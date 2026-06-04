@@ -1,0 +1,646 @@
+.ai-seo-assistant-box {
+	max-width: 100%;
+}
+
+.ai-seo-assistant-intro {
+	margin-top: 0;
+}
+
+.ai-seo-assistant-divider {
+	margin: 16px 0;
+}
+
+.ai-seo-assistant-status {
+	margin: 0 0 16px;
+	padding: 12px;
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+}
+
+.ai-seo-assistant-field {
+	margin: 0 0 16px;
+}
+
+.ai-seo-assistant-field label {
+	display: block;
+	margin-bottom: 6px;
+}
+
+.ai-seo-assistant-field input,
+.ai-seo-assistant-field textarea {
+	width: 100%;
+	max-width: 100%;
+}
+
+.ai-seo-assistant-count {
+	display: block;
+	margin-top: 4px;
+	color: #646970;
+	font-size: 12px;
+}
+
+.ai-seo-assistant-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 14px;
+	flex-wrap: wrap;
+}
+
+.ai-seo-assistant-status-message {
+	margin-left: 4px;
+	color: #646970;
+}
+
+.ai-seo-assistant-preview {
+	display: none;
+	margin-top: 12px;
+	padding: 12px;
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	max-height: 220px;
+	overflow: auto;
+	white-space: pre-wrap;
+}
+
+.ai-seo-assistant-note {
+	margin-bottom: 0;
+	color: #646970;
+	font-size: 12px;
+}
+
+.ai-seo-assistant-log-summary {
+	margin: 0 0 16px;
+	padding: 12px;
+	background: #fff8e5;
+	border: 1px solid #f0c36d;
+	border-radius: 4px;
+}
+
+.ai-seo-assistant-status-message {
+	display: inline-block;
+	color: #646970;
+}
+
+.ai-seo-assistant-audit-filters {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 16px 0;
+	padding: 12px;
+	background: #fff;
+	border: 1px solid #dcdcde;
+}
+
+.ai-seo-assistant-audit-table .ai-seo-assistant-badge {
+	display: inline-block;
+	padding: 3px 9px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 700;
+	line-height: 1.5;
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+}
+
+/* Looks good */
+.ai-seo-assistant-audit-table .ai-seo-assistant-badge.is-good {
+	background: #edfaef;
+	color: #007017;
+	border: 1px solid #8bd18f;
+}
+
+/* Missing */
+.ai-seo-assistant-audit-table .ai-seo-assistant-badge.is-missing {
+	background: #fcf0f1;
+	color: #b32d2e;
+	border: 1px solid #e09a9d;
+}
+
+/* Possibly too short / too long */
+.ai-seo-assistant-audit-table .ai-seo-assistant-badge.is-warning {
+	background: #fff8e5;
+	color: #8a5a00;
+	border: 1px solid #f0c36d;
+}
+
+.ai-seo-assistant-audit-meta-preview {
+	margin-top: 7px;
+	color: #3c434a;
+	line-height: 1.45;
+}
+
+.ai-seo-assistant-audit-empty {
+	margin-top: 7px;
+	color: #b32d2e;
+	font-style: italic;
+	font-weight: 600;
+}
+
+.ai-seo-assistant-audit-small {
+	margin-top: 4px;
+	color: #646970;
+	font-size: 12px;
+}
+
+.ai-seo-assistant-audit-table .ai-seo-assistant-indexing-badge {
+	display: inline-block;
+	padding: 3px 9px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 700;
+	line-height: 1.5;
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+}
+
+.ai-seo-assistant-audit-table .ai-seo-assistant-indexing-badge.is-indexable {
+	background: #edfaef;
+	color: #007017;
+	border: 1px solid #8bd18f;
+}
+
+.ai-seo-assistant-audit-table .ai-seo-assistant-indexing-badge.is-noindex {
+	background: #fcf0f1;
+	color: #b32d2e;
+	border: 1px solid #e09a9d;
+}
+
+.ai-seo-assistant-audit-table .ai-seo-assistant-indexing-badge.is-not-public {
+	background: #f0f0f1;
+	color: #646970;
+	border: 1px solid #c3c4c7;
+}
+
+.ai-seo-audit-actions-cell .button {
+	margin-right: 4px;
+	margin-bottom: 4px;
+}
+
+.ai-seo-audit-row-status {
+	margin-top: 6px;
+	color: #646970;
+	font-size: 12px;
+	line-height: 1.4;
+}
+
+.ai-seo-audit-row-status:not(:empty) {
+	padding: 4px 0;
+}
+
+.ai-seo-assistant-summary-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+	gap: 12px;
+	margin: 18px 0;
+}
+
+.ai-seo-assistant-summary-card {
+	padding: 14px;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-left-width: 4px;
+	border-radius: 4px;
+	box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+
+.ai-seo-assistant-summary-card.is-good {
+	border-left-color: #00a32a;
+}
+
+.ai-seo-assistant-summary-card.is-warning {
+	border-left-color: #dba617;
+}
+
+.ai-seo-assistant-summary-card.is-bad {
+	border-left-color: #d63638;
+}
+
+.ai-seo-assistant-summary-card.is-neutral {
+	border-left-color: #8c8f94;
+}
+
+.ai-seo-assistant-summary-value {
+	font-size: 26px;
+	font-weight: 700;
+	line-height: 1.1;
+	color: #1d2327;
+}
+
+.ai-seo-assistant-summary-label {
+	margin-top: 6px;
+	color: #646970;
+	font-size: 13px;
+}
+
+.ai-seo-assistant-report-actions {
+	margin: 16px 0;
+}
+
+.ai-seo-assistant-report-header {
+	margin: 20px 0;
+	padding: 22px;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 6px;
+}
+
+.ai-seo-assistant-report-header h1 {
+	margin-top: 0;
+}
+
+.ai-seo-assistant-report-meta,
+.ai-seo-assistant-report-intro {
+	max-width: 860px;
+}
+
+.ai-seo-assistant-report-filters {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 16px 0;
+	padding: 12px;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+}
+
+.ai-seo-assistant-report-summary {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+	gap: 12px;
+	margin: 18px 0;
+}
+
+.ai-seo-assistant-report-card {
+	padding: 14px;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-left-width: 4px;
+	border-radius: 4px;
+}
+
+.ai-seo-assistant-report-card.is-good {
+	border-left-color: #00a32a;
+}
+
+.ai-seo-assistant-report-card.is-warning {
+	border-left-color: #dba617;
+}
+
+.ai-seo-assistant-report-card.is-bad {
+	border-left-color: #d63638;
+}
+
+.ai-seo-assistant-report-card.is-neutral {
+	border-left-color: #8c8f94;
+}
+
+.ai-seo-assistant-report-card-value {
+	font-size: 25px;
+	font-weight: 700;
+	line-height: 1.1;
+	color: #1d2327;
+}
+
+.ai-seo-assistant-report-card-label {
+	margin-top: 6px;
+	color: #646970;
+	font-size: 13px;
+}
+
+.ai-seo-assistant-report-table th,
+.ai-seo-assistant-report-table td {
+	vertical-align: top;
+}
+
+.ai-seo-assistant-report-table th:nth-child(1) {
+	width: 16%;
+}
+
+.ai-seo-assistant-report-table th:nth-child(2) {
+	width: 20%;
+}
+
+.ai-seo-assistant-report-table th:nth-child(3) {
+	width: 10%;
+}
+
+.ai-seo-assistant-report-table th:nth-child(4),
+.ai-seo-assistant-report-table th:nth-child(5) {
+	width: 27%;
+}
+
+.ai-seo-assistant-report-small {
+	margin-top: 4px;
+	color: #646970;
+	font-size: 12px;
+}
+
+.ai-seo-assistant-report-text {
+	margin-top: 7px;
+	line-height: 1.45;
+}
+
+.ai-seo-assistant-report-footer {
+	margin-top: 18px;
+	color: #646970;
+	font-size: 12px;
+}
+
+@media print {
+	#adminmenumain,
+	#wpadminbar,
+	#screen-meta-links,
+	.notice,
+	.update-nag,
+	.no-print {
+		display: none !important;
+	}
+
+	html.wp-toolbar {
+		padding-top: 0 !important;
+	}
+
+	#wpcontent,
+	#wpbody-content {
+		margin-left: 0 !important;
+		padding-left: 0 !important;
+	}
+
+	.wrap.ai-seo-assistant-report-wrap {
+		max-width: none;
+		margin: 0;
+		padding: 0;
+	}
+
+	body {
+		background: #fff !important;
+		color: #000;
+	}
+
+	.ai-seo-assistant-report-header,
+	.ai-seo-assistant-report-card,
+	.ai-seo-assistant-report-table {
+		box-shadow: none !important;
+	}
+
+	.ai-seo-assistant-report-header {
+		border: none;
+		padding: 0 0 14px;
+		margin-bottom: 12px;
+	}
+
+	.ai-seo-assistant-report-summary {
+		grid-template-columns: repeat(3, 1fr);
+		gap: 8px;
+		page-break-inside: avoid;
+	}
+
+	.ai-seo-assistant-report-card {
+		padding: 10px;
+	}
+
+	.ai-seo-assistant-report-card-value {
+		font-size: 20px;
+	}
+
+	.ai-seo-assistant-report-table {
+		font-size: 11px;
+		border-collapse: collapse;
+	}
+
+	.ai-seo-assistant-report-table th,
+	.ai-seo-assistant-report-table td {
+		padding: 6px;
+	}
+
+	.ai-seo-assistant-report-table tr {
+		page-break-inside: avoid;
+	}
+
+	a {
+		color: #000 !important;
+		text-decoration: none !important;
+	}
+}
+
+/* Shared badge styling for Audit + Client Report tables */
+.ai-seo-assistant-audit-table .ai-seo-assistant-badge,
+.ai-seo-assistant-report-table .ai-seo-assistant-badge,
+.ai-seo-assistant-audit-table .ai-seo-assistant-indexing-badge,
+.ai-seo-assistant-report-table .ai-seo-assistant-indexing-badge {
+	display: inline-block;
+	padding: 3px 9px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 700;
+	line-height: 1.5;
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+}
+
+/* Metadata status badges */
+.ai-seo-assistant-audit-table .ai-seo-assistant-badge.is-good,
+.ai-seo-assistant-report-table .ai-seo-assistant-badge.is-good {
+	background: #edfaef;
+	color: #007017;
+	border: 1px solid #8bd18f;
+}
+
+.ai-seo-assistant-audit-table .ai-seo-assistant-badge.is-missing,
+.ai-seo-assistant-report-table .ai-seo-assistant-badge.is-missing {
+	background: #fcf0f1;
+	color: #b32d2e;
+	border: 1px solid #e09a9d;
+}
+
+.ai-seo-assistant-audit-table .ai-seo-assistant-badge.is-warning,
+.ai-seo-assistant-report-table .ai-seo-assistant-badge.is-warning {
+	background: #fff8e5;
+	color: #8a5a00;
+	border: 1px solid #f0c36d;
+}
+
+/* Indexing badges */
+.ai-seo-assistant-audit-table .ai-seo-assistant-indexing-badge.is-indexable,
+.ai-seo-assistant-report-table .ai-seo-assistant-indexing-badge.is-indexable {
+	background: #edfaef;
+	color: #007017;
+	border: 1px solid #8bd18f;
+}
+
+.ai-seo-assistant-audit-table .ai-seo-assistant-indexing-badge.is-noindex,
+.ai-seo-assistant-report-table .ai-seo-assistant-indexing-badge.is-noindex {
+	background: #fcf0f1;
+	color: #b32d2e;
+	border: 1px solid #e09a9d;
+}
+
+.ai-seo-assistant-audit-table .ai-seo-assistant-indexing-badge.is-not-public,
+.ai-seo-assistant-report-table .ai-seo-assistant-indexing-badge.is-not-public {
+	background: #f0f0f1;
+	color: #646970;
+	border: 1px solid #c3c4c7;
+}
+
+/* Client report table readability */
+.ai-seo-assistant-report-table {
+	border-collapse: separate;
+	border-spacing: 0;
+	table-layout: fixed;
+}
+
+.ai-seo-assistant-report-table th,
+.ai-seo-assistant-report-table td {
+	padding: 12px 14px;
+	border-bottom: 1px solid #dcdcde;
+	vertical-align: top;
+}
+
+.ai-seo-assistant-report-table th {
+	background: #f6f7f7;
+	font-weight: 700;
+	border-bottom: 2px solid #c3c4c7;
+}
+
+.ai-seo-assistant-report-table tbody tr:nth-child(even) td {
+	background: #fbfbfc;
+}
+
+.ai-seo-assistant-report-table tbody tr:last-child td {
+	border-bottom: 1px solid #c3c4c7;
+}
+
+.ai-seo-assistant-report-table td + td,
+.ai-seo-assistant-report-table th + th {
+	border-left: 1px solid #f0f0f1;
+}
+
+.ai-seo-assistant-report-table a {
+	word-break: break-word;
+	overflow-wrap: anywhere;
+}
+
+.ai-seo-assistant-report-text {
+	margin-top: 8px;
+	line-height: 1.55;
+}
+
+.ai-seo-assistant-report-small {
+	margin-top: 5px;
+	line-height: 1.4;
+}
+
+/* Better PDF/print layout */
+@media print {
+	.ai-seo-assistant-report-table {
+		border-collapse: collapse;
+		width: 100%;
+		font-size: 10.5px;
+	}
+
+	.ai-seo-assistant-report-table th,
+	.ai-seo-assistant-report-table td {
+		padding: 8px 9px;
+		border: 1px solid #d0d0d0;
+		vertical-align: top;
+	}
+
+	.ai-seo-assistant-report-table th {
+		background: #f1f1f1 !important;
+		border-bottom: 2px solid #b8b8b8;
+	}
+
+	.ai-seo-assistant-report-table tbody tr:nth-child(even) td {
+		background: #fafafa !important;
+	}
+
+	.ai-seo-assistant-report-table tr {
+		page-break-inside: avoid;
+		break-inside: avoid;
+	}
+
+	.ai-seo-assistant-report-text {
+		line-height: 1.45;
+	}
+
+	.ai-seo-assistant-badge,
+	.ai-seo-assistant-indexing-badge {
+		white-space: nowrap;
+	}
+}
+
+/* Give the indexing column more breathing room in the client report */
+.ai-seo-assistant-report-table th:nth-child(3),
+.ai-seo-assistant-report-table td:nth-child(3) {
+	width: 13%;
+	min-width: 95px;
+	white-space: nowrap;
+}
+
+/* Slightly reduce URL column so Indexing has space */
+.ai-seo-assistant-report-table th:nth-child(2),
+.ai-seo-assistant-report-table td:nth-child(2) {
+	width: 18%;
+}
+
+/* Keep indexing badge compact */
+.ai-seo-assistant-report-table .ai-seo-assistant-indexing-badge {
+	display: inline-block;
+	padding: 2px 6px;
+	font-size: 9px;
+	line-height: 1.4;
+	white-space: nowrap;
+	max-width: 100%;
+	box-sizing: border-box;
+}
+
+/* Better spacing in report cells */
+.ai-seo-assistant-report-table th,
+.ai-seo-assistant-report-table td {
+	padding: 12px 12px;
+}
+
+/* Print-specific tuning */
+@media print {
+	.ai-seo-assistant-report-table th:nth-child(1),
+	.ai-seo-assistant-report-table td:nth-child(1) {
+		width: 16%;
+	}
+
+	.ai-seo-assistant-report-table th:nth-child(2),
+	.ai-seo-assistant-report-table td:nth-child(2) {
+		width: 18%;
+	}
+
+	.ai-seo-assistant-report-table th:nth-child(3),
+	.ai-seo-assistant-report-table td:nth-child(3) {
+		width: 12%;
+		min-width: 85px;
+		white-space: nowrap;
+	}
+
+	.ai-seo-assistant-report-table th:nth-child(4),
+	.ai-seo-assistant-report-table td:nth-child(4) {
+		width: 25%;
+	}
+
+	.ai-seo-assistant-report-table th:nth-child(5),
+	.ai-seo-assistant-report-table td:nth-child(5) {
+		width: 29%;
+	}
+
+	.ai-seo-assistant-report-table .ai-seo-assistant-indexing-badge {
+		padding: 2px 5px;
+		font-size: 8.5px;
+		white-space: nowrap;
+	}
+
+	.ai-seo-assistant-report-table th,
+	.ai-seo-assistant-report-table td {
+		padding: 8px 8px;
+	}
+}

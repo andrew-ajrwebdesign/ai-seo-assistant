@@ -1,0 +1,240 @@
+.ai-seo-assistant-audit-filters {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 16px 0;
+	padding: 12px;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+}
+
+.ai-seo-assistant-summary-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+	gap: 12px;
+	margin: 18px 0;
+}
+
+.ai-seo-assistant-summary-card {
+	padding: 14px;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-left-width: 4px;
+	border-radius: 4px;
+	box-shadow: 0 1px 1px rgba(0, 0, 0, 0.04);
+}
+
+.ai-seo-assistant-summary-card.is-good {
+	border-left-color: #00a32a;
+}
+
+.ai-seo-assistant-summary-card.is-warning {
+	border-left-color: #dba617;
+}
+
+.ai-seo-assistant-summary-card.is-bad {
+	border-left-color: #d63638;
+}
+
+.ai-seo-assistant-summary-card.is-neutral {
+	border-left-color: #8c8f94;
+}
+
+.ai-seo-assistant-summary-value {
+	font-size: 26px;
+	font-weight: 700;
+	line-height: 1.1;
+	color: #1d2327;
+}
+
+.ai-seo-assistant-summary-label {
+	margin-top: 6px;
+	color: #646970;
+	font-size: 13px;
+}
+
+.ai-seo-assistant-audit-table th,
+.ai-seo-assistant-audit-table td {
+	vertical-align: top;
+}
+
+.ai-seo-assistant-audit-meta-preview {
+	margin-top: 7px;
+	color: #3c434a;
+	line-height: 1.45;
+}
+
+.ai-seo-assistant-audit-empty {
+	margin-top: 7px;
+	color: #b32d2e;
+	font-style: italic;
+	font-weight: 600;
+}
+
+.ai-seo-audit-actions-cell .button {
+	margin-right: 4px;
+	margin-bottom: 4px;
+}
+
+.ai-seo-audit-row-status {
+	margin-top: 6px;
+	color: #646970;
+	font-size: 12px;
+	line-height: 1.4;
+}
+
+.ai-seo-audit-row-status:not(:empty) {
+	padding: 4px 0;
+}
+
+.ai-seo-assistant-audit-table th,
+.ai-seo-assistant-audit-table td {
+	padding: 10px 8px;
+}
+
+.ai-seo-assistant-audit-table th:nth-child(4),
+.ai-seo-assistant-audit-table td:nth-child(4) {
+	width: 115px;
+}
+
+.ai-seo-assistant-content-match-missing {
+	margin-top: 6px;
+	color: #b32d2e;
+	font-size: 12px;
+	line-height: 1.4;
+}
+
+.ai-seo-assistant-content-match-missing strong {
+	font-weight: 700;
+}
+
+.ai-seo-audit-gsc-cell {
+	min-width: 180px;
+}
+
+.ai-seo-assistant-gsc-empty {
+	display: inline-block;
+	color: #646970;
+	font-size: 12px;
+	font-style: italic;
+}
+
+.ai-seo-assistant-gsc-summary {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.ai-seo-assistant-gsc-badge {
+	display: inline-block;
+	width: fit-content;
+	padding: 3px 8px;
+	border-radius: 999px;
+	font-size: 10px;
+	font-weight: 700;
+	line-height: 1.4;
+	text-transform: uppercase;
+	letter-spacing: 0.02em;
+}
+
+.ai-seo-assistant-gsc-badge.is-good {
+	background: #edfaef;
+	color: #007017;
+	border: 1px solid #8bd18f;
+}
+
+.ai-seo-assistant-gsc-badge.is-warning {
+	background: #fff8e5;
+	color: #8a5a00;
+	border: 1px solid #f0c36d;
+}
+
+.ai-seo-assistant-gsc-badge.is-neutral {
+	background: #f0f0f1;
+	color: #646970;
+	border: 1px solid #c3c4c7;
+}
+
+.ai-seo-assistant-gsc-metrics {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	font-size: 12px;
+	line-height: 1.35;
+	color: #3c434a;
+}
+
+.ai-seo-assistant-gsc-query {
+	font-size: 12px;
+	line-height: 1.35;
+	color: #3c434a;
+	word-break: break-word;
+}
+
+/* Indexing Tools */
+.ai-seo-indexing-summary {
+	display: flex;
+	gap: 12px;
+	margin: 18px 0;
+	flex-wrap: wrap;
+}
+
+.ai-seo-indexing-summary-card {
+	padding: 12px 16px;
+	min-width: 180px;
+}
+
+.ai-seo-indexing-summary-card span {
+	font-size: 22px;
+	font-weight: 700;
+	line-height: 1.2;
+	color: #1d2327;
+}
+
+.ai-seo-indexing-bulk-form {
+	margin: 18px 0;
+}
+
+.ai-seo-indexing-table th,
+.ai-seo-indexing-table td {
+	vertical-align: top;
+}
+
+.ai-seo-indexing-table form {
+	margin: 0;
+}
+
+.ai-seo-indexing-status {
+	font-weight: 600;
+}
+
+.ai-seo-indexing-status.is-noindex {
+	color: #b32d2e;
+}
+
+.ai-seo-indexing-status.is-indexable,
+.ai-seo-indexing-status.is-suggested {
+	color: #008a20;
+}
+
+.ai-seo-indexing-status.is-review {
+	color: #dba617;
+}
+
+.ai-seo-indexing-no-action {
+	color: #646970;
+}
+
+.wp-core-ui .button.ai-seo-optional-noindex-button {
+	border-color: #dba617;
+	color: #8a5a00;
+	background: #fff8e5;
+}
+
+.wp-core-ui .button.ai-seo-optional-noindex-button:hover,
+.wp-core-ui .button.ai-seo-optional-noindex-button:focus {
+	border-color: #b98500;
+	color: #6f4700;
+	background: #fff3cd;
+}

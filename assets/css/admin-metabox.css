@@ -1,0 +1,195 @@
+.ai-seo-assistant-box {
+	max-width: 100%;
+}
+
+.ai-seo-assistant-intro {
+	margin-top: 0;
+}
+
+.ai-seo-assistant-divider {
+	margin: 16px 0;
+}
+
+.ai-seo-assistant-status {
+	margin: 0 0 16px;
+	padding: 12px;
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+}
+
+.ai-seo-assistant-field {
+	margin: 0 0 16px;
+}
+
+.ai-seo-assistant-field label {
+	display: block;
+	margin-bottom: 6px;
+}
+
+.ai-seo-assistant-field input,
+.ai-seo-assistant-field textarea {
+	width: 100%;
+	max-width: 100%;
+}
+
+.ai-seo-assistant-count {
+	display: block;
+	margin-top: 4px;
+	color: #646970;
+	font-size: 12px;
+}
+
+.ai-seo-assistant-actions {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 14px;
+	flex-wrap: wrap;
+}
+
+.ai-seo-assistant-preview {
+	display: none;
+	margin-top: 12px;
+	padding: 12px;
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+	max-height: 220px;
+	overflow: auto;
+	white-space: pre-wrap;
+}
+
+.ai-seo-assistant-note {
+	margin-bottom: 0;
+	color: #646970;
+	font-size: 12px;
+}
+
+.ai-seo-assistant-log-summary {
+	margin: 0 0 16px;
+	padding: 12px;
+	background: #fff8e5;
+	border: 1px solid #f0c36d;
+	border-radius: 4px;
+}
+
+.ai-seo-assistant-recommendations-output {
+	display: none;
+	margin-top: 16px;
+}
+
+.ai-seo-assistant-recommendations-card {
+	padding: 16px;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+}
+
+.ai-seo-assistant-recommendations-card h3 {
+	margin-top: 0;
+}
+
+.ai-seo-assistant-recommendations-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+	gap: 14px;
+}
+
+.ai-seo-assistant-recommendations-section {
+	padding: 12px;
+	background: #f6f7f7;
+	border: 1px solid #dcdcde;
+	border-radius: 4px;
+}
+
+.ai-seo-assistant-recommendations-section h4 {
+	margin-top: 0;
+	margin-bottom: 8px;
+}
+
+.ai-seo-assistant-recommendations-section ul {
+	margin: 0 0 0 18px;
+}
+
+.ai-seo-assistant-recommendations-section li {
+	margin-bottom: 6px;
+}
+
+.ai-seo-assistant-recommendations-empty {
+	margin: 0;
+	color: #646970;
+	font-style: italic;
+}
+
+.ai-seo-assistant-error-text {
+	color: #b32d2e;
+	font-weight: 600;
+}
+
+.ai-seo-assistant-focus-autofill {
+	margin-top: 18px;
+	padding: 14px;
+	border: 1px solid #dcdcde;
+	border-radius: 6px;
+	background: #f6f7f7;
+}
+
+.ai-seo-assistant-focus-autofill h4 {
+	margin: 0 0 8px;
+}
+
+.ai-seo-assistant-inline-option {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	margin: 8px 0;
+}
+
+.ai-seo-assistant-focus-autofill-output {
+	display: none;
+	margin-top: 12px;
+}
+
+.ai-seo-focus-suggestion-card {
+	padding: 12px;
+	border-left: 4px solid #2271b1;
+	background: #fff;
+}
+
+.ai-seo-focus-suggestion-card p {
+	margin: 6px 0;
+}
+
+.ai-seo-focus-suggestion-card ul {
+	margin: 8px 0 0 18px;
+}
+
+/* Content Placement Suggestions */
+.ai-seo-content-insertion-list {
+	display: grid;
+	gap: 12px;
+}
+
+.ai-seo-content-insertion-item {
+	padding: 12px;
+	border: 1px solid #dcdcde;
+	border-left: 4px solid #dba617;
+	background: #fff;
+}
+
+.ai-seo-content-insertion-item p {
+	margin: 0 0 8px;
+}
+
+.ai-seo-content-insertion-item p:last-child {
+	margin-bottom: 0;
+}
+
+.ai-seo-content-insertion-item blockquote {
+	margin: 6px 0 10px;
+	padding: 10px 12px;
+	border-left: 3px solid #2271b1;
+	background: #f6f7f7;
+	font-style: normal;
+}

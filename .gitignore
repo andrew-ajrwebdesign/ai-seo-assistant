@@ -1,0 +1,28 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs
+*.log
+debug.log
+
+# Dependencies
+node_modules/
+vendor/
+
+# Build/package output
+dist/
+build/
+*.zip
+*.tar.gz
+
+# Environment / secrets
+.env
+.env.*
+*.key
+*.pem
+
+# WordPress noise
+wp-cli.local.yml

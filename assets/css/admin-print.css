@@ -1,0 +1,129 @@
+#adminmenumain,
+#wpadminbar,
+#screen-meta-links,
+.notice,
+.update-nag,
+.no-print {
+	display: none !important;
+}
+
+html.wp-toolbar {
+	padding-top: 0 !important;
+}
+
+#wpcontent,
+#wpbody-content {
+	margin-left: 0 !important;
+	padding-left: 0 !important;
+}
+
+.wrap.ai-seo-assistant-report-wrap {
+	max-width: none;
+	margin: 0;
+	padding: 0;
+}
+
+body {
+	background: #fff !important;
+	color: #000;
+}
+
+.ai-seo-assistant-report-header,
+.ai-seo-assistant-report-card,
+.ai-seo-assistant-report-table {
+	box-shadow: none !important;
+}
+
+.ai-seo-assistant-report-header {
+	border: none;
+	padding: 0 0 14px;
+	margin-bottom: 12px;
+}
+
+.ai-seo-assistant-report-summary {
+	grid-template-columns: repeat(3, 1fr);
+	gap: 8px;
+	page-break-inside: avoid;
+}
+
+.ai-seo-assistant-report-card {
+	padding: 10px;
+}
+
+.ai-seo-assistant-report-card-value {
+	font-size: 20px;
+}
+
+.ai-seo-assistant-report-table {
+	border-collapse: collapse;
+	width: 100%;
+	font-size: 10.5px;
+}
+
+.ai-seo-assistant-report-table th,
+.ai-seo-assistant-report-table td {
+	padding: 8px;
+	border: 1px solid #d0d0d0;
+	vertical-align: top;
+}
+
+.ai-seo-assistant-report-table th {
+	background: #f1f1f1 !important;
+	border-bottom: 2px solid #b8b8b8;
+}
+
+.ai-seo-assistant-report-table tbody tr:nth-child(even) td {
+	background: #fafafa !important;
+}
+
+.ai-seo-assistant-report-table tr {
+	page-break-inside: avoid;
+	break-inside: avoid;
+}
+
+.ai-seo-assistant-report-table th:nth-child(1),
+.ai-seo-assistant-report-table td:nth-child(1) {
+	width: 16%;
+}
+
+.ai-seo-assistant-report-table th:nth-child(2),
+.ai-seo-assistant-report-table td:nth-child(2) {
+	width: 18%;
+}
+
+.ai-seo-assistant-report-table th:nth-child(3),
+.ai-seo-assistant-report-table td:nth-child(3) {
+	width: 12%;
+	min-width: 85px;
+	white-space: nowrap;
+}
+
+.ai-seo-assistant-report-table th:nth-child(4),
+.ai-seo-assistant-report-table td:nth-child(4) {
+	width: 25%;
+}
+
+.ai-seo-assistant-report-table th:nth-child(5),
+.ai-seo-assistant-report-table td:nth-child(5) {
+	width: 29%;
+}
+
+.ai-seo-assistant-report-table .ai-seo-assistant-indexing-badge {
+	padding: 2px 5px;
+	font-size: 8.5px;
+	white-space: nowrap;
+}
+
+.ai-seo-assistant-report-text {
+	line-height: 1.45;
+}
+
+.ai-seo-assistant-badge,
+.ai-seo-assistant-indexing-badge {
+	white-space: nowrap;
+}
+
+a {
+	color: #000 !important;
+	text-decoration: none !important;
+}
