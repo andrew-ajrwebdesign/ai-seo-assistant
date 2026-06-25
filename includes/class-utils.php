@@ -87,6 +87,15 @@ class AI_SEO_Assistant_Utils {
 		);
 
 		/*
+		* Mask Google OAuth client secrets.
+		*/
+		$text = preg_replace(
+			'/GOCSPX-[A-Za-z0-9_\-]+/',
+			'GOCSPX-***masked***',
+			$text
+		);
+
+		/*
 		* Mask values shown after common API key phrases.
 		*/
 		$text = preg_replace(

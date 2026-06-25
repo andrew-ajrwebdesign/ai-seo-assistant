@@ -149,7 +149,7 @@ class AI_SEO_Assistant_GSC_Client {
 		if ( $status_code < 200 || $status_code >= 300 ) {
 			return new WP_Error(
 				'ai_seo_gsc_token_error',
-				'Google token error: ' . $body
+				'Google token error: ' . AI_SEO_Assistant_Utils::mask_sensitive_text( $body )
 			);
 		}
 
@@ -450,7 +450,7 @@ class AI_SEO_Assistant_GSC_Client {
 		if ( $status_code < 200 || $status_code >= 300 ) {
 			return new WP_Error(
 				'ai_seo_gsc_api_error',
-				'Google Search Console API error: ' . $response_body
+				'Google Search Console API error: ' . AI_SEO_Assistant_Utils::mask_sensitive_text( $response_body )
 			);
 		}
 
