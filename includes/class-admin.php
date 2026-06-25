@@ -740,14 +740,17 @@ class AI_SEO_Assistant_Admin {
 
 					<tr>
 						<th scope="row">
-							<label for="ai_seo_assistant_api_key">OpenAI API Key</label>
+							<label for="ai_seo_assistant_api_key">
+								<?php esc_html_e( 'OpenAI API Key', 'ai-seo-assistant' ); ?>
+							</label>
 						</th>
 						<td>
 							<?php
 							$openai_key_from_config = defined( 'AI_SEO_ASSISTANT_OPENAI_API_KEY' ) && AI_SEO_ASSISTANT_OPENAI_API_KEY;
+							$has_saved_api_key      = ! empty( $api_key );
 							$api_key_hint           = '';
 
-							if ( ! empty( $api_key ) && preg_match( '/^sk-/', $api_key ) ) {
+							if ( $has_saved_api_key && preg_match( '/^sk-/', $api_key ) ) {
 								$api_key_hint = substr( $api_key, 0, 7 ) . '...' . substr( $api_key, -4 );
 							}
 
@@ -761,21 +764,24 @@ class AI_SEO_Assistant_Admin {
 							<?php if ( $openai_key_from_config ) : ?>
 
 								<p>
-									<strong>OpenAI API key loaded from wp-config.php.</strong>
+									<strong><?php esc_html_e( 'OpenAI API key loaded from wp-config.php.', 'ai-seo-assistant' ); ?></strong>
 								</p>
 
 								<p class="description">
-									For better security, the API key is being loaded from server configuration and is not managed from this settings page.
+									<?php esc_html_e( 'The settings field is disabled because the API key is defined using AI_SEO_ASSISTANT_OPENAI_API_KEY.', 'ai-seo-assistant' ); ?>
 								</p>
 
-								<?php if ( ! empty( $api_key ) ) : ?>
+								<?php if ( $has_saved_api_key ) : ?>
 									<p class="description">
-										Database API key storage:
-										<?php if ( ! empty( get_option( 'ai_seo_assistant_api_key', '' ) ) ) : ?>
-											<span style="color:#b32d2e;font-weight:600;">A database key is still saved. Clear the <code>ai_seo_assistant_api_key</code> option if you want config-only storage.</span>
-										<?php else : ?>
-											<span style="color:#008a20;font-weight:600;">No database key saved.</span>
-										<?php endif; ?>
+										<span style="color:#b32d2e;font-weight:600;">
+											<?php esc_html_e( 'A database key is also saved. For config-only storage, clear the ai_seo_assistant_api_key option from the database.', 'ai-seo-assistant' ); ?>
+										</span>
+									</p>
+								<?php else : ?>
+									<p class="description">
+										<span style="color:#008a20;font-weight:600;">
+											<?php esc_html_e( 'No database key is saved.', 'ai-seo-assistant' ); ?>
+										</span>
 									</p>
 								<?php endif; ?>
 
@@ -787,35 +793,35 @@ class AI_SEO_Assistant_Admin {
 									name="ai_seo_assistant_api_key"
 									value=""
 									class="regular-text"
-									autocomplete="new-password"
-									placeholder="<?php echo esc_attr( ! empty( $api_key_hint ) ? 'API key saved' : 'Paste OpenAI API key' ); ?>"
-								>
+									autocomplete="off"
+									placeholder="<?php echo esc_attr( $has_saved_api_key ? __( 'Saved. Leave blank to keep existing key.', 'ai-seo-assistant' ) : __( 'Paste OpenAI API key', 'ai-seo-assistant' ) ); ?>"
+								/>
 
-								<?php if ( ! empty( $api_key_hint ) ) : ?>
+								<?php if ( $has_saved_api_key && ! empty( $api_key_hint ) ) : ?>
 									<p class="description">
-										Saved key:
+										<?php esc_html_e( 'An OpenAI API key is saved. Leave this field blank to keep the existing key, or paste a new key to replace it.', 'ai-seo-assistant' ); ?>
+										<?php esc_html_e( 'Current key:', 'ai-seo-assistant' ); ?>
 										<code><?php echo esc_html( $api_key_hint ); ?></code>
 									</p>
-								<?php elseif ( ! empty( $api_key ) ) : ?>
+								<?php elseif ( $has_saved_api_key ) : ?>
 									<p class="description" style="color:#b32d2e;font-weight:600;">
-										Saved API key value is invalid and should be replaced.
+										<?php esc_html_e( 'A saved API key exists but does not appear to use the expected OpenAI key format. Paste a new key to replace it.', 'ai-seo-assistant' ); ?>
+									</p>
+								<?php else : ?>
+									<p class="description">
+										<?php esc_html_e( 'Recommended: define AI_SEO_ASSISTANT_OPENAI_API_KEY in wp-config.php. As a fallback, you may paste a key here and save it to the database.', 'ai-seo-assistant' ); ?>
 									</p>
 								<?php endif; ?>
-
-								<p class="description">
-									Paste a new key and click <strong>Save Changes</strong>. Then test the saved key.
-								</p>
 
 							<?php endif; ?>
 
 							<p style="margin-top: 10px;">
 								<a href="<?php echo esc_url( $test_openai_url ); ?>" class="button button-secondary">
-									Test OpenAI Connection
+									<?php esc_html_e( 'Test OpenAI Connection', 'ai-seo-assistant' ); ?>
 								</a>
 							</p>
 						</td>
 					</tr>
-
 					<tr>
 						<th scope="row">
 							<label for="ai_seo_assistant_model">Model</label>
