@@ -1147,16 +1147,20 @@ class AI_SEO_Assistant_Admin {
 
 		delete_transient( 'ai_seo_assistant_settings_notice_' . get_current_user_id() );
 
-		$api_key = get_option( 'ai_seo_assistant_api_key', '' );
+			$openai_client = new AI_SEO_Assistant_OpenAI_Client();
 
-		$key_hint = 'no key saved';
+			if ( $openai_client->has_config_key() ) {
+				$key_hint = 'wp-config.php key';
+			} else {
+				$api_key  = get_option( 'ai_seo_assistant_api_key', '' );
+				$key_hint = 'no key saved';
 
-		if ( ! empty( $api_key ) && preg_match( '/^sk-/', $api_key ) ) {
-			$key_hint = substr( $api_key, 0, 7 ) . '...' . substr( $api_key, -4 );
-		}
+				if ( ! empty( $api_key ) && preg_match( '/^sk-/', $api_key ) ) {
+					$key_hint = substr( $api_key, 0, 7 ) . '...' . substr( $api_key, -4 );
+				}
+			}
 
-		$openai_client = new AI_SEO_Assistant_OpenAI_Client();
-		$result        = $openai_client->test_connection();
+			$result = $openai_client->test_connection();
 
 		if ( is_wp_error( $result ) ) {
 			set_transient(
