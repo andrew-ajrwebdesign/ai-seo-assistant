@@ -5,7 +5,7 @@
  * Version: 3.2.9
  * Author: AJR Web Design
  */
-
+    
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }

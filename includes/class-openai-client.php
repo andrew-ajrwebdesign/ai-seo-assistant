@@ -114,7 +114,7 @@ class AI_SEO_Assistant_OpenAI_Client {
 	}
 
 	public function has_config_key() {
-		return defined( 'AI_SEO_ASSISTANT_OPENAI_API_KEY' ) && AI_SEO_ASSISTANT_OPENAI_API_KEY;
+		return defined( 'AI_SEO_ASSISTANT_OPENAI_API_KEY' ) && trim( (string) AI_SEO_ASSISTANT_OPENAI_API_KEY ) !== '';
 	}
 
 	private function request( $api_key, $model, $messages, $max_tokens = 500, $json_mode = false ) {
