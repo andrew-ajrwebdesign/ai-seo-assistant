@@ -93,19 +93,34 @@ class AI_SEO_Assistant_GSC_Page {
 						</td>
 					</tr>
 
+					<?php $has_client_secret = ! empty( $this->gsc_client->get_client_secret() ); ?>
+
 					<tr>
 						<th scope="row">
-							<label for="ai_seo_assistant_gsc_client_secret">Google Client Secret</label>
+							<label for="ai_seo_assistant_gsc_client_secret">
+								<?php esc_html_e( 'Google Client Secret', 'ai-seo-assistant' ); ?>
+							</label>
 						</th>
 						<td>
 							<input
 								type="password"
 								id="ai_seo_assistant_gsc_client_secret"
 								name="ai_seo_assistant_gsc_client_secret"
-								value="<?php echo esc_attr( $client_secret ); ?>"
+								value=""
 								class="regular-text"
 								autocomplete="off"
-							>
+								placeholder="<?php echo $has_client_secret ? esc_attr__( 'Saved. Leave blank to keep existing secret.', 'ai-seo-assistant' ) : esc_attr__( 'Enter Google client secret', 'ai-seo-assistant' ); ?>"
+							/>
+
+							<?php if ( $has_client_secret ) : ?>
+								<p class="description">
+									<?php esc_html_e( 'A Google Client Secret is saved. Leave this field blank to keep the existing secret.', 'ai-seo-assistant' ); ?>
+								</p>
+							<?php else : ?>
+								<p class="description">
+									<?php esc_html_e( 'Add the Google OAuth client secret from Google Cloud Console.', 'ai-seo-assistant' ); ?>
+								</p>
+							<?php endif; ?>
 						</td>
 					</tr>
 
@@ -234,11 +249,20 @@ class AI_SEO_Assistant_GSC_Page {
 	public function save_settings() {
 		$this->verify_request( 'ai_seo_assistant_gsc_save_settings' );
 
-		$client_id     = isset( $_POST['ai_seo_assistant_gsc_client_id'] ) ? sanitize_text_field( wp_unslash( $_POST['ai_seo_assistant_gsc_client_id'] ) ) : '';
-		$client_secret = isset( $_POST['ai_seo_assistant_gsc_client_secret'] ) ? sanitize_text_field( wp_unslash( $_POST['ai_seo_assistant_gsc_client_secret'] ) ) : '';
+		$client_id = isset( $_POST['ai_seo_assistant_gsc_client_id'] )
+			? sanitize_text_field( wp_unslash( $_POST['ai_seo_assistant_gsc_client_id'] ) )
+			: '';
+
+		$client_secret = isset( $_POST['ai_seo_assistant_gsc_client_secret'] )
+			? sanitize_text_field( wp_unslash( $_POST['ai_seo_assistant_gsc_client_secret'] ) )
+			: '';
 
 		update_option( AI_SEO_Assistant_GSC_Client::OPTION_CLIENT_ID, $client_id, false );
-		update_option( AI_SEO_Assistant_GSC_Client::OPTION_CLIENT_SECRET, $client_secret, false );
+
+		// Do not overwrite an existing saved secret when the field is left blank.
+		if ( '' !== $client_secret ) {
+			update_option( AI_SEO_Assistant_GSC_Client::OPTION_CLIENT_SECRET, $client_secret, false );
+		}
 
 		$this->set_notice( 'success', 'Google settings saved.' );
 		$this->redirect();
