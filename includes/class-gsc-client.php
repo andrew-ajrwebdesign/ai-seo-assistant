@@ -24,11 +24,19 @@ class AI_SEO_Assistant_GSC_Client {
 	}
 
 	public function get_client_id() {
-		return get_option( self::OPTION_CLIENT_ID, '' );
+		if ( defined( 'AI_SEO_ASSISTANT_GOOGLE_CLIENT_ID' ) && AI_SEO_ASSISTANT_GOOGLE_CLIENT_ID ) {
+			return trim( (string) AI_SEO_ASSISTANT_GOOGLE_CLIENT_ID );
+		}
+
+		return trim( (string) get_option( self::OPTION_CLIENT_ID, '' ) );
 	}
 
 	public function get_client_secret() {
-		return get_option( self::OPTION_CLIENT_SECRET, '' );
+		if ( defined( 'AI_SEO_ASSISTANT_GOOGLE_CLIENT_SECRET' ) && AI_SEO_ASSISTANT_GOOGLE_CLIENT_SECRET ) {
+			return trim( (string) AI_SEO_ASSISTANT_GOOGLE_CLIENT_SECRET );
+		}
+
+		return trim( (string) get_option( self::OPTION_CLIENT_SECRET, '' ) );
 	}
 
 	public function has_credentials() {
