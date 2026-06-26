@@ -35,6 +35,11 @@ class AI_SEO_Assistant_Report_Page {
 			return;
 		}
 
+		if ( ! AI_SEO_Assistant_SEO_Adapter_Resolver::any_seo_plugin_active() ) {
+			echo '<div class="wrap"><h1>Client Report</h1><div class="notice notice-warning inline" style="margin:12px 0"><p><strong>No supported SEO plugin detected.</strong> Please activate The SEO Framework, Yoast SEO, or Rank Math to use AI SEO Assistant.</p></div></div>';
+			return;
+		}
+
 		$selected_post_type = isset( $_GET['post_type_filter'] ) ? sanitize_key( wp_unslash( $_GET['post_type_filter'] ) ) : '';
 		$selected_status    = isset( $_GET['metadata_status'] ) ? sanitize_key( wp_unslash( $_GET['metadata_status'] ) ) : '';
 

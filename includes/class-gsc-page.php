@@ -42,6 +42,10 @@ class AI_SEO_Assistant_GSC_Page {
 			return;
 		}
 
+		if ( ! AI_SEO_Assistant_SEO_Adapter_Resolver::any_seo_plugin_active() ) {
+			echo '<div class="notice notice-warning inline" style="margin:12px 0"><p><strong>No supported SEO plugin detected.</strong> Please activate The SEO Framework, Yoast SEO, or Rank Math to use AI SEO Assistant.</p></div>';
+		}
+
 		$this->render_notice();
 
 		$client_id     = $this->gsc_client->get_client_id();

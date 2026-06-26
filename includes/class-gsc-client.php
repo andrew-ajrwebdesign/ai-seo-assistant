@@ -80,14 +80,13 @@ class AI_SEO_Assistant_GSC_Client {
 	public function get_auth_url( $state ) {
 		return add_query_arg(
 			[
-				'client_id'              => $this->get_client_id(),
-				'redirect_uri'           => $this->get_redirect_uri(),
-				'response_type'          => 'code',
-				'scope'                  => self::SCOPE,
-				'access_type'            => 'offline',
-				'prompt'                 => 'consent',
-				'include_granted_scopes' => 'true',
-				'state'                  => $state,
+				'client_id'     => $this->get_client_id(),
+				'redirect_uri'  => $this->get_redirect_uri(),
+				'response_type' => 'code',
+				'scope'         => self::SCOPE,
+				'access_type'   => 'offline',
+				'prompt'        => 'consent',
+				'state'         => $state,
 			],
 			'https://accounts.google.com/o/oauth2/v2/auth'
 		);

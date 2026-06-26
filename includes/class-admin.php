@@ -27,7 +27,8 @@ class AI_SEO_Assistant_Admin {
 	public function init() {
 		add_action( 'add_meta_boxes', [ $this, 'add_meta_box' ] );
 		add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_admin_assets' ] );
-		add_action( 'save_post', [ $this, 'save_metadata_fields' ] );
+		add_action( 'save_post', [ $this, 'save_metadata_fields' ], 99 );
+		add_action( 'wp_after_insert_post', [ $this, 'save_metadata_fields' ], 9999 );
 
 		add_action( 'admin_menu', [ $this, 'add_settings_page' ] );
 		add_action( 'admin_init', [ $this, 'register_settings' ] );
@@ -391,6 +392,7 @@ class AI_SEO_Assistant_Admin {
 				]
 			);
 		}
+
 	}
 
 	public function add_settings_page() {
@@ -422,16 +424,6 @@ class AI_SEO_Assistant_Admin {
 				'type'              => 'string',
 				'sanitize_callback' => [ $this, 'sanitize_focus_mode' ],
 				'default'           => 'general',
-			]
-		);
-
-		register_setting(
-			'ai_seo_assistant_settings',
-			'ai_seo_assistant_seo_integration',
-			[
-				'type'              => 'string',
-				'sanitize_callback' => [ $this, 'sanitize_seo_integration' ],
-				'default'           => 'auto',
 			]
 		);
 
@@ -594,6 +586,7 @@ class AI_SEO_Assistant_Admin {
 				'default'           => 'no',
 			]
 		);
+
 	}
 
 	public function sanitize_focus_mode( $mode ) {
@@ -604,16 +597,6 @@ class AI_SEO_Assistant_Admin {
 		}
 
 		return $mode;
-	}
-
-	public function sanitize_seo_integration( $integration ) {
-		$integration = sanitize_key( $integration );
-
-		if ( ! in_array( $integration, [ 'auto', 'the_seo_framework', 'yoast', 'rank_math' ], true ) ) {
-			$integration = 'auto';
-		}
-
-		return $integration;
 	}
 
 	public function sanitize_api_key( $api_key ) {
@@ -669,9 +652,8 @@ class AI_SEO_Assistant_Admin {
 		}
 
 		$focus_mode              = get_option( 'ai_seo_assistant_focus_mode', 'general' );
-		$seo_integration         = get_option( 'ai_seo_assistant_seo_integration', 'auto' );
+		$seo_detected            = $this->seo_adapter_resolver->get_adapter() !== null;
 		$active_seo_name         = $this->seo_adapter_resolver->get_current_integration_name();
-		$active_seo_id           = $this->seo_adapter_resolver->get_current_integration_id();
 		$api_key                 = get_option( 'ai_seo_assistant_api_key', '' );
 		$model                   = get_option( 'ai_seo_assistant_model', 'gpt-4o-mini' );
 		$brand_context           = get_option( 'ai_seo_assistant_brand_context', '' );
@@ -694,6 +676,22 @@ class AI_SEO_Assistant_Admin {
 		<div class="wrap">
 			<h1>AI SEO Assistant</h1>
 
+			<?php if ( $seo_detected ) : ?>
+				<div class="notice notice-info inline" style="margin: 12px 0;">
+					<p>
+						<strong>SEO Integration:</strong> Auto-detected &mdash; currently using <strong><?php echo esc_html( $active_seo_name ); ?></strong>.
+						Supports The SEO Framework, Yoast SEO, and Rank Math.
+					</p>
+				</div>
+			<?php else : ?>
+				<div class="notice notice-warning inline" style="margin: 12px 0;">
+					<p>
+						<strong>No supported SEO plugin detected.</strong>
+						Please activate The SEO Framework, Yoast SEO, or Rank Math to use AI SEO Assistant.
+					</p>
+				</div>
+			<?php endif; ?>
+
 			<form method="post" action="options.php">
 				<?php settings_fields( 'ai_seo_assistant_settings' ); ?>
 
@@ -714,29 +712,6 @@ class AI_SEO_Assistant_Admin {
 						</td>
 					</tr>
 
-					<tr>
-						<th scope="row">
-							<label for="ai_seo_assistant_seo_integration">SEO Plugin Integration</label>
-						</th>
-						<td>
-							<select id="ai_seo_assistant_seo_integration" name="ai_seo_assistant_seo_integration">
-								<option value="auto" <?php selected( $seo_integration, 'auto' ); ?>>Auto-detect</option>
-								<option value="the_seo_framework" <?php selected( $seo_integration, 'the_seo_framework' ); ?>>The SEO Framework</option>
-								<option value="yoast" <?php selected( $seo_integration, 'yoast' ); ?>>Yoast SEO</option>
-								<option value="rank_math" <?php selected( $seo_integration, 'rank_math' ); ?>>Rank Math</option>
-							</select>
-
-							<p class="description">
-								Currently active integration:
-								<strong><?php echo esc_html( $active_seo_name ); ?></strong>
-								<code><?php echo esc_html( $active_seo_id ); ?></code>
-							</p>
-
-							<p class="description">
-								Use Auto-detect unless you need to force a specific SEO plugin integration.
-							</p>
-						</td>
-					</tr>
 
 					<tr>
 						<th scope="row">
@@ -1113,14 +1088,19 @@ class AI_SEO_Assistant_Admin {
 			return;
 		}
 
-		if ( isset( $_POST['ai_seo_title'] ) ) {
+		// Only write to the SEO plugin if the field contains a value — an empty
+		// metabox field must not overwrite data already stored by the active SEO
+		// plugin (e.g. Yoast saves its own values via the block-editor REST API
+		// before WordPress processes classic metaboxes, and a blank POST value
+		// would silently clear them).
+		if ( isset( $_POST['ai_seo_title'] ) && '' !== trim( wp_unslash( $_POST['ai_seo_title'] ) ) ) {
 			$this->tsf_adapter->save_title(
 				$post_id,
 				wp_unslash( $_POST['ai_seo_title'] )
 			);
 		}
 
-		if ( isset( $_POST['ai_seo_description'] ) ) {
+		if ( isset( $_POST['ai_seo_description'] ) && '' !== trim( wp_unslash( $_POST['ai_seo_description'] ) ) ) {
 			$this->tsf_adapter->save_description(
 				$post_id,
 				wp_unslash( $_POST['ai_seo_description'] )

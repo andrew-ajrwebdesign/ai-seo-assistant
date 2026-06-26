@@ -9,8 +9,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class AI_SEO_Assistant_SEO_Adapter_Resolver {
 
-	const OPTION_NAME = 'ai_seo_assistant_seo_integration';
-
 	private $tsf_adapter;
 	private $yoast_adapter;
 	private $rankmath_adapter;
@@ -22,20 +20,6 @@ class AI_SEO_Assistant_SEO_Adapter_Resolver {
 	}
 
 	public function get_adapter() {
-		$integration = get_option( self::OPTION_NAME, 'auto' );
-
-		if ( 'the_seo_framework' === $integration ) {
-			return $this->tsf_adapter;
-		}
-
-		if ( 'yoast' === $integration ) {
-			return $this->yoast_adapter;
-		}
-
-		if ( 'rank_math' === $integration ) {
-			return $this->rankmath_adapter;
-		}
-
 		return $this->auto_detect_adapter();
 	}
 
@@ -52,14 +36,22 @@ class AI_SEO_Assistant_SEO_Adapter_Resolver {
 			return $this->rankmath_adapter;
 		}
 
-		return $this->tsf_adapter;
+		return null;
+	}
+
+	public static function any_seo_plugin_active(): bool {
+		return defined( 'THE_SEO_FRAMEWORK_VERSION' ) || class_exists( 'The_SEO_Framework\Load' )
+			|| defined( 'WPSEO_VERSION' ) || defined( 'YOAST_SEO_VERSION' ) || class_exists( 'WPSEO_Options' )
+			|| defined( 'RANK_MATH_VERSION' ) || class_exists( 'RankMath' ) || class_exists( '\RankMath\Runner' );
 	}
 
 	public function get_current_integration_id() {
-		return $this->get_adapter()->get_id();
+		$adapter = $this->get_adapter();
+		return $adapter ? $adapter->get_id() : '';
 	}
 
 	public function get_current_integration_name() {
-		return $this->get_adapter()->get_name();
+		$adapter = $this->get_adapter();
+		return $adapter ? $adapter->get_name() : 'None detected';
 	}
 }

@@ -52,7 +52,7 @@ class AI_SEO_Assistant_Plugin {
 			$this->rankmath_adapter
 		);
 
-		$this->seo_adapter       = $this->seo_adapter_resolver->get_adapter();
+		$this->seo_adapter       = $this->seo_adapter_resolver->get_adapter() ?? $this->tsf_adapter;
 		$this->content_extractor = new AI_SEO_Assistant_Content_Extractor();
 		$this->prompt_builder    = new AI_SEO_Assistant_Prompt_Builder();
 		$this->openai_client     = new AI_SEO_Assistant_OpenAI_Client();
@@ -102,6 +102,7 @@ class AI_SEO_Assistant_Plugin {
 		);
 
 		$this->admin->init();
+		( new AI_SEO_Assistant_Markdown_Page() )->init();
 		$this->audit_page->init();
 		$this->report_page->init();
 		$this->gsc_page->init();

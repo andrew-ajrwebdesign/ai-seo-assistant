@@ -44,6 +44,11 @@ class AI_SEO_Assistant_Audit_Page {
 			return;
 		}
 
+		if ( ! AI_SEO_Assistant_SEO_Adapter_Resolver::any_seo_plugin_active() ) {
+			echo '<div class="wrap"><h1>Metadata Audit</h1><div class="notice notice-warning inline" style="margin:12px 0"><p><strong>No supported SEO plugin detected.</strong> Please activate The SEO Framework, Yoast SEO, or Rank Math to use AI SEO Assistant.</p></div></div>';
+			return;
+		}
+
 		$post_types = get_option( 'ai_seo_assistant_post_types', [ 'post', 'page' ] );
 
 		if ( ! is_array( $post_types ) || empty( $post_types ) ) {

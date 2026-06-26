@@ -108,6 +108,9 @@ jQuery(function ($) {
 				titleStatus.text(data.title_status || '');
 				descriptionStatus.text(data.description_status || '');
 				updateCounts();
+				lastGeneratedTitle = data.title || '';
+				lastGeneratedDesc  = data.description || '';
+				updateSeoPluginPreviews(lastGeneratedTitle, lastGeneratedDesc);
 				if (data.warning) {
 					setStatus(data.warning, 'warning');
 				} else if (data.source === 'placeholder') {
@@ -428,6 +431,52 @@ jQuery(function ($) {
 			.always(function () {
 				button.prop('disabled', false);
 			});
+	}
+
+	// Track the last generated values so we can push them into SEO plugin
+	// sidebar previews after the post save completes.
+	var lastGeneratedTitle = '';
+	var lastGeneratedDesc  = '';
+
+	function updateSeoPluginPreviews(title, description) {
+		if (!window.wp || !wp.data) return;
+		// Yoast SEO: updateData targets the snippet-editor display store only —
+		// does NOT touch core/editor, so it will not trigger a re-save.
+		try {
+			var yoast = wp.data.dispatch('yoast-seo/editor');
+			if (yoast && typeof yoast.updateData === 'function') {
+				yoast.updateData({ title: title, description: description });
+			}
+		} catch (e) {}
+		// Rank Math block editor store.
+		try {
+			var rankMath = wp.data.dispatch('rank-math');
+			if (rankMath) {
+				if (typeof rankMath.updateTitle === 'function') {
+					rankMath.updateTitle(title);
+				}
+				if (typeof rankMath.updateDescription === 'function') {
+					rankMath.updateDescription(description);
+				}
+			}
+		} catch (e) {}
+	}
+
+	// After the block editor finishes saving, push our generated values into
+	// SEO plugin sidebars so their snippet previews update without a hard refresh.
+	if (window.wp && wp.data && typeof wp.data.subscribe === 'function') {
+		var wasSavingPost = false;
+		wp.data.subscribe(function () {
+			try {
+				var select = wp.data.select('core/editor');
+				if (!select) return;
+				var isSavingPost = select.isSavingPost();
+				if (wasSavingPost && !isSavingPost && lastGeneratedTitle) {
+					updateSeoPluginPreviews(lastGeneratedTitle, lastGeneratedDesc);
+				}
+				wasSavingPost = isSavingPost;
+			} catch (e) {}
+		});
 	}
 
 	titleField.on('input', updateCounts);

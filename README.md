@@ -76,6 +76,31 @@ These suggestions are intended to be:
 
 The plugin should avoid repeating the same content suggestion endlessly for the same page issue.
 
+### SEO Plugin Integration
+
+AI SEO Assistant auto-detects the active SEO plugin. No manual configuration is required.
+
+Supported plugins:
+
+* The SEO Framework
+* Yoast SEO
+* Rank Math
+
+When a supported plugin is active, generated metadata is written directly to that plugin's meta fields. If no supported plugin is detected, a notice is shown in the admin and the audit, report, and indexing pages are hidden until a supported plugin is activated.
+
+In the block editor, the active SEO plugin's snippet preview updates live after metadata is generated, without requiring a hard refresh.
+
+### Markdown and LLMs.txt
+
+The plugin can generate a machine-readable Markdown index and full-content export of the site for use with AI tools and LLM context.
+
+Generated endpoints:
+
+* `/llms.txt` — index of public post titles and URLs
+* `/llms-full.txt` — full post content export, paginated across multiple pages (`/llms-full-2.txt`, `/llms-full-3.txt`, etc.)
+
+Output is cached using WordPress transients. Cache is flushed automatically when posts are saved or the plugin settings change.
+
 ### SEO Audit Tools
 
 The plugin includes admin audit tools for reviewing page-level SEO status, metadata, content coverage, and available Search Console signals.
@@ -357,7 +382,38 @@ ai-seo-assistant/
 ├── assets/
 │   ├── css/
 │   └── js/
+│       ├── admin.js
+│       └── wpmai-admin.js
 ├── includes/
+│   ├── class-admin.php
+│   ├── class-ajax.php
+│   ├── class-audit-page.php
+│   ├── class-cache.php
+│   ├── class-content-extractor.php
+│   ├── class-gsc-client.php
+│   ├── class-gsc-page.php
+│   ├── class-indexability.php
+│   ├── class-indexing-tools-page.php
+│   ├── class-llms-txt.php
+│   ├── class-local-seo-context.php
+│   ├── class-logger.php
+│   ├── class-markdown-converter.php
+│   ├── class-markdown-page.php
+│   ├── class-markdown-rest-api.php
+│   ├── class-markdown-settings.php
+│   ├── class-markdown-sitemap.php
+│   ├── class-metadata-generator.php
+│   ├── class-openai-client.php
+│   ├── class-plugin.php
+│   ├── class-prompt-builder.php
+│   ├── class-rankmath-adapter.php
+│   ├── class-rate-limiter.php
+│   ├── class-report-page.php
+│   ├── class-rewrite-rules.php
+│   ├── class-seo-adapter-resolver.php
+│   ├── class-tsf-adapter.php
+│   ├── class-utils.php
+│   └── class-yoast-adapter.php
 ├── ai-seo-assistant.php
 ├── README.md
 ├── LICENSE

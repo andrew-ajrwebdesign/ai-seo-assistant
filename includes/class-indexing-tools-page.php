@@ -38,6 +38,11 @@ class AI_SEO_Assistant_Indexing_Tools_Page {
 			return;
 		}
 
+		if ( ! AI_SEO_Assistant_SEO_Adapter_Resolver::any_seo_plugin_active() ) {
+			echo '<div class="wrap"><h1>Indexing Tools</h1><div class="notice notice-warning inline" style="margin:12px 0"><p><strong>No supported SEO plugin detected.</strong> Please activate The SEO Framework, Yoast SEO, or Rank Math to use AI SEO Assistant.</p></div></div>';
+			return;
+		}
+
 		$pages = $this->get_all_page_rows();
 
 		$recommended_count = 0;
