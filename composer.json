@@ -1,0 +1,17 @@
+{
+    "name": "ajrwebdesign/ai-seo-assistant",
+    "description": "AI-assisted SEO for WordPress",
+    "type": "wordpress-plugin",
+    "license": "GPL-2.0-or-later",
+    "autoload": {
+        "psr-4": {
+            "AJR\\SEOAssistant\\": "src/"
+        }
+    },
+    "require": {
+        "league/html-to-markdown": "^5.1"
+    },
+    "config": {
+        "optimize-autoloader": true
+    }
+}

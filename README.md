@@ -124,6 +124,15 @@ Potential noindex candidates may include:
 
 Indexing recommendations should always be reviewed before applying changes to a production site.
 
+### Redirects
+
+A **Redirects** admin page (under the AI SEO Assistant menu) lets you send old or broken URLs to a new destination so visitors and search engines get a real page instead of a 404.
+
+* Match is on the exact request path, with the trailing slash ignored and matching case-insensitive by default (filterable via `ai_seo_assistant_redirects_case_insensitive`).
+* Supported types: `301` permanent, `302` temporary, `307` temporary (method preserved), and `410` Gone (no destination).
+* Redirects are stored in a dedicated table and served from a compact, autoloaded lookup map, so a normal front-end request performs no extra database query and no write.
+* When Google Search Console is connected, the page surfaces cached GSC URLs that no longer resolve on the site as one-click redirect suggestions (some archive or term URLs can appear here even when valid, so review before creating a redirect).
+
 ## Requirements
 
 * WordPress 6.0+
@@ -377,47 +386,33 @@ If a real key was ever committed, remove it from Git history and rotate the key 
 
 ## Repository Structure
 
+The plugin follows a PSR-4 layout. Every class lives under the single root
+namespace `AJR\SEOAssistant\` (mapped to `src/`) and is autoloaded by Composer.
+
 ```text
 ai-seo-assistant/
+├── ai-seo-assistant.php        # Thin bootstrap: headers, constants, autoload, kickoff
+├── composer.json               # PSR-4: AJR\SEOAssistant\ => src/
+├── composer.lock
+├── README.md
+├── LICENSE
+├── .gitignore
 ├── assets/
 │   ├── css/
 │   └── js/
 │       ├── admin.js
 │       └── wpmai-admin.js
-├── includes/
-│   ├── class-admin.php
-│   ├── class-ajax.php
-│   ├── class-audit-page.php
-│   ├── class-cache.php
-│   ├── class-content-extractor.php
-│   ├── class-gsc-client.php
-│   ├── class-gsc-page.php
-│   ├── class-indexability.php
-│   ├── class-indexing-tools-page.php
-│   ├── class-llms-txt.php
-│   ├── class-local-seo-context.php
-│   ├── class-logger.php
-│   ├── class-markdown-converter.php
-│   ├── class-markdown-page.php
-│   ├── class-markdown-rest-api.php
-│   ├── class-markdown-settings.php
-│   ├── class-markdown-sitemap.php
-│   ├── class-metadata-generator.php
-│   ├── class-openai-client.php
-│   ├── class-plugin.php
-│   ├── class-prompt-builder.php
-│   ├── class-rankmath-adapter.php
-│   ├── class-rate-limiter.php
-│   ├── class-report-page.php
-│   ├── class-rewrite-rules.php
-│   ├── class-seo-adapter-resolver.php
-│   ├── class-tsf-adapter.php
-│   ├── class-utils.php
-│   └── class-yoast-adapter.php
-├── ai-seo-assistant.php
-├── README.md
-├── LICENSE
-└── .gitignore
+├── languages/                  # Translation files for the ai-seo-assistant text domain
+├── src/
+│   ├── Core/                   # Plugin (wiring), Utils, Logger
+│   ├── Adapters/               # SEO plugin adapters (TSF, Yoast, Rank Math) + resolver
+│   ├── AI/                     # OpenAI client, Prompt_Builder, Metadata_Generator
+│   ├── Content/                # Content_Extractor, Local_SEO_Context
+│   ├── Admin/                  # Admin, Ajax, Audit/Report/Indexing/Markdown/Redirects pages
+│   ├── GSC/                    # Google Search Console client + page
+│   ├── Redirects/              # Redirect manager (Redirect_Store + Redirect_Handler)
+│   └── Markdown/               # Markdown-for-AI module (Module, endpoints, settings, cache)
+└── vendor/                     # Composer dependencies (league/html-to-markdown)
 ```
 
 ## Architecture Notes
@@ -428,12 +423,13 @@ ai-seo-assistant/
 ai-seo-assistant.php
 ```
 
-Loads the plugin, defines core constants, and initializes plugin classes.
+A thin entry point: defines constants, requires the Composer autoloader, then
+boots `Core\Plugin` and the `Markdown\Module` on `plugins_loaded`.
 
 ### Admin UI
 
 ```text
-includes/class-admin.php
+src/Admin/Admin.php
 ```
 
 Handles admin screens, settings, editor metaboxes, and admin-facing actions.
@@ -441,7 +437,7 @@ Handles admin screens, settings, editor metaboxes, and admin-facing actions.
 ### OpenAI Client
 
 ```text
-includes/class-openai-client.php
+src/AI/OpenAI_Client.php
 ```
 
 Handles communication with the OpenAI API and retrieves the configured API key.
@@ -449,7 +445,7 @@ Handles communication with the OpenAI API and retrieves the configured API key.
 ### Metadata Generator
 
 ```text
-includes/class-metadata-generator.php
+src/AI/Metadata_Generator.php
 ```
 
 Handles metadata generation, SEO recommendations, content placement suggestions, and AI response processing.
@@ -457,7 +453,7 @@ Handles metadata generation, SEO recommendations, content placement suggestions,
 ### Prompt Builder
 
 ```text
-includes/class-prompt-builder.php
+src/AI/Prompt_Builder.php
 ```
 
 Builds structured prompts using site context, page content, SEO focus fields, Search Console data, and recommendation guidance.
@@ -465,7 +461,7 @@ Builds structured prompts using site context, page content, SEO focus fields, Se
 ### Audit Page
 
 ```text
-includes/class-audit-page.php
+src/Admin/Audit_Page.php
 ```
 
 Displays audit rows and page-level SEO visibility information.
@@ -473,15 +469,33 @@ Displays audit rows and page-level SEO visibility information.
 ### Indexing Tools
 
 ```text
-includes/class-indexing-tools-page.php
+src/Admin/Indexing_Tools_Page.php
 ```
 
 Handles noindex recommendations and indexing-related admin tools.
 
+### Markdown-for-AI Module
+
+```text
+src/Markdown/Module.php
+```
+
+Boots the AI-discovery endpoints (`/llms.txt`, `?format=markdown`, REST API, sitemap), the settings screen, and cache invalidation. Kept as a self-contained module under `AJR\SEOAssistant\Markdown\`.
+
+### Redirects
+
+```text
+src/Redirects/Redirect_Store.php
+src/Redirects/Redirect_Handler.php
+src/Admin/Redirects_Page.php
+```
+
+`Redirect_Store` owns the custom redirects table, path normalization, and a compact autoloaded lookup map. `Redirect_Handler` runs early on `template_redirect` and serves the redirect from that map, so a normal front-end request performs no extra database query and no write. `Redirects_Page` provides the admin UI and, when Search Console is connected, the 404 suggestions.
+
 ### Utilities
 
 ```text
-includes/class-utils.php
+src/Core/Utils.php
 ```
 
 Contains shared helper methods, including methods for masking sensitive data before logging or displaying errors.
