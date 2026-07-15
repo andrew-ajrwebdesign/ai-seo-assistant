@@ -144,7 +144,9 @@ A **Redirects** admin page (under the AI SEO Assistant menu) lets you send old o
 
 ## Installation
 
-> No build step is required. The `vendor/` directory (the Composer autoloader and dependencies) is committed to the repository, so the plugin installs and activates directly from any GitHub download or clone — you do **not** need to run Composer on the target site.
+> **Recommended:** download the latest **`ai-seo-assistant.zip`** from the [Releases page](https://github.com/andrew-ajrwebdesign/ai-seo-assistant/releases). It is built automatically on each version tag, is packaged with the correct `ai-seo-assistant/` folder name, includes the Composer autoloader, and installs on any WordPress site with no build step. In WP admin: **Plugins → Add New → Upload Plugin**.
+
+> No build step is required for any install method. The `vendor/` directory (the Composer autoloader and dependencies) is also committed to the repository, so a `git clone` or the code-page "Download ZIP" work too — you do **not** need to run Composer on the target site.
 
 ### Option 1: Install from a Zip File
 
