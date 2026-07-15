@@ -144,9 +144,9 @@ A **Redirects** admin page (under the AI SEO Assistant menu) lets you send old o
 
 ## Installation
 
-> **Recommended:** download the latest **`ai-seo-assistant.zip`** from the [Releases page](https://github.com/andrew-ajrwebdesign/ai-seo-assistant/releases). It is built automatically on each version tag, is packaged with the correct `ai-seo-assistant/` folder name, includes the Composer autoloader, and installs on any WordPress site with no build step. In WP admin: **Plugins → Add New → Upload Plugin**.
+> **Recommended:** download the latest **`ai-seo-assistant.zip`** from the [Releases page](https://github.com/andrew-ajrwebdesign/ai-seo-assistant/releases). It is built automatically (on every push to `main` and on version tags), packaged with the correct `ai-seo-assistant/` folder name and the Composer autoloader bundled, and installs on any WordPress site with **no build step**. In WP admin: **Plugins → Add New → Upload Plugin**.
 
-> No build step is required for any install method. The `vendor/` directory (the Composer autoloader and dependencies) is also committed to the repository, so a `git clone` or the code-page "Download ZIP" work too — you do **not** need to run Composer on the target site.
+> Installing from a **source checkout** instead (a `git clone` or the code-page "Download ZIP") requires generating the autoloader first, because `vendor/` is not committed: run `composer install --no-dev` in the plugin folder before activating. For a target site, prefer the release zip above.
 
 ### Option 1: Install from a Zip File
 
@@ -176,9 +176,11 @@ From the WordPress plugins directory:
 ```bash
 cd wp-content/plugins
 git clone git@github.com:andrew-ajrwebdesign/ai-seo-assistant.git
+cd ai-seo-assistant
+composer install --no-dev
 ```
 
-Then activate the plugin in WordPress admin.
+The `composer install` step is required — `vendor/` is not committed, and the plugin loads its classes through `vendor/autoload.php`. Then activate the plugin in WordPress admin. (If you would rather not run Composer, use the release zip from Option 1 instead.)
 
 ## API Key Configuration
 
@@ -336,9 +338,11 @@ git push -u origin feature/prompt-builder-upgrade
 
 ## Creating a Clean Plugin Zip
 
-> **The `vendor/` directory must be included.** The plugin loads all of its classes through `vendor/autoload.php`, so a zip without it fails to activate with a fatal error. `vendor/` is committed to the repository, so a plain GitHub download already contains it — build a clean zip only when you want a correctly-named `ai-seo-assistant/` folder (GitHub's "Download ZIP" names it `ai-seo-assistant-main`).
+> Most of the time you do not need to build a zip by hand — the [Releases page](https://github.com/andrew-ajrwebdesign/ai-seo-assistant/releases) has a ready-to-install `ai-seo-assistant.zip` (built by CI on every push). Build one manually only if you need a local package.
 
-From the parent `plugins` directory:
+> **The `vendor/` directory must be included.** The plugin loads all of its classes through `vendor/autoload.php`, so a zip without it fails to activate with a fatal error. `vendor/` is not committed, so run `composer install --no-dev -o` first to generate it, then build the zip.
+
+From the parent `plugins` directory (after `composer install --no-dev -o`):
 
 ```bash
 zip -r ai-seo-assistant.zip ai-seo-assistant \

@@ -25,9 +25,9 @@ define( 'AI_SEO_ASSISTANT_URL', plugin_dir_url( __FILE__ ) );
 define( 'AI_SEO_ASSISTANT_BASENAME', plugin_basename( __FILE__ ) );
 
 // Composer PSR-4 autoloader — all classes live under AJR\SEOAssistant\
-// (including the Markdown module) plus league/html-to-markdown. The vendor/
-// directory is committed to the repository so the plugin installs and runs
-// straight from a GitHub download without a Composer step.
+// (including the Markdown module) plus league/html-to-markdown. The packaged
+// release zip bundles vendor/; when working from a source checkout, run
+// `composer install` to generate it.
 $ai_seo_assistant_autoload = AI_SEO_ASSISTANT_PATH . 'vendor/autoload.php';
 
 if ( ! is_readable( $ai_seo_assistant_autoload ) ) {

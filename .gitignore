@@ -10,9 +10,7 @@ debug.log
 
 # Dependencies
 node_modules/
-# vendor/ is intentionally committed so the plugin installs and runs directly
-# from a GitHub download (the bootstrap requires vendor/autoload.php and target
-# sites do not run Composer). Regenerate with: composer install --no-dev -o
+vendor/
 
 # Build/package output
 dist/
