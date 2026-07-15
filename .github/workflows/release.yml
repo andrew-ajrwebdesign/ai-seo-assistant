@@ -1,17 +1,21 @@
 name: Build release zip
 
-# Publishes an install-ready plugin zip to the Releases page whenever a version
-# tag (vX.Y.Z) is pushed. To cut a release:
+# Packages an install-ready plugin zip (correct folder name, Composer autoloader
+# included, dev files excluded) and publishes it to the Releases page.
 #
-#   git tag v3.3.1 && git push origin v3.3.1
+#  - Every push to main refreshes a rolling "latest" pre-release, so the newest
+#    install-ready zip is ALWAYS downloadable from a stable URL:
+#      https://github.com/andrew-ajrwebdesign/ai-seo-assistant/releases/download/latest/ai-seo-assistant.zip
+#  - Pushing a version tag (git tag v3.3.1 && git push origin v3.3.1) publishes a
+#    permanent, versioned release as well.
 #
-# The job packages a correctly-named `ai-seo-assistant/` folder that includes the
-# Composer autoloader and excludes dev files, so the attached zip installs on any
-# WordPress site with no build step. It uses only tools pre-installed on the
-# runner plus the pinned first-party actions/checkout, to minimise supply-chain risk.
+# Uses only tools pre-installed on the runner plus the pinned first-party
+# actions/checkout, to minimise supply-chain surface.
 
 on:
   push:
+    branches:
+      - main
     tags:
       - 'v*'
 
@@ -22,7 +26,7 @@ jobs:
   release:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out the tagged commit
+      - name: Check out the pushed commit
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
       - name: Install production dependencies
@@ -47,7 +51,8 @@ jobs:
           cd build
           zip -rq ../ai-seo-assistant.zip ai-seo-assistant
 
-      - name: Publish the release with the zip attached
+      - name: Publish versioned release (on vX.Y.Z tag)
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -55,3 +60,17 @@ jobs:
             --title "${GITHUB_REF_NAME}" \
             --generate-notes \
           || gh release upload "${GITHUB_REF_NAME}" ai-seo-assistant.zip --clobber
+
+      - name: Refresh rolling latest build (on push to main)
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view latest >/dev/null 2>&1; then
+            gh release upload latest ai-seo-assistant.zip --clobber
+          else
+            gh release create latest ai-seo-assistant.zip \
+              --title "Latest build (main)" \
+              --notes "Automatically rebuilt from the newest push to main. Always the current install-ready zip." \
+              --prerelease
+          fi
