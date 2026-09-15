@@ -20,7 +20,14 @@ class Sitemap {
 		// produces invalid XML that Google rejects. AI crawlers discover Markdown
 		// URLs from /llms.txt directly; a separate /llms-sitemap.xml is sufficient.
 		add_action( 'init', [ $this, 'register_rewrite' ] );
-		add_action( 'template_redirect', [ $this, 'maybe_serve_sitemap' ] );
+		// Priority 5 so core redirect_canonical (10) cannot 301 it to /llms-sitemap.xml/.
+		add_action( 'template_redirect', [ $this, 'maybe_serve_sitemap' ], 5 );
+		add_filter(
+			'redirect_canonical',
+			static function ( $redirect_url ) {
+				return get_query_var( 'wpmai_llms_sitemap' ) ? false : $redirect_url;
+			}
+		);
 	}
 
 	/**
@@ -39,8 +46,13 @@ class Sitemap {
 			return;
 		}
 
-		$settings = get_option( 'wpmai_settings', [] );
-		if ( empty( $settings['enable_llms_txt'] ) && empty( $settings['enable_format_param'] ) ) {
+		// Every <loc> below is a ?format=markdown URL, so the format toggle alone decides
+		// whether this sitemap may exist - with it off, each listed URL 404s. Defaults ON,
+		// like the endpoint itself. Previously this also read 'enable_llms_txt', a key
+		// sanitize() never writes, which made the check depend on a setting that never exists.
+		$settings  = get_option( 'wpmai_settings', [] );
+		$format_on = (bool) ( $settings['enable_format_param'] ?? true );
+		if ( ! $format_on ) {
 			wp_die( esc_html__( 'WP Markdown for AI endpoints are disabled.', 'ai-seo-assistant' ), '', 403 );
 		}
 

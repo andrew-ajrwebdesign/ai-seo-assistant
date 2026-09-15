@@ -22,8 +22,25 @@ class Llms_Txt {
 	public function register(): void {
 		add_filter( 'query_vars', [ $this, 'add_query_vars' ] );
 		add_action( 'init', [ $this, 'add_rewrite_rules' ] );
-		add_action( 'template_redirect', [ $this, 'maybe_serve' ] );
+		// Priority 5: after Redirect_Handler (1), before core redirect_canonical (10).
+		// At the default 10, canonical ran first and 301'd /llms.txt to /llms.txt/ on
+		// every /%postname%/ site - agents and Lighthouse request the exact path.
+		add_action( 'template_redirect', [ $this, 'maybe_serve' ], 5 );
+		add_filter( 'redirect_canonical', [ $this, 'keep_exact_path' ] );
 		add_filter( 'robots_txt', [ $this, 'add_robots_pointer' ], 10, 2 );
+	}
+
+	/**
+	 * Stops WordPress adding a trailing slash to /llms.txt and /llms-full*.txt.
+	 *
+	 * Belt and braces with the priority-5 serve: if another plugin moves
+	 * redirect_canonical earlier, the endpoint still answers at its exact path.
+	 *
+	 * @param string|false $redirect_url Canonical URL WordPress intends to redirect to.
+	 * @return string|false
+	 */
+	public function keep_exact_path( $redirect_url ) {
+		return get_query_var( 'wpmai_llms' ) ? false : $redirect_url;
 	}
 
 	public function add_query_vars( array $vars ): array {
@@ -169,8 +186,14 @@ class Llms_Txt {
 		$ai_instructions = trim( (string) Settings::get_option( 'ai_instructions', '' ) );
 		$allowed_langs   = Settings::get_option( 'polylang_languages', [] );
 
-		$output  = "# {$site_name}\n\n";
-		$output .= "> {$site_desc}\n\n";
+		$summary = $this->get_summary( (string) $site_desc );
+
+		// llmstxt.org shape: H1 name, then a blockquote summary. An empty "> " line is
+		// worse than none, so the blockquote is only written when there is a summary.
+		$output = "# {$site_name}\n\n";
+		if ( '' !== $summary ) {
+			$output .= "> {$summary}\n\n";
+		}
 		$output .= "Site: {$site_url}\n";
 		$output .= 'Generated: ' . gmdate( 'Y-m-d\TH:i:s\Z' ) . "\n\n";
 
@@ -257,7 +280,9 @@ class Llms_Txt {
 		} else {
 			// --- Index mode: list of links with excerpts, grouped by post type ---
 
-			$output .= "This file lists all public content on this site. Append ?format=markdown to any URL to retrieve its content as Markdown.\n\n";
+			$output .= Settings::get_option( 'enable_format_param', true )
+				? "This file lists all public content on this site. Append ?format=markdown to any URL to retrieve its content as Markdown.\n\n"
+				: "This file lists all public content on this site.\n\n";
 
 			if ( $ai_instructions ) {
 				$output .= "## Instructions\n\n";
@@ -266,62 +291,191 @@ class Llms_Txt {
 
 			$output .= "---\n\n";
 
-			foreach ( $post_types as $post_type ) {
-				$query_args = [
-					'post_type'              => sanitize_key( $post_type ),
-					'post_status'            => 'publish',
-					'posts_per_page'         => 500,
-					'no_found_rows'          => true,
-					'update_post_meta_cache' => true,
-					'update_post_term_cache' => true,
-					'orderby'                => 'date',
-					'order'                  => 'DESC',
-				];
+			// Key pages first: the handful an agent should read before anything else.
+			$key_ids = array_values( array_filter( array_map( 'absint', (array) Settings::get_option( 'llms_key_page_ids', [] ) ) ) );
+			$listed  = [];
 
-				if ( ! empty( $excluded ) ) {
-					$query_args['post__not_in'] = array_map( 'absint', $excluded );
-				}
+			if ( $key_ids ) {
+				// One query for the posts and one for their meta, instead of two per key page.
+				_prime_post_caches( $key_ids, false, true );
 
-				if ( ! empty( $allowed_langs ) && function_exists( 'pll_get_post_language' ) ) {
-					$query_args['lang'] = implode( ',', array_map( 'sanitize_key', $allowed_langs ) );
-				}
-
-				$posts = new \WP_Query( $query_args );
-
-				if ( ! $posts->have_posts() ) {
-					continue;
-				}
-
-				$type_obj = get_post_type_object( $post_type );
-				$label    = $type_obj ? $type_obj->labels->name : ucfirst( $post_type );
-				$section  = '';
-
-				foreach ( $posts->posts as $post ) {
-					if ( ! Indexability::is_indexable( $post ) ) {
+				$section = '';
+				foreach ( $key_ids as $key_id ) {
+					$key_post = get_post( $key_id );
+					// Same gates as every other list: an enabled, viewable post type, not excluded.
+					// Without them a mistyped ID could publish e.g. a WooCommerce coupon title here.
+					if ( ! $key_post
+						|| 'publish' !== $key_post->post_status
+						|| ! in_array( $key_post->post_type, array_map( 'sanitize_key', (array) $post_types ), true )
+						|| ! is_post_type_viewable( $key_post->post_type )
+						|| in_array( $key_id, array_map( 'absint', (array) $excluded ), true )
+						|| ! Indexability::is_indexable( $key_post )
+					) {
 						continue;
 					}
-
-					$title        = html_entity_decode( get_the_title( $post ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
-					$url          = get_permalink( $post );
-					$markdown_url = add_query_arg( 'format', 'markdown', $url );
-					$excerpt      = $this->get_excerpt( $post );
-
-					$section .= "- [{$title}]({$markdown_url})";
-					if ( $excerpt ) {
-						$section .= ': ' . $excerpt;
-					}
-					$section .= "\n";
+					$section          .= $this->link_line( $key_post );
+					$listed[ $key_id ] = true;
 				}
-
 				if ( $section ) {
-					$output .= "## {$label}\n\n" . $section . "\n";
+					$output .= "## Key pages\n\n" . $section . "\n";
 				}
+			}
 
-				wp_reset_postdata();
+			// Types marked optional go under llmstxt.org's "## Optional" heading, which tells
+			// agents the links can be skipped when context is short.
+			$optional_types = array_map( 'sanitize_key', (array) Settings::get_option( 'llms_optional_post_types', [] ) );
+			$primary_types  = array_values( array_diff( array_map( 'sanitize_key', (array) $post_types ), $optional_types ) );
+			$optional_types = array_values( array_intersect( $optional_types, array_map( 'sanitize_key', (array) $post_types ) ) );
+
+			foreach ( $primary_types as $post_type ) {
+				$section = $this->type_section( $post_type, $excluded, $allowed_langs, $listed );
+				if ( $section ) {
+					$type_obj = get_post_type_object( $post_type );
+					$label    = $type_obj ? $type_obj->labels->name : ucfirst( $post_type );
+					$output  .= "## {$label}\n\n" . $section . "\n";
+				}
+			}
+
+			$optional = '';
+			foreach ( $optional_types as $post_type ) {
+				$optional .= $this->type_section( $post_type, $excluded, $allowed_langs, $listed );
+			}
+			if ( $optional ) {
+				$output .= "## Optional\n\n" . $optional . "\n";
 			}
 		}
 
 		return $output;
+	}
+
+	/**
+	 * Builds the Markdown link lines for one post type in index mode.
+	 *
+	 * Posts already listed (e.g. under "Key pages") are skipped so no link appears twice.
+	 * Exclusions are filtered in PHP rather than with post__not_in, which is cheaper and
+	 * cache-friendlier on the query.
+	 *
+	 * @param string $post_type     Post type slug.
+	 * @param array  $excluded      Post IDs excluded in settings.
+	 * @param array  $allowed_langs Polylang language slugs, if restricted.
+	 * @param array  $listed        Map of post ID => true already written; updated in place.
+	 * @return string Link lines, or '' when the type has nothing indexable.
+	 */
+	private function type_section( string $post_type, array $excluded, array $allowed_langs, array &$listed ): string {
+		$query_args = [
+			'post_type'              => $post_type,
+			'post_status'            => 'publish',
+			'posts_per_page'         => 500,
+			'no_found_rows'          => true,
+			'update_post_meta_cache' => true,
+			'update_post_term_cache' => false,
+			'orderby'                => 'date',
+			'order'                  => 'DESC',
+		];
+
+		if ( ! empty( $allowed_langs ) && function_exists( 'pll_get_post_language' ) ) {
+			$query_args['lang'] = implode( ',', array_map( 'sanitize_key', $allowed_langs ) );
+		}
+
+		$skip  = array_fill_keys( array_map( 'absint', $excluded ), true );
+		$posts = new \WP_Query( $query_args );
+		$lines = '';
+
+		foreach ( $posts->posts as $post ) {
+			if ( isset( $skip[ $post->ID ] ) || isset( $listed[ $post->ID ] ) || ! Indexability::is_indexable( $post ) ) {
+				continue;
+			}
+			$lines              .= $this->link_line( $post );
+			$listed[ $post->ID ] = true;
+		}
+
+		wp_reset_postdata();
+
+		return $lines;
+	}
+
+	/**
+	 * One llms.txt list item: "- [Title](url): description".
+	 *
+	 * The link must be Markdown link syntax - Lighthouse's llms-txt audit counts only
+	 * [text](url) links. The URL is the page itself or its ?format=markdown twin,
+	 * per the llms_link_target setting (default markdown, the historic behaviour).
+	 *
+	 * @param \WP_Post $post Post object.
+	 * @return string
+	 */
+	private function link_line( \WP_Post $post ): string {
+		$title = html_entity_decode( get_the_title( $post ), ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+		$title = str_replace( [ '[', ']' ], [ '(', ')' ], $title );
+		$url   = get_permalink( $post );
+
+		// Markdown links only while the ?format endpoint is on; otherwise they would all 404.
+		if ( 'page' !== Settings::get_option( 'llms_link_target', 'markdown' ) && Settings::get_option( 'enable_format_param', true ) ) {
+			$url = add_query_arg( 'format', 'markdown', $url );
+		}
+
+		$line    = "- [{$title}]({$url})";
+		$excerpt = $this->get_excerpt( $post );
+
+		return $line . ( $excerpt ? ': ' . $excerpt : '' ) . "\n";
+	}
+
+	/**
+	 * The blockquote summary under the H1.
+	 *
+	 * Priority: the llms_summary setting, then the SEO plugin's homepage description,
+	 * then the WordPress tagline. The tagline is last because block themes often leave
+	 * it blank or as a slogan, which describes nothing to an agent.
+	 *
+	 * @param string $tagline WordPress site tagline.
+	 * @return string Single-line summary, or '' when nothing usable exists.
+	 */
+	private function get_summary( string $tagline ): string {
+		$summary = trim( (string) Settings::get_option( 'llms_summary', '' ) );
+
+		if ( '' === $summary ) {
+			$tsf     = get_option( 'autodescription-site-settings' );
+			$summary = is_array( $tsf ) ? trim( (string) ( $tsf['homepage_description'] ?? '' ) ) : '';
+		}
+
+		if ( '' === $summary && 'page' === get_option( 'show_on_front' ) ) {
+			$front = get_post( (int) get_option( 'page_on_front' ) );
+			// Only a published, indexable front page may lend its description to a public file.
+			if ( $front && 'publish' === $front->post_status && Indexability::is_indexable( $front ) ) {
+				$summary = $this->get_seo_description( (int) $front->ID );
+			}
+		}
+
+		if ( '' === $summary ) {
+			$summary = trim( $tagline );
+		}
+
+		// A blockquote is one line in llms.txt; collapse any newlines from a textarea.
+		return trim( preg_replace( '/\s+/', ' ', html_entity_decode( $summary, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) ) );
+	}
+
+	/**
+	 * The page's hand-written SEO meta description, if the active SEO plugin has one.
+	 *
+	 * Reads the stored field directly for TSF, Yoast and Rank Math. Templated values
+	 * (Yoast %%title%%, Rank Math %title%) are ignored rather than shown unexpanded.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return string
+	 */
+	private function get_seo_description( int $post_id ): string {
+		if ( $post_id <= 0 ) {
+			return '';
+		}
+
+		foreach ( [ '_genesis_description', '_yoast_wpseo_metadesc', 'rank_math_description' ] as $meta_key ) {
+			$value = trim( (string) get_post_meta( $post_id, $meta_key, true ) );
+			if ( '' !== $value && ! preg_match( '/%%?[a-z_]+%%?/i', $value ) ) {
+				return $value;
+			}
+		}
+
+		return '';
 	}
 
 	/**
@@ -360,6 +514,14 @@ class Llms_Txt {
 	private function get_excerpt( \WP_Post $post ): string {
 		$length = (int) Settings::get_option( 'excerpt_length', 20 );
 
+		// A written meta description beats an excerpt stripped out of block markup.
+		$seo = $this->get_seo_description( (int) $post->ID );
+		if ( '' !== $seo ) {
+			// One line, no tags: a newline in a meta value must not add its own "## " or "- [..]"
+			// line to the file agents read first.
+			return trim( (string) preg_replace( '/\s+/u', ' ', wp_strip_all_tags( html_entity_decode( $seo, ENT_QUOTES | ENT_HTML5, 'UTF-8' ) ) ) );
+		}
+
 		if ( $post->post_excerpt ) {
 			$text = wp_strip_all_tags( $post->post_excerpt );
 		} else {
@@ -384,8 +546,10 @@ class Llms_Txt {
 			return $output;
 		}
 
-		$output .= "\n# AI Agents\n";
-		$output .= 'X-Llms-Txt: ' . esc_url( home_url( '/llms.txt' ) ) . "\n";
+		// A comment, not a directive: robots.txt parsers (Lighthouse's SEO audit among them)
+		// reject unknown directives, and "X-Llms-Txt:" is not one. Agents still find the pointer.
+		$output .= "\n# AI agents\n";
+		$output .= '# llms.txt: ' . esc_url( home_url( '/llms.txt' ) ) . "\n";
 
 		return $output;
 	}

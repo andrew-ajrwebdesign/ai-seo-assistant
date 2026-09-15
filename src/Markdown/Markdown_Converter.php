@@ -93,9 +93,16 @@ class Markdown_Converter {
 			'url: '      . esc_url( get_permalink( $post ) ),
 			'date: '     . get_the_date( 'Y-m-d', $post ),
 			'modified: ' . get_the_modified_date( 'Y-m-d', $post ),
-			'author: '   . esc_html( get_the_author_meta( 'display_name', $post->post_author ) ),
 			'type: '     . esc_html( $post->post_type ),
 		];
+
+		// Only a real display name. When it still equals the login (WordPress's default),
+		// printing it publishes an administrator's username in a public, crawled file.
+		$author_name  = (string) get_the_author_meta( 'display_name', $post->post_author );
+		$author_login = (string) get_the_author_meta( 'user_login', $post->post_author );
+		if ( '' !== $author_name && 0 !== strcasecmp( $author_name, $author_login ) ) {
+			array_splice( $lines, 5, 0, [ 'author: ' . esc_html( $author_name ) ] );
+		}
 
 		if ( ! is_wp_error( $categories ) && ! empty( $categories ) ) {
 			$lines[] = 'categories: [' . implode( ', ', array_map( 'esc_html', $categories ) ) . ']';

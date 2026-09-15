@@ -38,22 +38,16 @@ class Rate_Limiter {
 	 * Sends 429 headers and exits if the limit is exceeded.
 	 */
 	public function check(): void {
-		$ip  = $this->client_ip();
-		$key = 'wpmai_rl_' . md5( $ip );
-
-		$data = get_transient( $key );
-
-		if ( false === $data ) {
-			$data = [ 'count' => 0, 'reset' => time() + $this->window() ];
-		}
-
-		$data['count']++;
-
-		set_transient( $key, $data, $this->window() );
+		$data = $this->count();
 
 		if ( $data['count'] > $this->limit() ) {
 			$retry_after = max( 0, $data['reset'] - time() );
-			header( 'HTTP/1.1 429 Too Many Requests' );
+			// status_header() + nocache_headers(), never a raw status line: cache plugins
+			// only see a status through the status_header filter, and a 429 cached as a
+			// page would replace that page for every visitor.
+			status_header( 429 );
+			nocache_headers();
+			header( 'X-LiteSpeed-Cache-Control: no-cache' );
 			header( 'Retry-After: ' . $retry_after );
 			header( 'Content-Type: text/plain; charset=UTF-8' );
 			header( 'X-RateLimit-Limit: ' . $this->limit() );
@@ -65,6 +59,41 @@ class Rate_Limiter {
 		header( 'X-RateLimit-Limit: ' . $this->limit() );
 		header( 'X-RateLimit-Remaining: ' . max( 0, $this->limit() - $data['count'] ) );
 		header( 'X-RateLimit-Reset: ' . $data['reset'] );
+	}
+
+	/**
+	 * Counts this request and reports whether the client is over the limit, WITHOUT exiting.
+	 *
+	 * For callers that must degrade instead of refusing — Markdown content negotiation
+	 * answers at the page's own URL, so an over-limit agent gets the normal HTML page,
+	 * never an error page that a cache could store as that URL.
+	 *
+	 * @return bool True when over the limit.
+	 */
+	public function is_limited(): bool {
+		return $this->count()['count'] > $this->limit();
+	}
+
+	/**
+	 * Increments and returns this client's counter for the current window.
+	 *
+	 * @return array{count:int,reset:int}
+	 */
+	private function count(): array {
+		$key  = 'wpmai_rl_' . md5( $this->client_ip() );
+		$data = get_transient( $key );
+
+		if ( ! is_array( $data ) || ! isset( $data['count'], $data['reset'] ) ) {
+			$data = [
+				'count' => 0,
+				'reset' => time() + $this->window(),
+			];
+		}
+
+		++$data['count'];
+		set_transient( $key, $data, $this->window() );
+
+		return $data;
 	}
 
 	/**

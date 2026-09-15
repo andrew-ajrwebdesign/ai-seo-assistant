@@ -166,6 +166,17 @@ class Markdown_Page {
 					</tr>
 
 					<tr>
+						<th scope="row">Markdown for agents</th>
+						<td>
+							<label>
+								<input type="checkbox" name="<?php echo esc_attr( $option_key ); ?>[enable_accept_negotiation]" value="1" <?php checked( (bool) ( $s['enable_accept_negotiation'] ?? false ) ); ?>>
+								Serve Markdown at the page's own address when an agent sends <code>Accept: text/markdown</code>
+							</label>
+							<p class="description">Browsers keep getting HTML. The Markdown response is never page-cached, carries <code>Vary: Accept</code> and a canonical link, and has no noindex header.</p>
+						</td>
+					</tr>
+
+					<tr>
 						<th scope="row">
 							<label for="wpmai_full_post_limit">Max posts in llms-full.txt (per type)</label>
 						</th>
@@ -246,6 +257,57 @@ class Markdown_Page {
 						<td>
 							<textarea id="wpmai_ai_instructions" name="<?php echo esc_attr( $option_key ); ?>[ai_instructions]" rows="6" style="width:600px;font-family:monospace"><?php echo esc_textarea( $s['ai_instructions'] ?? '' ); ?></textarea>
 							<p class="description">Plain text or Markdown. Use this to tell agents what the site is for, what content to prioritise, and any usage notes.</p>
+						</td>
+					</tr>
+				</table>
+
+				<h2>llms.txt structure</h2>
+				<p>Shapes /llms.txt to the <a href="https://llmstxt.org/" target="_blank" rel="noopener">llmstxt.org</a> format that Lighthouse's Agentic Browsing audit checks: a site summary, key pages first, and lower-priority content under "Optional".</p>
+				<table class="form-table" role="presentation">
+					<tr>
+						<th scope="row">
+							<label for="wpmai_llms_summary">Site summary</label>
+						</th>
+						<td>
+							<textarea id="wpmai_llms_summary" name="<?php echo esc_attr( $option_key ); ?>[llms_summary]" rows="3" style="width:600px"><?php echo esc_textarea( $s['llms_summary'] ?? '' ); ?></textarea>
+							<p class="description">One or two sentences: who the business is, what it does, where. Leave blank to use the SEO homepage description, then the site tagline.</p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row">
+							<label for="wpmai_llms_key_page_ids">Key pages</label>
+						</th>
+						<td>
+							<input type="text" id="wpmai_llms_key_page_ids" name="<?php echo esc_attr( $option_key ); ?>[llms_key_page_ids]" value="<?php echo esc_attr( implode( ', ', array_map( 'absint', (array) ( $s['llms_key_page_ids'] ?? [] ) ) ) ); ?>" style="width:320px" placeholder="e.g. 12, 48, 51">
+							<p class="description">Post or page IDs listed first, in this order, under "Key pages" — typically services, pricing, service areas and contact.</p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row">Optional content</th>
+						<td>
+							<?php foreach ( get_post_types( [ 'public' => true ], 'objects' ) as $llms_type_obj ) : ?>
+								<?php
+								if ( 'attachment' === $llms_type_obj->name ) {
+									continue;
+								}
+								?>
+								<label style="display:block">
+									<input type="checkbox" name="<?php echo esc_attr( $option_key ); ?>[llms_optional_post_types][]" value="<?php echo esc_attr( $llms_type_obj->name ); ?>" <?php checked( in_array( $llms_type_obj->name, (array) ( $s['llms_optional_post_types'] ?? [] ), true ) ); ?>>
+									<?php echo esc_html( $llms_type_obj->labels->name ); ?>
+								</label>
+							<?php endforeach; ?>
+							<p class="description">Listed under "Optional" — content agents can skip when short of context, such as blog posts and guides.</p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row">
+							<label for="wpmai_llms_link_target">Links point to</label>
+						</th>
+						<td>
+							<select id="wpmai_llms_link_target" name="<?php echo esc_attr( $option_key ); ?>[llms_link_target]">
+								<option value="markdown" <?php selected( ( $s['llms_link_target'] ?? 'markdown' ), 'markdown' ); ?>>Markdown version (?format=markdown)</option>
+								<option value="page" <?php selected( ( $s['llms_link_target'] ?? 'markdown' ), 'page' ); ?>>The page itself</option>
+							</select>
 						</td>
 					</tr>
 				</table>
@@ -643,6 +705,7 @@ class Markdown_Page {
 		$clean['enable_llms_index']   = ! empty( $input['enable_llms_index'] );
 		$clean['enable_llms_full']    = ! empty( $input['enable_llms_full'] );
 		$clean['enable_format_param'] = ! empty( $input['enable_format_param'] );
+		$clean['enable_accept_negotiation'] = ! empty( $input['enable_accept_negotiation'] );
 		$clean['full_post_limit']     = max( 1, min( 1000, (int) ( $input['full_post_limit'] ?? 200 ) ) );
 
 		$valid_types         = array_keys( get_post_types( [ 'public' => true ] ) );
@@ -666,6 +729,19 @@ class Markdown_Page {
 		}
 
 		$clean['ai_instructions'] = wp_strip_all_tags( $input['ai_instructions'] ?? '' );
+
+		$clean['llms_summary']      = sanitize_textarea_field( $input['llms_summary'] ?? '' );
+		$clean['llms_key_page_ids'] = array_values( array_unique( array_filter( array_map( 'absint', explode( ',', (string) ( $input['llms_key_page_ids'] ?? '' ) ) ) ) ) );
+		$clean['llms_link_target']  = 'page' === ( $input['llms_link_target'] ?? 'markdown' ) ? 'page' : 'markdown';
+
+		$clean['llms_optional_post_types'] = array_values(
+			array_intersect( array_map( 'sanitize_key', (array) ( $input['llms_optional_post_types'] ?? [] ) ), $valid_types )
+		);
+
+		// Ticking a type as Optional means "list it, lower priority". It only appears if the
+		// type is also enabled for the endpoints, so enable it rather than output nothing silently.
+		$clean['post_types'] = array_values( array_unique( array_merge( $clean['post_types'], $clean['llms_optional_post_types'] ) ) );
+
 		$clean['cache_ttl_hours'] = max( 1, min( 168, (int) ( $input['cache_ttl_hours'] ?? 12 ) ) );
 
 		\AJR\SEOAssistant\Markdown\Cache::flush_all();
