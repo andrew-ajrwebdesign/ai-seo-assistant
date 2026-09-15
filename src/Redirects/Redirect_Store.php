@@ -85,6 +85,14 @@ class Redirect_Store {
 		if ( get_option( self::DB_VERSION_OPTION ) !== self::DB_VERSION ) {
 			self::install();
 		}
+
+		/*
+		 * The lookup map must EXIST, empty and autoloaded. Redirect_Handler reads it on every front-end
+		 * request; until a redirect was first saved the option was absent, and an absent option is not in
+		 * the autoloaded set, so every uncached page view paid a SELECT to learn it was still missing
+		 * (performance review, Common Shamans M6). add_option() is a no-op once it exists.
+		 */
+		add_option( self::MAP_OPTION, [], '', true );
 	}
 
 	// -------------------------------------------------------------------------

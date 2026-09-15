@@ -67,7 +67,7 @@ class Sitemap {
 				'post__not_in'           => $excluded_ids, // phpcs:ignore WordPressVIPMinimum.Performance.WPQueryParams.PostNotIn_post__not_in
 				'no_found_rows'          => true,
 				'update_post_meta_cache' => true,
-				'update_post_term_cache' => false,
+				'update_post_term_cache' => true, // true: wpmai_is_post_indexable filters may read terms (e.g. hidden products); one batch query, not one per post.
 				'ignore_sticky_posts'    => true,
 			]
 		);

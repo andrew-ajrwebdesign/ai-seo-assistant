@@ -209,7 +209,7 @@ class Llms_Txt {
 				'posts_per_page'         => $per_page,
 				'paged'                  => $page,
 				'update_post_meta_cache' => true,
-				'update_post_term_cache' => false,
+				'update_post_term_cache' => true, // true: wpmai_is_post_indexable filters may read terms (e.g. hidden products); one batch query, not one per post.
 				'orderby'                => 'date',
 				'order'                  => 'DESC',
 			];
@@ -368,7 +368,7 @@ class Llms_Txt {
 			'posts_per_page'         => 500,
 			'no_found_rows'          => true,
 			'update_post_meta_cache' => true,
-			'update_post_term_cache' => false,
+			'update_post_term_cache' => true, // true: wpmai_is_post_indexable filters may read terms (e.g. hidden products); one batch query, not one per post.
 			'orderby'                => 'date',
 			'order'                  => 'DESC',
 		];
