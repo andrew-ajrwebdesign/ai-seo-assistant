@@ -9,6 +9,109 @@ defined( 'ABSPATH' ) || exit;
 
 class Prompt_Builder {
 
+	/**
+	 * JSON schema for the metadata reply.
+	 *
+	 * Sent to Claude as a structured-output format, so the reply always has
+	 * exactly these two string fields. Kept beside the prompt it answers so
+	 * the two cannot drift apart.
+	 *
+	 * @return array
+	 */
+	public function metadata_schema() {
+		return [
+			'type'                 => 'object',
+			'properties'           => [
+				'title'       => [
+					'type'        => 'string',
+					'description' => 'The SEO title.',
+				],
+				'description' => [
+					'type'        => 'string',
+					'description' => 'The meta description.',
+				],
+			],
+			'required'             => [ 'title', 'description' ],
+			'additionalProperties' => false,
+		];
+	}
+
+	/**
+	 * JSON schema for the page recommendations reply.
+	 *
+	 * Mirrors the keys Metadata_Generator::generate_recommendations() reads.
+	 * Array lengths ("0 or 1 item") are stated in the prompt, because
+	 * structured outputs do not enforce array-size constraints.
+	 *
+	 * @return array
+	 */
+	public function recommendations_schema() {
+		$string_list = [
+			'type'  => 'array',
+			'items' => [ 'type' => 'string' ],
+		];
+
+		return [
+			'type'                 => 'object',
+			'properties'           => [
+				'summary'                       => [ 'type' => 'string' ],
+				'priority_actions'              => $string_list,
+				'content_gaps'                  => $string_list,
+				'suggested_sections'            => $string_list,
+				'local_seo_notes'               => $string_list,
+				'internal_linking_suggestions'  => $string_list,
+				'content_insertion_suggestions' => [
+					'type'  => 'array',
+					'items' => [
+						'type'                 => 'object',
+						'properties'           => [
+							'missing_term'         => [ 'type' => 'string' ],
+							'recommended_location' => [ 'type' => 'string' ],
+							'suggested_copy'       => [ 'type' => 'string' ],
+							'reason'               => [ 'type' => 'string' ],
+						],
+						'required'             => [ 'missing_term', 'recommended_location', 'suggested_copy', 'reason' ],
+						'additionalProperties' => false,
+					],
+				],
+				'metadata_direction'            => [
+					'type'                 => 'object',
+					'properties'           => [
+						'title_angle'       => [ 'type' => 'string' ],
+						'description_angle' => [ 'type' => 'string' ],
+					],
+					'required'             => [ 'title_angle', 'description_angle' ],
+					'additionalProperties' => false,
+				],
+			],
+			'required'             => [
+				'summary',
+				'priority_actions',
+				'content_gaps',
+				'suggested_sections',
+				'local_seo_notes',
+				'internal_linking_suggestions',
+				'content_insertion_suggestions',
+				'metadata_direction',
+			],
+			'additionalProperties' => false,
+		];
+	}
+
+	/**
+	 * Removes the wrapper's own tags from page text.
+	 *
+	 * Content is cleaned with html_entity_decode(), so an author who types
+	 * "&lt;/page_content&gt;" as visible text would otherwise close the
+	 * wrapper early and have the rest of the page read as instructions.
+	 *
+	 * @param string $content Extracted page text.
+	 * @return string
+	 */
+	protected function neutralise_wrapper_tags( $content ) {
+		return str_ireplace( [ '<page_content>', '</page_content>' ], '', (string) $content );
+	}
+
 	public function build_metadata_prompt( $args ) {
 		$post_title           = isset( $args['post_title'] ) ? $args['post_title'] : '';
 		$permalink            = isset( $args['permalink'] ) ? $args['permalink'] : '';
@@ -55,6 +158,7 @@ class Prompt_Builder {
 		$prompt[] = '- SEO title should ideally be under ' . $title_length . ' characters.';
 		$prompt[] = '- Meta description should ideally be under ' . $description_length . ' characters.';
 		$prompt[] = '- Include the brand/site name in the SEO title only if this setting says yes: ' . $include_brand . '.';
+		$prompt[] = '- Write the title and description in the same language as the extracted page content, even though these instructions are in English.';
 
 		if ( 'local' === $focus_mode ) {
 			$prompt[] = '- This site is using Local SEO mode. Use location context only when relevant and supported by the page focus/content.';
@@ -64,10 +168,7 @@ class Prompt_Builder {
 		}
 
 		$prompt[] = '';
-		$prompt[] = 'Output rules:';
-		$prompt[] = '- Return only valid JSON.';
-		$prompt[] = '- Return exactly these keys: "title" and "description".';
-		$prompt[] = '- Do not include markdown, explanations, notes, or extra keys.';
+		$prompt[] = 'Output: "title" is the SEO title and "description" is the meta description, both as plain text.';
 		$prompt[] = '';
 
 		$this->append_business_context( $prompt, $brand_context, $metadata_guidance, '', '' );
@@ -87,8 +188,12 @@ class Prompt_Builder {
 			$prompt[] = '';
 		}
 
+		// Tagged so the page text reads as data: a page that happens to say
+		// "ignore the rules above" is content to describe, not an instruction.
 		$prompt[] = 'Extracted page content:';
-		$prompt[] = $content;
+		$prompt[] = '<page_content>';
+		$prompt[] = $this->neutralise_wrapper_tags( $content );
+		$prompt[] = '</page_content>';
 
 		return implode( "\n", $prompt );
 	}
@@ -238,10 +343,7 @@ class Prompt_Builder {
 		}
 
 		$prompt[] = '';
-		$prompt[] = 'Return only valid JSON with exactly these keys:';
-		$prompt[] = '"summary", "priority_actions", "content_gaps", "suggested_sections", "local_seo_notes", "internal_linking_suggestions", "content_insertion_suggestions", "metadata_direction".';
-		$prompt[] = '';
-		$prompt[] = 'JSON value rules:';
+		$prompt[] = 'Output field rules:';
 		$prompt[] = '- "summary" must be a concise paragraph.';
 		$prompt[] = '- "priority_actions" must be an array of specific action items. If no GSC data exists, include 1 to 3 practical page-quality improvements when clearly supported by the content.';
 		$prompt[] = '- "content_gaps" must be an array. If a section exists but needs improvement, say that clearly. Do not call something missing if it already exists.';
@@ -253,7 +355,7 @@ class Prompt_Builder {
 		$prompt[] = '- If current metadata is already relevant and clear, leave metadata_direction title_angle and description_angle empty.';
 		$prompt[] = '- Do not provide generic metadata_direction advice. Only return metadata_direction values when the current title or description is missing, too vague, too long, too short, or mismatched with the page content.';
 		$prompt[] = '- All explanation fields should be in English except "suggested_copy", which should match the page language.';
-		$prompt[] = '- Do not include markdown, explanations, notes, or extra keys.';
+		$prompt[] = '- Write every field as plain text, without markdown.';
 		$prompt[] = '';
 
 		$this->append_business_context( $prompt, $brand_context, '', $recommendation_guidance, $gsc_guidance );
@@ -271,8 +373,12 @@ class Prompt_Builder {
 		$prompt[] = 'Current title: ' . $current_title;
 		$prompt[] = 'Current description: ' . $current_description;
 		$prompt[] = '';
+		// Tagged so the page text reads as data: a page that happens to say
+		// "ignore the rules above" is content to describe, not an instruction.
 		$prompt[] = 'Extracted page content:';
-		$prompt[] = $content;
+		$prompt[] = '<page_content>';
+		$prompt[] = $this->neutralise_wrapper_tags( $content );
+		$prompt[] = '</page_content>';
 
 		return implode( "\n", $prompt );
 	}

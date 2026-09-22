@@ -12,7 +12,7 @@ use AJR\SEOAssistant\Adapters\SEO_Adapter_Resolver;
 use AJR\SEOAssistant\Content\Content_Extractor;
 use AJR\SEOAssistant\Content\Local_SEO_Context;
 use AJR\SEOAssistant\AI\Prompt_Builder;
-use AJR\SEOAssistant\AI\OpenAI_Client;
+use AJR\SEOAssistant\AI\Claude_Client;
 use AJR\SEOAssistant\AI\Metadata_Generator;
 use AJR\SEOAssistant\Admin\Admin;
 use AJR\SEOAssistant\Admin\Ajax;
@@ -40,7 +40,7 @@ class Plugin {
 
 	private $content_extractor;
 	private $prompt_builder;
-	private $openai_client;
+	private $ai_client;
 	private $logger;
 	private $local_seo_context;
 	private $metadata_generator;
@@ -80,7 +80,7 @@ class Plugin {
 		$this->seo_adapter       = $this->seo_adapter_resolver->get_adapter() ?? $this->tsf_adapter;
 		$this->content_extractor = new Content_Extractor();
 		$this->prompt_builder    = new Prompt_Builder();
-		$this->openai_client     = new OpenAI_Client();
+		$this->ai_client         = new Claude_Client();
 		$this->logger            = new Logger();
 		$this->local_seo_context = new Local_SEO_Context();
 		$this->gsc_client        = new GSC_Client();
@@ -89,7 +89,7 @@ class Plugin {
 			$this->seo_adapter,
 			$this->content_extractor,
 			$this->prompt_builder,
-			$this->openai_client,
+			$this->ai_client,
 			$this->logger,
 			$this->local_seo_context,
 			$this->gsc_client
@@ -99,7 +99,8 @@ class Plugin {
 			$this->seo_adapter,
 			$this->logger,
 			$this->local_seo_context,
-			$this->seo_adapter_resolver
+			$this->seo_adapter_resolver,
+			$this->ai_client
 		);
 
 		$this->audit_page = new Audit_Page(

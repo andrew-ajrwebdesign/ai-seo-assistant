@@ -15,7 +15,7 @@ Generate page-level SEO metadata suggestions, including:
 * Focus keyword ideas
 * Page-level SEO summaries
 
-The plugin uses the OpenAI API when an API key is configured.
+The plugin uses Claude (Anthropic's API) when an API key is configured. Every reply is constrained to a JSON schema, so titles, descriptions and recommendations always arrive in the exact shape the plugin expects. Without a key, or if the API is unreachable, it falls back to placeholder metadata built from the page content.
 
 ### SEO Recommendations
 
@@ -138,7 +138,7 @@ A **Redirects** admin page (under the AI SEO Assistant menu) lets you send old o
 * WordPress 6.0+
 * PHP 8.0+
 * Administrator access to WordPress
-* OpenAI API key for AI-powered generation
+* Claude API key (from the Claude Console) for AI-powered generation
 * Google Cloud OAuth credentials for Search Console integration
 * Verified Google Search Console property for the site
 
@@ -192,13 +192,27 @@ Add configuration constants above this line in `wp-config.php`:
 /* That's all, stop editing! Happy publishing. */
 ```
 
-### OpenAI API Key
+### Claude API Key
+
+Create a key in the Claude Console (console.anthropic.com → API keys). Give each client site its own key, ideally in its own workspace with a monthly spend limit, so one site's key can be revoked without affecting the others.
 
 ```php
-define( 'AI_SEO_ASSISTANT_OPENAI_API_KEY', 'your-openai-api-key-here' );
+define( 'AI_SEO_ASSISTANT_ANTHROPIC_API_KEY', 'sk-ant-...' );
 ```
 
-Do not commit a real OpenAI API key to this repository.
+Pasting the key on the settings screen also works; the `wp-config.php` constant takes priority when both exist. Use **Test Claude connection** on the settings screen to confirm it.
+
+Do not commit a real API key to this repository.
+
+### Model
+
+The settings screen offers Claude Opus 5 (default, best quality), Claude Sonnet 5 and Claude Haiku 4.5 (faster and cheaper). Metadata runs at low effort and recommendations at medium; the `ai_seo_assistant_claude_effort` filter overrides either.
+
+On Opus 5 the plugin opts into Anthropic's server-side refusal fallback: a request the model declines is re-run on Anthropic's recommended fallback model instead of failing, and the generation log records the model that actually answered.
+
+### Upgrading from 3.x (OpenAI)
+
+4.0.0 removed the OpenAI integration. On the first admin page load after the update (once per site, recorded in the `ai_seo_assistant_settings_version` option), the plugin deletes the old `ai_seo_assistant_api_key` option (an OpenAI secret nothing reads any more) and resets a stored OpenAI model name to the Claude default. Until a Claude key is added, metadata generation falls back to placeholders; nothing errors. Remove any `AI_SEO_ASSISTANT_OPENAI_API_KEY` line from `wp-config.php`.
 
 ## Google Search Console OAuth Setup
 
@@ -270,7 +284,7 @@ For wider public use, the OAuth app may need to be published and may require Goo
 
 After activation, follow this setup order:
 
-1. Confirm the OpenAI API key is available.
+1. Add the Claude API key and click **Test Claude connection**.
 2. Configure Google OAuth credentials, if Search Console integration is needed.
 3. Connect Google Search Console.
 4. Select the correct Search Console property.
@@ -286,7 +300,7 @@ Before using the plugin broadly on a live site:
 
 1. Activate the plugin.
 2. Confirm no fatal errors appear.
-3. Confirm OpenAI API key detection.
+3. Confirm **Test Claude connection** succeeds.
 4. Generate metadata for one test page.
 5. Connect Google Search Console.
 6. Sync Search Console data.
@@ -367,7 +381,7 @@ This repository is public.
 
 Do not commit:
 
-* OpenAI API keys
+* Claude (Anthropic) API keys
 * Google client secrets
 * OAuth refresh tokens
 * Site-specific private data
@@ -379,15 +393,16 @@ Do not commit:
 Before committing, check for obvious secret patterns:
 
 ```bash
-grep -R "sk-" .
+grep -R "sk-ant-" .
 grep -R "GOOGLE_CLIENT_SECRET" .
-grep -R "OPENAI_API_KEY" .
+grep -R "ANTHROPIC_API_KEY" .
 ```
 
-It is normal for the plugin to contain constant names such as:
+It is normal for the plugin to contain constant names and placeholders such as:
 
 ```text
-AI_SEO_ASSISTANT_OPENAI_API_KEY
+AI_SEO_ASSISTANT_ANTHROPIC_API_KEY
+sk-ant-...
 ```
 
 It is not okay for real key values to be committed.
@@ -395,7 +410,7 @@ It is not okay for real key values to be committed.
 To check Git history before making a public release:
 
 ```bash
-git log --all -p | grep "sk-"
+git log --all -p | grep "sk-ant-api"
 ```
 
 If a real key was ever committed, remove it from Git history and rotate the key immediately.
@@ -422,7 +437,7 @@ ai-seo-assistant/
 ├── src/
 │   ├── Core/                   # Plugin (wiring), Utils, Logger
 │   ├── Adapters/               # SEO plugin adapters (TSF, Yoast, Rank Math) + resolver
-│   ├── AI/                     # OpenAI client, Prompt_Builder, Metadata_Generator
+│   ├── AI/                     # Claude_Client, Prompt_Builder, Metadata_Generator
 │   ├── Content/                # Content_Extractor, Local_SEO_Context
 │   ├── Admin/                  # Admin, Ajax, Audit/Report/Indexing/Markdown/Redirects pages
 │   ├── GSC/                    # Google Search Console client + page
@@ -450,13 +465,13 @@ src/Admin/Admin.php
 
 Handles admin screens, settings, editor metaboxes, and admin-facing actions.
 
-### OpenAI Client
+### Claude Client
 
 ```text
-src/AI/OpenAI_Client.php
+src/AI/Claude_Client.php
 ```
 
-Handles communication with the OpenAI API and retrieves the configured API key.
+Sends prompts to the Anthropic Messages API through the WordPress HTTP API (no bundled SDK, so no dependency clashes with other plugins). Each request carries a JSON schema from `Prompt_Builder`, so replies are structured output rather than parsed free text. Handles the key (wp-config constant first), the model allow-list, per-task effort, the Opus 5 refusal fallback, and turns every API failure into a masked, plain-English `WP_Error`.
 
 ### Metadata Generator
 

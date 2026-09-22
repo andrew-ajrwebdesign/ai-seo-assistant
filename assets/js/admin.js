@@ -71,7 +71,7 @@ jQuery(function ($) {
 			url: aiSeoAssistant.ajaxUrl,
 			method: 'POST',
 			dataType: 'json',
-			timeout: 90000,
+			timeout: 120000,
 			data: {
 				action: 'ai_seo_assistant_generate',
 				nonce: aiSeoAssistant.nonce,
@@ -196,7 +196,7 @@ jQuery(function ($) {
 			url: aiSeoAssistant.ajaxUrl,
 			method: 'POST',
 			dataType: 'json',
-			timeout: 90000,
+			timeout: 120000,
 			data: {
 				action: 'ai_seo_assistant_generate_and_save',
 				nonce: aiSeoAssistant.nonce,
@@ -309,7 +309,7 @@ jQuery(function ($) {
 			url: aiSeoAssistant.ajaxUrl,
 			method: 'POST',
 			dataType: 'json',
-			timeout: 90000,
+			timeout: 120000,
 			data: {
 				action: 'ai_seo_assistant_generate_recommendations',
 				nonce: aiSeoAssistant.nonce,
@@ -390,7 +390,7 @@ jQuery(function ($) {
 			url: aiSeoAssistant.ajaxUrl,
 			method: 'POST',
 			dataType: 'json',
-			timeout: 90000,
+			timeout: 120000,
 			data: {
 				action: 'ai_seo_assistant_suggest_focus',
 				nonce: aiSeoAssistant.nonce,

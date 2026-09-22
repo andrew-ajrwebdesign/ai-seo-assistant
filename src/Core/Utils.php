@@ -74,6 +74,14 @@ class Utils {
 			return 'Incorrect API key provided.';
 		}
 
+		// Anthropic keys (sk-ant-api03-…) first: the OpenAI pattern below
+		// cannot match them, so they would otherwise reach logs unmasked.
+		$text = preg_replace(
+			'/sk-ant-[A-Za-z0-9_\-]{8,}/',
+			'sk-ant-***masked***',
+			$text
+		);
+
 		$text = preg_replace(
 			'/sk-(proj|live|test)?-[A-Za-z0-9_\-]{8,}/',
 			'sk-***masked***',
