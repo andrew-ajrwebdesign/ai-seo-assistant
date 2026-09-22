@@ -26,18 +26,24 @@ class Content_Extractor {
 			$parts[] = $title;
 		}
 
-		$excerpt = get_the_excerpt( $post_id );
+		// Only a hand-written excerpt. get_the_excerpt() falls back to the
+		// first 55 words of the content, which then appeared twice in the
+		// text sent to the AI and read as duplicated copy on the page.
+		$excerpt = trim( (string) $post->post_excerpt );
 
-		if ( ! empty( $excerpt ) ) {
+		if ( '' !== $excerpt ) {
 			$parts[] = $excerpt;
 		}
 
-		if ( $this->is_elementor_page( $post_id ) ) {
-			$parts[] = $this->get_elementor_content( $post_id );
-		}
-
-		if ( ! empty( $post->post_content ) ) {
+		// post_content is the primary source for every page. Elementor saves a
+		// rendered plain-text copy of the page there, which holds all widget
+		// copy (including HTML widgets the settings walker cannot read), so
+		// reading it AND the walker doubled every Elementor page's text. The
+		// walker is only a fallback for a builder page with an empty copy.
+		if ( '' !== trim( (string) $post->post_content ) ) {
 			$parts[] = $this->get_wordpress_content( $post->post_content );
+		} elseif ( $this->is_elementor_page( $post_id ) ) {
+			$parts[] = $this->get_elementor_content( $post_id );
 		}
 
 		return Utils::clean_plain_text(
@@ -53,10 +59,16 @@ class Content_Extractor {
 		return $content;
 	}
 
+	/**
+	 * Whether the page is currently built with Elementor.
+	 *
+	 * Elementor keeps _elementor_data after a page is switched back to the
+	 * WordPress editor, so its presence alone would resurrect stale copy.
+	 * Same test as Markdown_Converter.
+	 */
 	private function is_elementor_page( $post_id ) {
-		$elementor_data = get_post_meta( $post_id, '_elementor_data', true );
-
-		return ! empty( $elementor_data );
+		return 'builder' === get_post_meta( $post_id, '_elementor_edit_mode', true )
+			&& ! empty( get_post_meta( $post_id, '_elementor_data', true ) );
 	}
 
 	private function get_elementor_content( $post_id ) {

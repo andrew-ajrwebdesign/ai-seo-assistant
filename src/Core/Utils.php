@@ -22,6 +22,54 @@ class Utils {
 		return rtrim( $trimmed, " \t\n\r\0\x0B.,;:-" );
 	}
 
+	/**
+	 * Shortens text to $max_length, preferring the end of a sentence.
+	 *
+	 * A meta description cut at a word boundary can still stop mid-phrase
+	 * ("Flat fee, month to"), which reads as broken in search results. When a
+	 * full sentence ends within the limit and keeps at least 60% of it, the
+	 * text is cut there instead; otherwise this falls back to the word cut.
+	 *
+	 * @param string $text       Text to shorten.
+	 * @param int    $max_length Maximum length in characters.
+	 * @return string
+	 */
+	public static function trim_to_sentence( $text, $max_length ) {
+		$text = trim( wp_strip_all_tags( (string) $text ) );
+
+		if ( mb_strlen( $text ) <= $max_length ) {
+			return $text;
+		}
+
+		$floor = (int) floor( $max_length * 0.6 );
+
+		// A sentence end is . ! or ? followed by whitespace and an uppercase
+		// letter (or the end of the text), and not a common abbreviation, so
+		// "Dr. Sarah" and "St. Louis" and "4.99" are never treated as one.
+		// Matched against the full text so the character after the stop is
+		// always visible, then walked from the latest candidate backwards.
+		// Each abbreviation is its own top-level lookbehind branch: PCRE2
+		// before 10.43 (bundled with PHP 8.0-8.3) rejects different-length
+		// alternatives nested inside a group, and the plugin supports 8.0.
+		$pattern = '/(?<!\bDr|\bMr|\bMrs|\bMs|\bSt|\bNr|\bInc|\bLtd|\bCo|\bvs|\bbzw|\bca|\binkl|\bz\.B)[.!?](?=\s+[\p{Lu}\p{N}"\'“„(]|\s*$)/u';
+
+		if ( preg_match_all( $pattern, $text, $matches, PREG_OFFSET_CAPTURE ) ) {
+			foreach ( array_reverse( $matches[0] ) as $match ) {
+				$cut = mb_strlen( substr( $text, 0, $match[1] + strlen( $match[0] ) ) );
+
+				if ( $cut < $floor ) {
+					break;
+				}
+
+				if ( $cut <= $max_length ) {
+					return mb_substr( $text, 0, $cut );
+				}
+			}
+		}
+
+		return self::trim_to_length( $text, $max_length );
+	}
+
 	public static function get_title_status( $title ) {
 		$length = mb_strlen( trim( (string) $title ) );
 
@@ -73,6 +121,14 @@ class Utils {
 		if ( false !== stripos( $text, 'Incorrect API key provided' ) ) {
 			return 'Incorrect API key provided.';
 		}
+
+		// Anthropic keys (sk-ant-api03-…) first: the OpenAI pattern below
+		// cannot match them, so they would otherwise reach logs unmasked.
+		$text = preg_replace(
+			'/sk-ant-[A-Za-z0-9_\-]{8,}/',
+			'sk-ant-***masked***',
+			$text
+		);
 
 		$text = preg_replace(
 			'/sk-(proj|live|test)?-[A-Za-z0-9_\-]{8,}/',

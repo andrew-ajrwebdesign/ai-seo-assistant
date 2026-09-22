@@ -22,8 +22,23 @@ class Ajax {
 		add_action( 'wp_ajax_ai_seo_assistant_suggest_focus', [ $this, 'suggest_focus' ] );
 	}
 
+	/**
+	 * Lets a Claude request run to its own timeout.
+	 *
+	 * On Linux, time spent waiting on the network does not count toward
+	 * max_execution_time, but on Windows hosts and PHP builds with wall-clock
+	 * timers it does, and a 30 s limit would kill a 45-90 s request mid-way.
+	 * Some hosts disable set_time_limit(), hence the function_exists() guard.
+	 */
+	private function allow_long_request() {
+		if ( function_exists( 'set_time_limit' ) ) {
+			set_time_limit( 120 );
+		}
+	}
+
 	public function generate_metadata() {
 		check_ajax_referer( Admin::NONCE_ACTION, 'nonce' );
+		$this->allow_long_request();
 
 		$post_id = $this->get_valid_post_id();
 
@@ -50,6 +65,7 @@ class Ajax {
 
 	public function generate_and_save_metadata() {
 		check_ajax_referer( Admin::NONCE_ACTION, 'nonce' );
+		$this->allow_long_request();
 
 		$post_id = $this->get_valid_post_id();
 
@@ -76,6 +92,7 @@ class Ajax {
 
 	public function generate_recommendations() {
 		check_ajax_referer( Admin::NONCE_ACTION, 'nonce' );
+		$this->allow_long_request();
 
 		$post_id = $this->get_valid_post_id();
 

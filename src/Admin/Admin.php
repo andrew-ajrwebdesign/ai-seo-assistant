@@ -6,7 +6,7 @@
 namespace AJR\SEOAssistant\Admin;
 
 use AJR\SEOAssistant\Core\Utils;
-use AJR\SEOAssistant\AI\OpenAI_Client;
+use AJR\SEOAssistant\AI\Claude_Client;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -15,16 +15,51 @@ class Admin {
 	const NONCE_ACTION = 'ai_seo_assistant_generate';
 	const NONCE_NAME   = 'ai_seo_assistant_nonce';
 
+	/**
+	 * Option that held the OpenAI key before the move to Claude (4.0.0).
+	 */
+	const LEGACY_OPENAI_KEY_OPTION = 'ai_seo_assistant_api_key';
+
+	/**
+	 * Autoloaded marker recording which one-time settings clean-ups have run.
+	 */
+	const SETTINGS_VERSION_OPTION = 'ai_seo_assistant_settings_version';
+
+	/**
+	 * The clean-up level this code expects. Deliberately NOT the plugin
+	 * version: it only moves when a release adds a new one-time clean-up. If
+	 * it followed the header, every release would re-run the clean-ups.
+	 */
+	const SETTINGS_VERSION = '4.0.0';
+
 	private $tsf_adapter;
 	private $logger;
 	private $local_seo_context;
 	private $seo_adapter_resolver;
 
-	public function __construct( $seo_adapter, $logger, $local_seo_context, $seo_adapter_resolver ) {
+	/**
+	 * Claude client, used for the settings screen (key status, model list)
+	 * and the "Test Claude connection" action.
+	 *
+	 * @var Claude_Client
+	 */
+	private $ai_client;
+
+	/**
+	 * Wires the admin UI to its collaborators.
+	 *
+	 * @param object               $seo_adapter          Active SEO plugin adapter.
+	 * @param \AJR\SEOAssistant\Core\Logger $logger      Generation log store.
+	 * @param object               $local_seo_context    Site and page SEO focus.
+	 * @param object               $seo_adapter_resolver Detects the active SEO plugin.
+	 * @param Claude_Client        $ai_client            Claude API client.
+	 */
+	public function __construct( $seo_adapter, $logger, $local_seo_context, $seo_adapter_resolver, Claude_Client $ai_client ) {
 		$this->tsf_adapter          = $seo_adapter;
 		$this->logger               = $logger;
 		$this->local_seo_context    = $local_seo_context;
 		$this->seo_adapter_resolver = $seo_adapter_resolver;
+		$this->ai_client            = $ai_client;
 	}
 
 	public function init() {
@@ -35,8 +70,14 @@ class Admin {
 
 		add_action( 'admin_menu', [ $this, 'add_settings_page' ] );
 		add_action( 'admin_init', [ $this, 'register_settings' ] );
+		add_action( 'admin_init', [ $this, 'remove_legacy_openai_settings' ] );
 
-		add_action( 'admin_post_ai_seo_assistant_test_openai', [ $this, 'test_openai_connection' ] );
+		// A saved key is only needed when generating, so keep it out of the
+		// options loaded (and object-cached) on every request.
+		add_action( 'add_option_' . Claude_Client::OPTION_API_KEY, [ $this, 'keep_api_key_out_of_autoload' ] );
+		add_action( 'update_option_' . Claude_Client::OPTION_API_KEY, [ $this, 'keep_api_key_out_of_autoload' ] );
+
+		add_action( 'admin_post_ai_seo_assistant_test_claude', [ $this, 'test_claude_connection' ] );
 
 		add_filter( 'plugin_action_links_' . AI_SEO_ASSISTANT_BASENAME, [ $this, 'add_action_links' ] );
 	}
@@ -454,7 +495,7 @@ class Admin {
 
 		register_setting(
 			'ai_seo_assistant_settings',
-			'ai_seo_assistant_api_key',
+			Claude_Client::OPTION_API_KEY,
 			[
 				'type'              => 'string',
 				'sanitize_callback' => [ $this, 'sanitize_api_key' ],
@@ -464,11 +505,11 @@ class Admin {
 
 		register_setting(
 			'ai_seo_assistant_settings',
-			'ai_seo_assistant_model',
+			Claude_Client::OPTION_MODEL,
 			[
 				'type'              => 'string',
-				'sanitize_callback' => 'sanitize_text_field',
-				'default'           => 'gpt-4o-mini',
+				'sanitize_callback' => [ $this, 'sanitize_model' ],
+				'default'           => Claude_Client::DEFAULT_MODEL,
 			]
 		);
 
@@ -623,23 +664,89 @@ class Admin {
 		return $mode;
 	}
 
+	/**
+	 * Keeps the saved Claude key when the field is submitted blank, and
+	 * refuses anything that is not an Anthropic key.
+	 *
+	 * A rejected value keeps the existing key rather than wiping it, so a
+	 * mistyped paste never silently switches AI generation off.
+	 *
+	 * @param mixed $api_key Submitted value.
+	 * @return string
+	 */
 	public function sanitize_api_key( $api_key ) {
-		$api_key     = trim( sanitize_text_field( $api_key ) );
-		$current_key = get_option( 'ai_seo_assistant_api_key', '' );
+		$api_key     = trim( sanitize_text_field( (string) $api_key ) );
+		$current_key = (string) get_option( Claude_Client::OPTION_API_KEY, '' );
 
 		if ( '' === $api_key ) {
-			if ( is_string( $current_key ) && preg_match( '/^sk-/', $current_key ) ) {
-				return $current_key;
-			}
-
-			return '';
+			return $current_key;
 		}
 
-		if ( ! preg_match( '/^sk-/', $api_key ) ) {
-			return '';
+		if ( 0 !== strpos( $api_key, Claude_Client::KEY_PREFIX ) ) {
+			add_settings_error(
+				Claude_Client::OPTION_API_KEY,
+				'ai_seo_assistant_invalid_key',
+				__( 'That does not look like a Claude API key (they start with sk-ant-). The previous key was kept.', 'ai-seo-assistant' )
+			);
+
+			return $current_key;
 		}
 
 		return $api_key;
+	}
+
+	/**
+	 * Marks the saved Claude key as not autoloaded.
+	 *
+	 * The Settings API saves options with default autoload, which would put
+	 * the plaintext key into memory and any persistent object cache on every
+	 * page view. wp_set_option_autoload() exists from WordPress 6.4; on older
+	 * versions the key simply stays autoloaded, as it did before.
+	 */
+	public function keep_api_key_out_of_autoload() {
+		if ( function_exists( 'wp_set_option_autoload' ) ) {
+			wp_set_option_autoload( Claude_Client::OPTION_API_KEY, false );
+		}
+	}
+
+	/**
+	 * Restricts the model to the supported Claude models.
+	 *
+	 * @param mixed $model Submitted value.
+	 * @return string
+	 */
+	public function sanitize_model( $model ) {
+		$model = sanitize_text_field( (string) $model );
+
+		return Claude_Client::is_supported_model( $model ) ? $model : Claude_Client::DEFAULT_MODEL;
+	}
+
+	/**
+	 * Removes settings left over from the OpenAI version, once per site.
+	 *
+	 * The old option held an OpenAI secret that nothing reads any more;
+	 * leaving an unused credential in the database is a liability. A stored
+	 * OpenAI model name is reset so the dropdown shows a real Claude model.
+	 *
+	 * Gated by an autoloaded marker: after the first run, every admin request
+	 * costs one in-memory option read and nothing else. (Checking the old
+	 * options directly would query the database on every admin page once
+	 * they are gone, because a missing option is not autoloaded.)
+	 */
+	public function remove_legacy_openai_settings() {
+		if ( version_compare( (string) get_option( self::SETTINGS_VERSION_OPTION, '0' ), self::SETTINGS_VERSION, '>=' ) ) {
+			return;
+		}
+
+		delete_option( self::LEGACY_OPENAI_KEY_OPTION );
+
+		$model = get_option( Claude_Client::OPTION_MODEL, false );
+
+		if ( false !== $model && ! Claude_Client::is_supported_model( $model ) ) {
+			update_option( Claude_Client::OPTION_MODEL, Claude_Client::DEFAULT_MODEL, false );
+		}
+
+		update_option( self::SETTINGS_VERSION_OPTION, self::SETTINGS_VERSION, true );
 	}
 
 	public function sanitize_post_types( $post_types ) {
@@ -662,6 +769,10 @@ class Admin {
 			return;
 		}
 
+		// Top-level menu pages do not print Settings API notices on their own,
+		// so without this a rejected API key would be dropped silently.
+		settings_errors();
+
 		$settings_notice = get_transient( 'ai_seo_assistant_settings_notice_' . get_current_user_id() );
 
 		if ( ! empty( $settings_notice ) ) {
@@ -678,8 +789,7 @@ class Admin {
 		$focus_mode              = get_option( 'ai_seo_assistant_focus_mode', 'general' );
 		$seo_detected            = $this->seo_adapter_resolver->get_adapter() !== null;
 		$active_seo_name         = $this->seo_adapter_resolver->get_current_integration_name();
-		$api_key                 = get_option( 'ai_seo_assistant_api_key', '' );
-		$model                   = get_option( 'ai_seo_assistant_model', 'gpt-4o-mini' );
+		$model                   = $this->ai_client->get_model();
 		$brand_context           = get_option( 'ai_seo_assistant_brand_context', '' );
 		$primary_locations       = get_option( 'ai_seo_assistant_primary_locations', '' );
 		$secondary_locations     = get_option( 'ai_seo_assistant_secondary_locations', '' );
@@ -738,48 +848,31 @@ class Admin {
 
 					<tr>
 						<th scope="row">
-							<label for="ai_seo_assistant_api_key">
-								<?php esc_html_e( 'OpenAI API Key', 'ai-seo-assistant' ); ?>
+							<label for="<?php echo esc_attr( Claude_Client::OPTION_API_KEY ); ?>">
+								<?php esc_html_e( 'Claude API key', 'ai-seo-assistant' ); ?>
 							</label>
 						</th>
 						<td>
 							<?php
-							$openai_key_from_config = defined( 'AI_SEO_ASSISTANT_OPENAI_API_KEY' ) && AI_SEO_ASSISTANT_OPENAI_API_KEY;
-							$has_saved_api_key      = ! empty( $api_key );
-							$api_key_hint           = '';
+							$key_from_config   = $this->ai_client->has_config_key();
+							$has_saved_api_key = '' !== (string) get_option( Claude_Client::OPTION_API_KEY, '' );
 
-							if ( $has_saved_api_key && preg_match( '/^sk-/', $api_key ) ) {
-								$api_key_hint = substr( $api_key, 0, 7 ) . '...' . substr( $api_key, -4 );
-							}
-
-							$test_openai_url = wp_nonce_url(
-								admin_url( 'admin-post.php?action=ai_seo_assistant_test_openai' ),
-								'ai_seo_assistant_test_openai',
-								'ai_seo_assistant_test_openai_nonce'
+							$test_claude_url = wp_nonce_url(
+								admin_url( 'admin-post.php?action=ai_seo_assistant_test_claude' ),
+								'ai_seo_assistant_test_claude',
+								'ai_seo_assistant_test_claude_nonce'
 							);
 							?>
 
-							<?php if ( $openai_key_from_config ) : ?>
+							<?php if ( $key_from_config ) : ?>
 
 								<p>
-									<strong><?php esc_html_e( 'OpenAI API key loaded from wp-config.php.', 'ai-seo-assistant' ); ?></strong>
-								</p>
-
-								<p class="description">
-									<?php esc_html_e( 'The settings field is disabled because the API key is defined using AI_SEO_ASSISTANT_OPENAI_API_KEY.', 'ai-seo-assistant' ); ?>
+									<strong><?php esc_html_e( 'Claude API key loaded from wp-config.php.', 'ai-seo-assistant' ); ?></strong>
 								</p>
 
 								<?php if ( $has_saved_api_key ) : ?>
 									<p class="description">
-										<span style="color:#b32d2e;font-weight:600;">
-											<?php esc_html_e( 'A database key is also saved. For config-only storage, clear the ai_seo_assistant_api_key option from the database.', 'ai-seo-assistant' ); ?>
-										</span>
-									</p>
-								<?php else : ?>
-									<p class="description">
-										<span style="color:#008a20;font-weight:600;">
-											<?php esc_html_e( 'No database key is saved.', 'ai-seo-assistant' ); ?>
-										</span>
+										<?php esc_html_e( 'A key is also saved in the database, but the wp-config.php key takes priority and is the one used.', 'ai-seo-assistant' ); ?>
 									</p>
 								<?php endif; ?>
 
@@ -787,53 +880,58 @@ class Admin {
 
 								<input
 									type="password"
-									id="ai_seo_assistant_api_key"
-									name="ai_seo_assistant_api_key"
+									id="<?php echo esc_attr( Claude_Client::OPTION_API_KEY ); ?>"
+									name="<?php echo esc_attr( Claude_Client::OPTION_API_KEY ); ?>"
 									value=""
 									class="regular-text"
 									autocomplete="off"
-									placeholder="<?php echo esc_attr( $has_saved_api_key ? __( 'Saved. Leave blank to keep existing key.', 'ai-seo-assistant' ) : __( 'Paste OpenAI API key', 'ai-seo-assistant' ) ); ?>"
+									spellcheck="false"
+									placeholder="<?php echo esc_attr( $has_saved_api_key ? __( 'Saved. Leave blank to keep the current key.', 'ai-seo-assistant' ) : 'sk-ant-...' ); ?>"
 								/>
 
-								<?php if ( $has_saved_api_key && ! empty( $api_key_hint ) ) : ?>
-									<p class="description">
-										<?php esc_html_e( 'An OpenAI API key is saved. Leave this field blank to keep the existing key, or paste a new key to replace it.', 'ai-seo-assistant' ); ?>
-										<?php esc_html_e( 'Current key:', 'ai-seo-assistant' ); ?>
-										<code><?php echo esc_html( $api_key_hint ); ?></code>
-									</p>
-								<?php elseif ( $has_saved_api_key ) : ?>
-									<p class="description" style="color:#b32d2e;font-weight:600;">
-										<?php esc_html_e( 'A saved API key exists but does not appear to use the expected OpenAI key format. Paste a new key to replace it.', 'ai-seo-assistant' ); ?>
-									</p>
-								<?php else : ?>
-									<p class="description">
-										<?php esc_html_e( 'Recommended: define AI_SEO_ASSISTANT_OPENAI_API_KEY in wp-config.php. As a fallback, you may paste a key here and save it to the database.', 'ai-seo-assistant' ); ?>
-									</p>
-								<?php endif; ?>
+								<p class="description">
+									<?php if ( $has_saved_api_key ) : ?>
+										<?php
+										printf(
+											/* translators: %s: masked API key, e.g. sk-ant-api...AbCd. */
+											esc_html__( 'Current key: %s. Paste a new key to replace it.', 'ai-seo-assistant' ),
+											'<code>' . esc_html( $this->ai_client->get_key_hint() ) . '</code>'
+										);
+										?>
+									<?php else : ?>
+										<?php
+										printf(
+											/* translators: %s: wp-config.php constant name. */
+											esc_html__( 'Recommended: define %s in wp-config.php so the key never sits in the database. Pasting a key here also works.', 'ai-seo-assistant' ),
+											'<code>' . esc_html( Claude_Client::CONFIG_CONSTANT ) . '</code>'
+										);
+										?>
+									<?php endif; ?>
+								</p>
 
 							<?php endif; ?>
 
-							<p style="margin-top: 10px;">
-								<a href="<?php echo esc_url( $test_openai_url ); ?>" class="button button-secondary">
-									<?php esc_html_e( 'Test OpenAI Connection', 'ai-seo-assistant' ); ?>
+							<p>
+								<a href="<?php echo esc_url( $test_claude_url ); ?>" class="button button-secondary">
+									<?php esc_html_e( 'Test Claude connection', 'ai-seo-assistant' ); ?>
 								</a>
 							</p>
 						</td>
 					</tr>
 					<tr>
 						<th scope="row">
-							<label for="ai_seo_assistant_model">Model</label>
+							<label for="<?php echo esc_attr( Claude_Client::OPTION_MODEL ); ?>"><?php esc_html_e( 'Model', 'ai-seo-assistant' ); ?></label>
 						</th>
 						<td>
-							<input
-								type="text"
-								id="ai_seo_assistant_model"
-								name="ai_seo_assistant_model"
-								value="<?php echo esc_attr( $model ); ?>"
-								class="regular-text"
-							>
+							<select id="<?php echo esc_attr( Claude_Client::OPTION_MODEL ); ?>" name="<?php echo esc_attr( Claude_Client::OPTION_MODEL ); ?>">
+								<?php foreach ( Claude_Client::available_models() as $model_id => $model_info ) : ?>
+									<option value="<?php echo esc_attr( $model_id ); ?>" <?php selected( $model, $model_id ); ?>>
+										<?php echo esc_html( $model_info['label'] ); ?>
+									</option>
+								<?php endforeach; ?>
+							</select>
 							<p class="description">
-								Start with <code>gpt-4o-mini</code>. You can change this later if needed.
+								<?php esc_html_e( 'Opus gives the most careful titles and recommendations. Sonnet and Haiku answer faster and cost less per request.', 'ai-seo-assistant' ); ?>
 							</p>
 						</td>
 					</tr>
@@ -1133,16 +1231,23 @@ class Admin {
 		$this->local_seo_context->save_page_context( $post_id, $_POST );
 	}
 
-	public function test_openai_connection() {
+	/**
+	 * admin-post handler for "Test Claude connection".
+	 *
+	 * Sends one tiny request with the configured key and model, then returns
+	 * to the settings screen with a notice naming the model that answered,
+	 * or the masked reason it failed.
+	 */
+	public function test_claude_connection() {
 		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_die( esc_html__( 'You do not have permission to test the OpenAI connection.', 'ai-seo-assistant' ) );
+			wp_die( esc_html__( 'You do not have permission to test the Claude connection.', 'ai-seo-assistant' ) );
 		}
 
 		if (
-			empty( $_GET['ai_seo_assistant_test_openai_nonce'] ) ||
+			empty( $_GET['ai_seo_assistant_test_claude_nonce'] ) ||
 			! wp_verify_nonce(
-				sanitize_text_field( wp_unslash( $_GET['ai_seo_assistant_test_openai_nonce'] ) ),
-				'ai_seo_assistant_test_openai'
+				sanitize_text_field( wp_unslash( $_GET['ai_seo_assistant_test_claude_nonce'] ) ),
+				'ai_seo_assistant_test_claude'
 			)
 		) {
 			wp_die( esc_html__( 'Invalid request.', 'ai-seo-assistant' ) );
@@ -1150,27 +1255,20 @@ class Admin {
 
 		delete_transient( 'ai_seo_assistant_settings_notice_' . get_current_user_id() );
 
-		$openai_client = new OpenAI_Client();
-
-		if ( $openai_client->has_config_key() ) {
-			$key_hint = 'wp-config.php key';
-		} else {
-			$api_key  = get_option( 'ai_seo_assistant_api_key', '' );
-			$key_hint = 'no key saved';
-
-			if ( ! empty( $api_key ) && preg_match( '/^sk-/', $api_key ) ) {
-				$key_hint = substr( $api_key, 0, 7 ) . '...' . substr( $api_key, -4 );
-			}
-		}
-
-		$result = $openai_client->test_connection();
+		$key_hint = $this->ai_client->get_key_hint();
+		$result   = $this->ai_client->test_connection();
 
 		if ( is_wp_error( $result ) ) {
 			set_transient(
 				'ai_seo_assistant_settings_notice_' . get_current_user_id(),
 				[
 					'type'    => 'error',
-					'message' => 'OpenAI connection failed using key ' . $key_hint . ': ' . Utils::mask_sensitive_text( $result->get_error_message() ),
+					'message' => sprintf(
+						/* translators: 1: key hint, 2: error message. */
+						__( 'Claude connection failed using %1$s: %2$s', 'ai-seo-assistant' ),
+						$key_hint,
+						Utils::mask_sensitive_text( $result->get_error_message() )
+					),
 				],
 				60
 			);
@@ -1179,7 +1277,12 @@ class Admin {
 				'ai_seo_assistant_settings_notice_' . get_current_user_id(),
 				[
 					'type'    => 'success',
-					'message' => 'OpenAI connection working using key ' . $key_hint . '.',
+					'message' => sprintf(
+						/* translators: 1: model ID, 2: key hint. */
+						__( 'Claude is connected: %1$s answered using %2$s.', 'ai-seo-assistant' ),
+						$this->ai_client->get_last_model(),
+						$key_hint
+					),
 				],
 				60
 			);

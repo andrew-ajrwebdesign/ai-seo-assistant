@@ -14,16 +14,32 @@ class Metadata_Generator {
 	private $tsf_adapter;
 	private $content_extractor;
 	private $prompt_builder;
-	private $openai_client;
+	/**
+	 * Claude client that answers the metadata and recommendation prompts.
+	 *
+	 * @var Claude_Client
+	 */
+	private $ai_client;
 	private $logger;
 	private $local_seo_context;
 	private $gsc_client;
 
-	public function __construct( $tsf_adapter, $content_extractor, $prompt_builder, $openai_client, $logger, $local_seo_context, $gsc_client = null ) {
+	/**
+	 * Wires the generator to its collaborators.
+	 *
+	 * @param object                              $tsf_adapter       Active SEO plugin adapter (whichever the resolver picked).
+	 * @param \AJR\SEOAssistant\Content\Content_Extractor $content_extractor Page text extraction.
+	 * @param Prompt_Builder                      $prompt_builder    Prompts and their JSON schemas.
+	 * @param Claude_Client                       $ai_client         Claude API client.
+	 * @param \AJR\SEOAssistant\Core\Logger       $logger            Generation log store.
+	 * @param object                              $local_seo_context Site and page SEO focus.
+	 * @param object|null                         $gsc_client        Search Console data, when connected.
+	 */
+	public function __construct( $tsf_adapter, $content_extractor, $prompt_builder, Claude_Client $ai_client, $logger, $local_seo_context, $gsc_client = null ) {
 		$this->tsf_adapter       = $tsf_adapter;
 		$this->content_extractor = $content_extractor;
 		$this->prompt_builder    = $prompt_builder;
-		$this->openai_client     = $openai_client;
+		$this->ai_client         = $ai_client;
 		$this->logger            = $logger;
 		$this->local_seo_context = $local_seo_context;
 		$this->gsc_client        = $gsc_client;
@@ -39,9 +55,7 @@ class Metadata_Generator {
 			);
 		}
 
-		$api_key = $this->get_openai_api_key();
-
-		if ( empty( $api_key ) ) {
+		if ( ! $this->ai_client->has_api_key() ) {
 			$result = $this->generate_placeholder_metadata( $post_id, $content );
 
 			$this->log_generation( $post_id, $result, $content, 'placeholder' );
@@ -58,7 +72,7 @@ class Metadata_Generator {
 
 			$fallback_result['source']       = 'placeholder';
 			$fallback_result['model']        = '';
-			$fallback_result['warning']      = 'OpenAI unavailable. Placeholder metadata was generated instead.';
+			$fallback_result['warning']      = __( 'Claude was unavailable, so placeholder metadata was generated instead.', 'ai-seo-assistant' );
 			$fallback_result['api_error']    = $error_message;
 			$fallback_result['generated_at'] = current_time( 'mysql' );
 
@@ -67,7 +81,7 @@ class Metadata_Generator {
 				$fallback_result,
 				$content,
 				'placeholder',
-				''
+				$error_message
 			);
 
 			return $fallback_result;
@@ -117,12 +131,10 @@ class Metadata_Generator {
 			);
 		}
 
-		$api_key = $this->get_openai_api_key();
-
-		if ( empty( $api_key ) ) {
+		if ( ! $this->ai_client->has_api_key() ) {
 			return new \WP_Error(
 				'ai_seo_missing_api_key',
-				'Missing OpenAI API key.'
+				__( 'Add a Claude API key in AI SEO Assistant settings to get recommendations.', 'ai-seo-assistant' )
 			);
 		}
 
@@ -155,7 +167,11 @@ class Metadata_Generator {
 			]
 		);
 
-		$recommendations = $this->openai_client->generate_json( $prompt, 2200 );
+		$recommendations = $this->ai_client->generate_json(
+			$prompt,
+			$this->prompt_builder->recommendations_schema(),
+			'recommendations'
+		);
 
 		if ( is_wp_error( $recommendations ) ) {
 			return $recommendations;
@@ -321,7 +337,11 @@ class Metadata_Generator {
 			]
 		);
 
-		$metadata = $this->openai_client->generate_json( $prompt, 500 );
+		$metadata = $this->ai_client->generate_json(
+			$prompt,
+			$this->prompt_builder->metadata_schema(),
+			'metadata'
+		);
 
 		if ( is_wp_error( $metadata ) ) {
 			return $metadata;
@@ -344,7 +364,7 @@ class Metadata_Generator {
 		$description_max = $description_max > 0 ? $description_max + 10 : 165;
 
 		$title       = Utils::trim_to_length( $title, $title_max );
-		$description = Utils::trim_to_length( $description, $description_max );
+		$description = Utils::trim_to_sentence( $description, $description_max );
 
 		return [
 			'title'              => $title,
@@ -353,7 +373,7 @@ class Metadata_Generator {
 			'description_status' => Utils::get_description_status( $description ),
 			'extracted_preview'  => Utils::trim_to_length( $content, 800 ),
 			'source'             => 'ai',
-			'model'              => get_option( 'ai_seo_assistant_model', 'gpt-4o-mini' ),
+			'model'              => $this->ai_client->get_last_model(),
 			'generated_at'       => current_time( 'mysql' ),
 		];
 	}
@@ -1162,14 +1182,6 @@ class Metadata_Generator {
 		}
 
 		return 'I help businesses' . $location . ' with practical technical improvements, SEO analysis, and clearer website performance.';
-	}
-
-	private function get_openai_api_key() {
-		if ( defined( 'AI_SEO_ASSISTANT_OPENAI_API_KEY' ) && AI_SEO_ASSISTANT_OPENAI_API_KEY ) {
-			return trim( (string) AI_SEO_ASSISTANT_OPENAI_API_KEY );
-		}
-
-		return trim( (string) get_option( 'ai_seo_assistant_api_key', '' ) );
 	}
 
 	private function log_generation( $post_id, $result, $content, $source, $error = '' ) {
