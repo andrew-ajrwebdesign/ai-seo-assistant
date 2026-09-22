@@ -26,17 +26,22 @@ class Content_Extractor {
 			$parts[] = $title;
 		}
 
-		$excerpt = get_the_excerpt( $post_id );
+		// Only a hand-written excerpt. get_the_excerpt() falls back to the
+		// first 55 words of the content, which then appeared twice in the
+		// text sent to the AI and read as duplicated copy on the page.
+		$excerpt = trim( (string) $post->post_excerpt );
 
-		if ( ! empty( $excerpt ) ) {
+		if ( '' !== $excerpt ) {
 			$parts[] = $excerpt;
 		}
 
-		if ( $this->is_elementor_page( $post_id ) ) {
-			$parts[] = $this->get_elementor_content( $post_id );
-		}
+		// Elementor also stores a plain copy of the page in post_content, so
+		// reading both sources doubled every Elementor page's text.
+		$elementor_content = $this->is_elementor_page( $post_id ) ? $this->get_elementor_content( $post_id ) : '';
 
-		if ( ! empty( $post->post_content ) ) {
+		if ( '' !== trim( $elementor_content ) ) {
+			$parts[] = $elementor_content;
+		} elseif ( ! empty( $post->post_content ) ) {
 			$parts[] = $this->get_wordpress_content( $post->post_content );
 		}
 

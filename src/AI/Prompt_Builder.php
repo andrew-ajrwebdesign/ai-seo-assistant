@@ -155,8 +155,8 @@ class Prompt_Builder {
 		$prompt[] = '- Include important search terms only when they fit naturally and are supported by the page.';
 		$prompt[] = '- Do not keyword stuff.';
 		$prompt[] = '- Desired default tone: ' . $tone . '.';
-		$prompt[] = '- SEO title should ideally be under ' . $title_length . ' characters.';
-		$prompt[] = '- Meta description should ideally be under ' . $description_length . ' characters.';
+		$prompt[] = '- The SEO title must be ' . $title_length . ' characters or fewer, including spaces.';
+		$prompt[] = '- The meta description must be ' . $description_length . ' characters or fewer, including spaces, and must end on a complete sentence. Anything longer is cut off mid-phrase.';
 		$prompt[] = '- Include the brand/site name in the SEO title only if this setting says yes: ' . $include_brand . '.';
 		$prompt[] = '- Write the title and description in the same language as the extracted page content, even though these instructions are in English.';
 

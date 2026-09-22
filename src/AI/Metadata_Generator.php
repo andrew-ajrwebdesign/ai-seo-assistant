@@ -364,7 +364,7 @@ class Metadata_Generator {
 		$description_max = $description_max > 0 ? $description_max + 10 : 165;
 
 		$title       = Utils::trim_to_length( $title, $title_max );
-		$description = Utils::trim_to_length( $description, $description_max );
+		$description = Utils::trim_to_sentence( $description, $description_max );
 
 		return [
 			'title'              => $title,

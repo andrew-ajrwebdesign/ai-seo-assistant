@@ -22,6 +22,39 @@ class Utils {
 		return rtrim( $trimmed, " \t\n\r\0\x0B.,;:-" );
 	}
 
+	/**
+	 * Shortens text to $max_length, preferring the end of a sentence.
+	 *
+	 * A meta description cut at a word boundary can still stop mid-phrase
+	 * ("Flat fee, month to"), which reads as broken in search results. When a
+	 * full sentence ends within the limit and keeps at least 60% of it, the
+	 * text is cut there instead; otherwise this falls back to the word cut.
+	 *
+	 * @param string $text       Text to shorten.
+	 * @param int    $max_length Maximum length in characters.
+	 * @return string
+	 */
+	public static function trim_to_sentence( $text, $max_length ) {
+		$text = trim( wp_strip_all_tags( (string) $text ) );
+
+		if ( mb_strlen( $text ) <= $max_length ) {
+			return $text;
+		}
+
+		$window = mb_substr( $text, 0, $max_length + 1 );
+
+		if ( preg_match_all( '/[.!?](?=\s|$)/u', $window, $matches, PREG_OFFSET_CAPTURE ) ) {
+			$last = end( $matches[0] );
+			$cut  = mb_strlen( substr( $window, 0, $last[1] + strlen( $last[0] ) ) );
+
+			if ( $cut <= $max_length && $cut >= (int) floor( $max_length * 0.6 ) ) {
+				return mb_substr( $text, 0, $cut );
+			}
+		}
+
+		return self::trim_to_length( $text, $max_length );
+	}
+
 	public static function get_title_status( $title ) {
 		$length = mb_strlen( trim( (string) $title ) );
 
