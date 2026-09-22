@@ -24,6 +24,7 @@ use AJR\SEOAssistant\GSC\GSC_Client;
 use AJR\SEOAssistant\GSC\GSC_Page;
 use AJR\SEOAssistant\Redirects\Redirect_Store;
 use AJR\SEOAssistant\Redirects\Redirect_Handler;
+use AJR\SEOAssistant\Redirects\Core_Suggestions;
 use AJR\SEOAssistant\Admin\Redirects_Page;
 
 defined( 'ABSPATH' ) || exit;
@@ -135,17 +136,78 @@ class Plugin {
 		$this->indexing_tools_page->init();
 		$this->ajax->init();
 
-		// Redirects: the front-end handler runs on every request; the admin UI
-		// and the table install only load in the admin (the front end reads the
-		// cached lookup map, never the table).
-		$this->redirect_store = new Redirect_Store();
-		( new Redirect_Handler( $this->redirect_store ) )->register();
+		/*
+		 * ⛔ REDIRECTS HAVE MOVED TO AJR CORE. ONE FEATURE, ONE PLUGIN.
+		 *
+		 * AJR Core 0.5.0 owns redirects on every site, retainer or not. Both plugins
+		 * hooked `template_redirect` at priority 1, so with both active the same rules
+		 * were applied twice by two owners — and a rule edited on one screen and not the
+		 * other would have been decided by whichever plugin happened to load first. That
+		 * is not a conflict anyone would see in testing; it is one that appears months
+		 * later as "that redirect stopped working".
+		 *
+		 * So this feature stands down the moment AJR Core is present: no handler, no
+		 * menu item, no table install. It keeps running only on a site that does not
+		 * have AJR Core yet, because standing down there would drop that site's
+		 * redirects on an update — the one outcome worse than duplication.
+		 *
+		 * AJR Core copies this plugin's rules into its own table on first run and
+		 * changes nothing here, so the hand-over needs no migration and is reversible.
+		 * The code goes altogether in 5.0, once AJR Core is on every site.
+		 */
+		if ( self::core_owns_redirects() ) {
+			/*
+			 * The SUGGESTIONS do not move with the redirects, and should not: they need
+			 * Search Console, which is this plugin's job and part of what a retainer pays
+			 * for. AJR Core owns the screen and the rules; this supplies the knowledge of
+			 * which addresses Google is still asking for. Admin only — it is a screen.
+			 */
+			if ( is_admin() ) {
+				( new Core_Suggestions( $this->gsc_client ) )->register();
+			}
+		} else {
+			$this->redirect_store = new Redirect_Store();
+			( new Redirect_Handler( $this->redirect_store ) )->register();
 
-		if ( is_admin() ) {
-			$this->redirect_store->maybe_install();
-			$this->redirects_page = new Redirects_Page( $this->redirect_store, $this->gsc_client );
-			$this->redirects_page->init();
+			if ( is_admin() ) {
+				/*
+				 * ⛔ is_admin() is a CONTEXT flag, not a permission check. admin-post.php
+				 * defines WP_ADMIN and fires admin_init (line 27) BEFORE it checks
+				 * is_user_logged_in() (line 36) — verified in core on this site — so anything
+				 * gated on is_admin() alone is reachable by a request carrying no cookie.
+				 * Here that only ever meant a dbDelta while the version flag was stale, which
+				 * self-heals, so nothing was exposed; this makes the gate say what it means.
+				 *
+				 * The capability is checked ON admin_init, not here: calling
+				 * current_user_can() at plugins_loaded resolves the current user before the
+				 * authentication filters have run, which breaks application-password and REST
+				 * logins — a worse bug than the one being fixed.
+				 */
+				add_action(
+					'admin_init',
+					function (): void {
+						if ( current_user_can( 'manage_options' ) ) {
+							$this->redirect_store->maybe_install();
+						}
+					}
+				);
+				$this->redirects_page = new Redirects_Page( $this->redirect_store, $this->gsc_client );
+				$this->redirects_page->init();
+			}
 		}
+	}
+
+	/**
+	 * Whether AJR Core is present and owns redirects on this site.
+	 *
+	 * Checks for the class rather than the plugin file, so it is true exactly when AJR
+	 * Core has actually loaded — a plugin that is installed but not active, or active but
+	 * fatally broken, must NOT switch this plugin's redirects off.
+	 *
+	 * @return bool
+	 */
+	public static function core_owns_redirects() {
+		return class_exists( '\AJR\Core\Redirects\Redirect_Store' );
 	}
 
 	/**
