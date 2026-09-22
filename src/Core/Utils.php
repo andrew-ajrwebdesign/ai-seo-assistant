@@ -48,7 +48,10 @@ class Utils {
 		// "Dr. Sarah" and "St. Louis" and "4.99" are never treated as one.
 		// Matched against the full text so the character after the stop is
 		// always visible, then walked from the latest candidate backwards.
-		$pattern = '/(?<!\b(?:Dr|Mr|Mrs|Ms|St|Nr|Inc|Ltd|Co|vs|bzw|ca|inkl|z\.B))[.!?](?=\s+\p{Lu}|\s*$)/u';
+		// Each abbreviation is its own top-level lookbehind branch: PCRE2
+		// before 10.43 (bundled with PHP 8.0-8.3) rejects different-length
+		// alternatives nested inside a group, and the plugin supports 8.0.
+		$pattern = '/(?<!\bDr|\bMr|\bMrs|\bMs|\bSt|\bNr|\bInc|\bLtd|\bCo|\bvs|\bbzw|\bca|\binkl|\bz\.B)[.!?](?=\s+[\p{Lu}\p{N}"\'“„(]|\s*$)/u';
 
 		if ( preg_match_all( $pattern, $text, $matches, PREG_OFFSET_CAPTURE ) ) {
 			foreach ( array_reverse( $matches[0] ) as $match ) {
