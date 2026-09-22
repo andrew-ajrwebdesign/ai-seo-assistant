@@ -41,14 +41,26 @@ class Utils {
 			return $text;
 		}
 
-		$window = mb_substr( $text, 0, $max_length + 1 );
+		$floor = (int) floor( $max_length * 0.6 );
 
-		if ( preg_match_all( '/[.!?](?=\s|$)/u', $window, $matches, PREG_OFFSET_CAPTURE ) ) {
-			$last = end( $matches[0] );
-			$cut  = mb_strlen( substr( $window, 0, $last[1] + strlen( $last[0] ) ) );
+		// A sentence end is . ! or ? followed by whitespace and an uppercase
+		// letter (or the end of the text), and not a common abbreviation, so
+		// "Dr. Sarah" and "St. Louis" and "4.99" are never treated as one.
+		// Matched against the full text so the character after the stop is
+		// always visible, then walked from the latest candidate backwards.
+		$pattern = '/(?<!\b(?:Dr|Mr|Mrs|Ms|St|Nr|Inc|Ltd|Co|vs|bzw|ca|inkl|z\.B))[.!?](?=\s+\p{Lu}|\s*$)/u';
 
-			if ( $cut <= $max_length && $cut >= (int) floor( $max_length * 0.6 ) ) {
-				return mb_substr( $text, 0, $cut );
+		if ( preg_match_all( $pattern, $text, $matches, PREG_OFFSET_CAPTURE ) ) {
+			foreach ( array_reverse( $matches[0] ) as $match ) {
+				$cut = mb_strlen( substr( $text, 0, $match[1] + strlen( $match[0] ) ) );
+
+				if ( $cut < $floor ) {
+					break;
+				}
+
+				if ( $cut <= $max_length ) {
+					return mb_substr( $text, 0, $cut );
+				}
 			}
 		}
 
