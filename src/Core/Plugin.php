@@ -129,7 +129,13 @@ class Plugin {
 		);
 
 		$this->admin->init();
-		( new Markdown_Page() )->init();
+
+		// Markdown for AI moved to AJR Core 0.8.0 — see core_owns_markdown(). Its screen lives
+		// under AJR Core's menu there, editing the same settings.
+		if ( ! self::core_owns_markdown() ) {
+			( new Markdown_Page() )->init();
+		}
+
 		$this->audit_page->init();
 		$this->report_page->init();
 		$this->gsc_page->init();
@@ -208,6 +214,38 @@ class Plugin {
 	 */
 	public static function core_owns_redirects() {
 		return class_exists( '\AJR\Core\Redirects\Redirect_Store' );
+	}
+
+	/**
+	 * Whether AJR Core (0.8.0+) is present and owns Markdown for AI on this site.
+	 *
+	 * ⛔ MARKDOWN FOR AI HAS MOVED TO AJR CORE. ONE FEATURE, ONE PLUGIN — the same hand-over as
+	 * redirects in 4.1.0, and for the same reason: two copies answering /llms.txt, the REST
+	 * routes and ?format=markdown on one site would be decided by load order.
+	 *
+	 * The hand-over is safe in either update order. AJR Core reads the same `wpmai_settings`,
+	 * the same `wpmai_` caches and the same filters, so nothing migrates; and AJR Core stands
+	 * ITS copy down while this plugin is older than 4.2.0, so the two never both serve. On a
+	 * site without AJR Core this keeps serving exactly as before. The code goes in 5.0.
+	 *
+	 * The class, not the plugin file: installed-but-inactive or fatally broken must not switch
+	 * this plugin's endpoints off.
+	 *
+	 * @return bool
+	 */
+	public static function core_owns_markdown() {
+		if ( ! class_exists( '\AJR\Core\Markdown\Module' ) ) {
+			return false;
+		}
+
+		/*
+		 * ⛔ One decision, asked of one function. AJR Core stands its copy down while this plugin
+		 * is older than its minimum; asking AJR Core that same question here means the two can
+		 * never BOTH stand down. When each decided on its own, a version mismatch left /llms.txt
+		 * answered by nobody (hand-over scenario test, 2026-09-23).
+		 */
+		return ! method_exists( '\AJR\Core\Markdown\Module', 'older_assistant_serves' )
+			|| ! \AJR\Core\Markdown\Module::older_assistant_serves();
 	}
 
 	/**
