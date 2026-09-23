@@ -92,6 +92,8 @@ In the block editor, the active SEO plugin's snippet preview updates live after 
 
 ### Markdown and LLMs.txt
 
+> **4.2.0: moved to AJR Core.** On a site running AJR Core 0.8.0 or later, AJR Core serves every endpoint below and its screen is **AJR Core → Markdown for AI**. This plugin stands its copy down, the same hand-over redirects made in 4.1.0. Both plugins read the same `wpmai_settings`, caches and filters, so nothing migrates, and either update order is safe: AJR Core stays quiet while this plugin is older than 4.2.0. On a site without AJR Core, this plugin keeps serving exactly as before. The code is removed in 5.0.
+
 The plugin can generate a machine-readable Markdown index and full-content export of the site for use with AI tools and LLM context.
 
 Generated endpoints:
