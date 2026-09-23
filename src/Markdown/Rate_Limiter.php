@@ -110,7 +110,10 @@ class Rate_Limiter {
 		if ( $this->is_private_ip( $remote_addr ) ) {
 			$forwarded = $_SERVER['HTTP_X_FORWARDED_FOR'] ?? ''; // phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 			if ( $forwarded ) {
-				$ips = array_map( 'trim', explode( ',', $forwarded ) );
+				// From the RIGHT: a proxy appends the address it saw; entries to its left are
+				// client-written, so reading the first let a client pick its own bucket (4.2.0,
+				// security review of the AJR Core port; preflight `forwarded-for order`).
+				$ips = array_reverse( array_map( 'trim', explode( ',', $forwarded ) ) );
 				foreach ( $ips as $ip ) {
 					if ( filter_var( $ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE ) ) {
 						return $ip;
