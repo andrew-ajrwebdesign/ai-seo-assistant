@@ -27,7 +27,10 @@ class Llms_Txt {
 		// every /%postname%/ site - agents and Lighthouse request the exact path.
 		add_action( 'template_redirect', [ $this, 'maybe_serve' ], 5 );
 		add_filter( 'redirect_canonical', [ $this, 'keep_exact_path' ] );
-		add_filter( 'robots_txt', [ $this, 'add_robots_pointer' ], 10, 2 );
+		// Priority 20: The SEO Framework's robots_txt filter runs at 10 (registered later, on
+		// init) and rebuilds the file from an empty string, discarding this pointer on every TSF
+		// site (4.2.0; preflight `robots_txt priority`).
+		add_filter( 'robots_txt', [ $this, 'add_robots_pointer' ], 20, 2 );
 	}
 
 	/**
