@@ -36,14 +36,14 @@ class Audit_Page {
 			'ai-seo-assistant',
 			'Metadata Audit',
 			'Metadata Audit',
-			'manage_options',
+			\AJR\SEOAssistant\Report\Access::TOOLS_CAP,
 			'ai-seo-assistant-audit',
 			[ $this, 'render_audit_page' ]
 		);
 	}
 
 	public function render_audit_page() {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( \AJR\SEOAssistant\Report\Access::TOOLS_CAP ) ) {
 			return;
 		}
 

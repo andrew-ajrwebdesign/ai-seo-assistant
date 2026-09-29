@@ -54,7 +54,7 @@ class Redirects_Page {
 			'ai-seo-assistant',
 			__( 'Redirects', 'ai-seo-assistant' ),
 			__( 'Redirects', 'ai-seo-assistant' ),
-			'manage_options',
+			\AJR\SEOAssistant\Report\Access::TOOLS_CAP,
 			self::MENU_SLUG,
 			[ $this, 'render_page' ]
 		);
@@ -65,7 +65,7 @@ class Redirects_Page {
 	// -------------------------------------------------------------------------
 
 	public function render_page(): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( \AJR\SEOAssistant\Report\Access::TOOLS_CAP ) ) {
 			return;
 		}
 
@@ -458,7 +458,7 @@ class Redirects_Page {
 	 * Blocks the request when the user lacks the required capability.
 	 */
 	private function require_cap(): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( \AJR\SEOAssistant\Report\Access::TOOLS_CAP ) ) {
 			wp_die( esc_html__( 'You do not have permission to do this.', 'ai-seo-assistant' ) );
 		}
 	}

@@ -3,7 +3,7 @@
  * Plugin Name:       AI SEO Assistant
  * Plugin URI:        https://github.com/andrew-ajrwebdesign/ai-seo-assistant
  * Description:       AI-assisted SEO metadata generation, audit tools, and AI-agent content endpoints for WordPress.
- * Version:           4.2.0
+ * Version:           4.3.0
  * Requires at least: 6.0
  * Requires PHP:      8.0
  * Author:            AJR Web Design
@@ -75,4 +75,10 @@ register_activation_hook(
 		\AJR\SEOAssistant\Redirects\Redirect_Store::install();
 	}
 );
-register_deactivation_hook( __FILE__, [ \AJR\SEOAssistant\Markdown\Module::class, 'deactivate' ] );
+register_deactivation_hook(
+	__FILE__,
+	static function () {
+		\AJR\SEOAssistant\Markdown\Module::deactivate();
+		\AJR\SEOAssistant\Report\Stale_Alert::unschedule();
+	}
+);

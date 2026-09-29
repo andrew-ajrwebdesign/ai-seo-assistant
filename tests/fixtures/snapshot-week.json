@@ -1,0 +1,66 @@
+{
+  "schema": 1,
+  "site": "northfield.example",
+  "week": { "start": "2026-09-21", "end": "2026-09-27" },
+  "generated_at": "2026-09-28T07:12:00+00:00",
+  "enquiries": {
+    "sources": [
+      { "key": "calls", "label": "Phone calls", "count": 11, "previous": 8 },
+      { "key": "form", "label": "Website form", "count": 7, "previous": 6 },
+      { "key": "bookings", "label": "Online bookings", "count": 3, "previous": 2 },
+      { "key": "email", "label": "Email", "count": 2, "previous": 2 }
+    ],
+    "series_12w": [12, 15, 13, 16, 14, 17, 15, 18, 16, 19, 18, 23],
+    "note": "Calls are those Google Ads and your Business Profile recorded. Form entries and bookings are counted on this website. Google Ads and Google Analytics each see only part of these, which is why their figures further down are smaller."
+  },
+  "note": {
+    "did": [
+      "Rewrote the emergency plumbing page to answer the questions people actually search for.",
+      "Paused two ad keywords that were spending money without bringing calls.",
+      "Fixed a slow-loading photo on the water heater page."
+    ],
+    "next": [
+      "A furnace tune-up page, ready before the cold weather.",
+      "Ask your last ten customers for a Google review."
+    ],
+    "author": "Andrew Ryan",
+    "date": "2026-09-28"
+  },
+  "gsc": {
+    "week": {
+      "clicks": { "value": 412, "previous": 381 },
+      "impressions": { "value": 18600, "previous": 18050 },
+      "ctr": { "value": 2.2, "previous": 2.1 },
+      "position": { "value": 11.4, "previous": 12.1 }
+    },
+    "clicks_12w": [290, 300, 296, 322, 318, 338, 332, 350, 348, 366, 380, 412],
+    "impressions_12w": [11200, 11900, 12400, 13100, 13800, 13300, 14500, 15200, 15900, 16600, 17800, 18600],
+    "top_queries": [
+      { "query": "emergency plumber northfield", "clicks": 64, "change": 12 },
+      { "query": "furnace repair near me", "clicks": 41, "change": 6 },
+      { "query": "northfield plumbing", "clicks": 38, "change": -2 },
+      { "query": "water heater replacement", "clicks": 27, "change": 9 },
+      { "query": "blocked drain northfield", "clicks": 19, "change": 4 }
+    ]
+  },
+  "ga4": {
+    "week": {
+      "visits": { "value": 1284, "previous": 1211 },
+      "key_events": { "value": 41, "previous": 34 },
+      "engaged": { "value": 62, "previous": 64 }
+    },
+    "top_pages": [
+      { "title": "Emergency plumbing", "path": "/emergency-plumbing/", "visits": 312 },
+      { "title": "Home", "path": "/", "visits": 288 },
+      { "title": "Water heaters", "path": "/water-heaters/", "visits": 174 },
+      { "title": "Book online", "path": "/book/", "visits": 96 }
+    ]
+  },
+  "ads": {
+    "currency": "USD",
+    "budget": 700,
+    "spend": { "value": 612, "previous": 588 },
+    "clicks": { "value": 188, "previous": 181 },
+    "conversions": { "value": 9, "previous": 7 }
+  }
+}

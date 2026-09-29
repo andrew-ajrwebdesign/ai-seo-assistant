@@ -1,0 +1,40 @@
+<?xml version="1.0"?>
+<ruleset name="AI SEO Assistant">
+    <description>WordPress Coding Standards for AI SEO Assistant.</description>
+
+    <!--
+      SCOPE — ratchet, not a big bang (2026-09-29). The plugin had no coding-standards gate before
+      4.3.0. New code is held to WPCS from its first commit; older modules join this list as they are
+      cleaned (backlog: "tests/phpcs in repo", Next Steps 2026-09-15). A module listed here must pass
+      in CI — adding a folder is a promise, not a wish.
+    -->
+    <file>src/Report</file>
+
+    <exclude-pattern>/vendor/*</exclude-pattern>
+    <exclude-pattern>/tests/*</exclude-pattern>
+
+    <arg name="extensions" value="php"/>
+    <arg name="colors"/>
+    <arg value="sp"/>
+
+    <rule ref="WordPress">
+        <!-- PSR-4 file names deliberately do not follow the WP filename convention (one class per file). -->
+        <exclude name="WordPress.Files.FileName.InvalidClassFileName"/>
+        <exclude name="WordPress.Files.FileName.NotHyphenatedLowercase"/>
+        <!-- Short array syntax is standard modern PHP and used throughout WP Core. -->
+        <exclude name="Universal.Arrays.DisallowShortArraySyntax"/>
+        <exclude name="Squiz.Commenting.InlineComment.InvalidEndChar"/>
+    </rule>
+
+    <rule ref="WordPress.WP.I18n">
+        <properties>
+            <property name="text_domain" type="array">
+                <element value="ai-seo-assistant"/>
+            </property>
+        </properties>
+    </rule>
+
+    <!-- Match the plugin header: Requires at least 6.0, Requires PHP 8.0. -->
+    <config name="minimum_supported_wp_version" value="6.0"/>
+    <config name="testVersion" value="8.0-"/>
+</ruleset>

@@ -33,14 +33,14 @@ class GSC_Page {
 			'ai-seo-assistant',
 			'Search Console',
 			'Search Console',
-			'manage_options',
+			\AJR\SEOAssistant\Report\Access::TOOLS_CAP,
 			'ai-seo-assistant-gsc',
 			[ $this, 'render_page' ]
 		);
 	}
 
 	public function render_page() {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( \AJR\SEOAssistant\Report\Access::TOOLS_CAP ) ) {
 			return;
 		}
 
@@ -294,7 +294,7 @@ class GSC_Page {
 	}
 
 	public function callback() {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( \AJR\SEOAssistant\Report\Access::TOOLS_CAP ) ) {
 			wp_die( esc_html__( 'You do not have permission to connect Google Search Console.', 'ai-seo-assistant' ) );
 		}
 
@@ -438,7 +438,7 @@ class GSC_Page {
 	}
 
 	private function verify_request( $action ) {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( \AJR\SEOAssistant\Report\Access::TOOLS_CAP ) ) {
 			wp_die( esc_html__( 'You do not have permission to manage Google Search Console settings.', 'ai-seo-assistant' ) );
 		}
 
