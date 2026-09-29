@@ -8,7 +8,7 @@ The plugin is designed for controlled WordPress admin workflows. It is not inten
 
 ### Weekly Report (4.3.0)
 
-**AI SEO Assistant → Weekly report** is the client's page: enquiries from every source first, then a note from the agency, Search Console, Analytics and Google Ads for the week, with 12 weeks of history and 52 weeks kept.
+**AI SEO Assistant → Weekly report** is the client's page: under a header leading with the week's enquiries, Search Console comes first (4.3.1), then enquiries from every source beside a note from the agency, then Analytics and Google Ads, with 12 weeks of history and 52 weeks kept.
 
 * **The site holds no Google keys.** The agency's `retainer-scan` builds each week's snapshot and POSTs it to `/wp-json/ai-seo-assistant/v1/report`, signed with HMAC-SHA256 (`X-AISA-Signature: t=<unix>,v1=<hex>` over `"<t>.<body>"`, 10-minute window). The per-site key is made on the Weekly report screen and shown once, or set as `AI_SEO_ASSISTANT_REPORT_KEY` in `wp-config.php`. Snapshots are validated against schema 1 and must name this site.
 * **No SSH needed.** The push is plain HTTPS. On a host that blocks it, upload the saved JSON with **Import a report** on the same screen.
