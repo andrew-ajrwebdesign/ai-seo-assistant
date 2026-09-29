@@ -3,8 +3,8 @@
  * Report_View — the Weekly report's markup, from a stored snapshot.
  *
  * Built from the approved Figma mockup (architecture map §12): a dark AJR header with the enquiries
- * headline and week navigation; enquiries by source beside the agency's note; Search Console; Analytics
- * and Google Ads side by side; a footer saying what the figures cover and that the site holds no Google
+ * headline and week navigation; Search Console as the first card (moved up from third, 2026-09-29);
+ * enquiries by source beside the agency's note; Analytics and Google Ads side by side; a footer saying what the figures cover and that the site holds no Google
  * keys. Three states: a normal week, a LATE week (the Monday update did not arrive) and EMPTY (before the
  * first update).
  *
@@ -39,10 +39,12 @@ class Report_View {
 	 *                                       latest (bool: this is the newest week), alerted (bool).
 	 */
 	public static function report( array $snap, array $context ): string {
-		$html   = self::late_notice( $snap, $context );
-		$html  .= self::header( $snap, $context );
-		$html  .= '<div class="aisa-row">' . self::enquiries( $snap ) . self::note( $snap['note'] ?? null, $context ) . '</div>';
+		$html  = self::late_notice( $snap, $context );
+		$html .= self::header( $snap, $context );
+		// Search Console is the first card under the header (Andrew, 2026-09-29): it is the figure that
+		// moves every week, on every site, even while enquiries are few.
 		$html  .= self::search( $snap['gsc'] ?? null, $snap );
+		$html  .= '<div class="aisa-row">' . self::enquiries( $snap ) . self::note( $snap['note'] ?? null, $context ) . '</div>';
 		$visits = self::visits( $snap['ga4'] ?? null );
 		$ads    = self::ads( $snap['ads'] ?? null );
 		if ( '' !== $visits || '' !== $ads ) {
@@ -62,8 +64,8 @@ class Report_View {
 	 */
 	public static function empty_state( array $context ): string {
 		$cards = [
-			[ 'phone', __( 'Every enquiry, from every source', 'ai-seo-assistant' ), __( 'Calls, form entries and online bookings added together, and compared with the week before.', 'ai-seo-assistant' ) ],
 			[ 'search', __( 'How people find you on Google', 'ai-seo-assistant' ), __( 'Clicks, how often you appeared, and the searches that brought people in, over 12 weeks.', 'ai-seo-assistant' ) ],
+			[ 'phone', __( 'Every enquiry, from every source', 'ai-seo-assistant' ), __( 'Calls, form entries and online bookings added together, and compared with the week before.', 'ai-seo-assistant' ) ],
 			[ 'chart-line', __( 'Visits to your website', 'ai-seo-assistant' ), __( 'How many people came, which pages they read, and how many got in touch.', 'ai-seo-assistant' ) ],
 			[ 'megaphone', __( 'What your Google Ads did', 'ai-seo-assistant' ), __( 'What was spent, the clicks, and the enquiries Google Ads can see.', 'ai-seo-assistant' ) ],
 			[ 'edit', __( 'A note each week', 'ai-seo-assistant' ), __( 'What we worked on that week and what comes next, in plain English.', 'ai-seo-assistant' ) ],
