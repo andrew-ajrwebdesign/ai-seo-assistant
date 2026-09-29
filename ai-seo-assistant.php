@@ -61,7 +61,7 @@ add_action(
 	static function () {
 		\AJR\SEOAssistant\Core\Plugin::instance()->init();
 
-		// Markdown for AI stands down while AJR Core 0.8+ serves it (Plugin::core_owns_markdown()).
+		// Markdown for AI stands down while AJR Core 0.8+ or the site's own core serves it (Plugin::core_owns_markdown()).
 		if ( ! \AJR\SEOAssistant\Core\Plugin::core_owns_markdown() ) {
 			\AJR\SEOAssistant\Markdown\Module::boot();
 		}
