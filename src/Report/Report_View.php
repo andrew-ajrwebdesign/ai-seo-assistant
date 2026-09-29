@@ -205,9 +205,9 @@ class Report_View {
 		$series = $snap['enquiries']['series_12w'];
 		$figure = '';
 		if ( count( $series ) >= 2 ) {
-			$title  = __( 'Enquiries, last 12 weeks', 'ai-seo-assistant' );
-			$figure = '<figure class="aisa-figure"><figcaption>' . esc_html( $title ) . '</figcaption>'
-				. Chart::bars( $series, self::week_labels( $snap['week']['start'], count( $series ) ), $title ) . '</figure>';
+			$caption = __( 'Enquiries, last 12 weeks', 'ai-seo-assistant' );
+			$figure  = '<figure class="aisa-figure"><figcaption>' . esc_html( $caption ) . '</figcaption>'
+				. Chart::bars( $series, self::week_labels( $snap['week']['start'], count( $series ) ), $caption ) . '</figure>';
 		}
 		$note = '' !== $snap['enquiries']['note'] ? '<p class="aisa-small">' . esc_html( $snap['enquiries']['note'] ) . '</p>' : '';
 

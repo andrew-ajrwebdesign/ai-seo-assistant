@@ -88,6 +88,7 @@ class ReportViewTest extends TestCase {
 		}
 		$this->assertStringContainsString( '<aside class="aisa-card aisa-note"', $html );
 		$this->assertStringContainsString( 'A note from Andrew', $html );
+		$this->assertStringContainsString( 'id="aisa-enquiries"><span class="aisa-icon dashicons dashicons-phone" aria-hidden="true"></span>Where this week’s enquiries came from</h2>', $html, 'the card keeps its own heading' );
 		$this->assertStringNotContainsString( 'aisa-late', $html );
 		$this->assertStringContainsString( 'Northfield Plumbing &amp; Heating', $html, 'business name escaped' );
 		$this->assertStringContainsString( '<span class="aisa-weekbtn" role="link" aria-disabled="true">', $html, 'no next week' );
