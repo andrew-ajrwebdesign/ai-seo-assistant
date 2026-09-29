@@ -12,6 +12,10 @@ debug.log
 node_modules/
 vendor/
 
+# Test output
+.phpunit.result.cache
+coverage/
+
 # Build/package output
 dist/
 build/

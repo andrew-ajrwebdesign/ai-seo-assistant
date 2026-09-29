@@ -1,0 +1,736 @@
+/**
+ * AI SEO Assistant — Weekly report (wp-admin → AI SEO Assistant → Weekly report).
+ *
+ * Built from the approved Figma mockup (reORO92GJaeEhxTgWuaj9R). Every colour is a token declared once
+ * on .aisa-report — the AJR brand palette — and nothing below it types a colour. Charts are inline SVG
+ * whose shapes carry classes only; they are coloured here.
+ *
+ * Mobile first: one column, then two-up rows from 900px. No motion beyond the admin's own focus rings.
+ */
+
+/* ---- Tokens ------------------------------------------------------------------------------------ */
+
+/* The screen wrapper: only the agency panel's divider sits outside the report, in wp-admin's grey. */
+.aisa-wrap {
+	--aisa-admin-divider: #dcdcde;
+}
+
+.aisa-report {
+	--aisa-dark: #071a2f;
+	--aisa-dark-lift: #11334d;
+	--aisa-primary: #0f766e;
+	--aisa-accent-light: #7fe0c3;
+	--aisa-muted: #5f6e85;
+	--aisa-muted-light: #b8c6d6;
+	--aisa-border: #e2e8f0;
+	--aisa-surface: #f8fafc;
+	--aisa-tint: #f4f3ee;
+	--aisa-ink: #0f172a;
+	--aisa-good: #07783f;
+	--aisa-bad: #cc2b1f;
+	--aisa-bg: #fff;
+	--aisa-on-dark: #fff;
+	--aisa-warning-bg: #fff7e6;
+	--aisa-warning-edge: #b45309;
+
+	--aisa-radius: 12px;
+	--aisa-gap: 20px;
+	--aisa-pad: clamp(16px, 2.2vw, 24px);
+	--aisa-serif: Lora, "Iowan Old Style", Georgia, serif;
+	--aisa-sans: "Noto Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+	display: grid;
+	gap: var(--aisa-gap);
+	max-inline-size: 1200px;
+	margin-block-start: 16px;
+	color: var(--aisa-ink);
+	font-family: var(--aisa-sans);
+	font-size: 14px;
+	line-height: 1.5;
+}
+
+.aisa-report *,
+.aisa-report *::before,
+.aisa-report *::after {
+	box-sizing: border-box;
+}
+
+.aisa-report :where(h1, h2, h3, p, ul, figure) {
+	margin: 0;
+	padding: 0;
+}
+
+.aisa-report :where(ul) {
+	list-style: none;
+}
+
+.aisa-report .aisa-icon {
+	inline-size: 20px;
+	block-size: 20px;
+	font-size: 20px;
+	flex: none;
+}
+
+/* ---- Header ------------------------------------------------------------------------------------ */
+
+.aisa-hero {
+	display: grid;
+	gap: 12px;
+	padding: var(--aisa-pad);
+	border-radius: var(--aisa-radius);
+	background-color: var(--aisa-dark);
+	color: var(--aisa-on-dark);
+}
+
+.aisa-hero__top {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+}
+
+.aisa-brand {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	color: var(--aisa-muted-light);
+	font-size: 12px;
+	line-height: 1.35;
+}
+
+.aisa-brand strong {
+	color: var(--aisa-on-dark);
+	font-size: 14px;
+}
+
+.aisa-brand__mark {
+	display: grid;
+	place-items: center;
+	inline-size: 36px;
+	block-size: 36px;
+	border-radius: 8px;
+	background-color: var(--aisa-primary);
+	color: var(--aisa-on-dark);
+}
+
+.aisa-fresh {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	padding: 4px 12px;
+	border-radius: 999px;
+	background-color: var(--aisa-dark-lift);
+	color: var(--aisa-muted-light);
+	font-size: 12px;
+}
+
+.aisa-fresh__dot {
+	inline-size: 8px;
+	block-size: 8px;
+	border-radius: 50%;
+	background-color: var(--aisa-accent-light);
+}
+
+.aisa-fresh--late .aisa-fresh__dot {
+	background-color: var(--aisa-warning-bg);
+	outline: 2px solid var(--aisa-warning-edge);
+}
+
+.aisa-hero__headline {
+	margin-block-start: 8px;
+	color: var(--aisa-on-dark);
+	font-family: var(--aisa-serif);
+	font-size: clamp(26px, 3.4vw, 38px);
+	font-weight: 600;
+	line-height: 1.15;
+	text-wrap: balance;
+}
+
+.aisa-hero__sub {
+	color: var(--aisa-muted-light);
+	font-size: 15px;
+}
+
+.aisa-weeks {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin-block-start: 4px;
+}
+
+.aisa-weekbtn {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	min-block-size: 36px;
+	padding: 6px 12px;
+	border: 1px solid var(--aisa-dark-lift);
+	border-radius: 8px;
+	background-color: var(--aisa-dark-lift);
+	color: var(--aisa-on-dark);
+	font-size: 13px;
+	text-decoration: none;
+}
+
+.aisa-weekbtn:hover {
+	border-color: var(--aisa-accent-light);
+	color: var(--aisa-on-dark);
+}
+
+.aisa-weekbtn:focus-visible {
+	outline: 2px solid var(--aisa-accent-light);
+	outline-offset: 2px;
+	box-shadow: none;
+	color: var(--aisa-on-dark);
+}
+
+.aisa-weekbtn[aria-disabled="true"] {
+	background-color: transparent;
+	color: var(--aisa-muted-light);
+	opacity: 0.6;
+}
+
+.aisa-weeks__note {
+	margin-inline-start: auto;
+	color: var(--aisa-muted-light);
+	font-size: 12px;
+}
+
+/* ---- Late notice ------------------------------------------------------------------------------- */
+
+.aisa-late {
+	display: flex;
+	gap: 12px;
+	padding: 14px var(--aisa-pad);
+	border: 1px solid var(--aisa-warning-edge);
+	border-radius: var(--aisa-radius);
+	background-color: var(--aisa-warning-bg);
+}
+
+.aisa-late .aisa-icon {
+	color: var(--aisa-warning-edge);
+}
+
+.aisa-late__title {
+	font-weight: 600;
+}
+
+/* ---- Rows and cards ---------------------------------------------------------------------------- */
+
+.aisa-row {
+	display: grid;
+	gap: var(--aisa-gap);
+}
+
+.aisa-card {
+	display: grid;
+	align-content: start;
+	gap: 16px;
+	min-inline-size: 0;
+	padding: var(--aisa-pad);
+	border: 1px solid var(--aisa-border);
+	border-radius: var(--aisa-radius);
+	background-color: var(--aisa-bg);
+}
+
+.aisa-card__head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 4px 12px;
+}
+
+.aisa-card__title,
+.aisa-note__title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--aisa-ink);
+	font-size: 17px;
+	font-weight: 600;
+	line-height: 1.3;
+}
+
+.aisa-card__title .aisa-icon,
+.aisa-note__title .aisa-icon {
+	color: var(--aisa-primary);
+}
+
+.aisa-card__source,
+.aisa-small,
+.aisa-figure figcaption {
+	color: var(--aisa-muted);
+	font-size: 12px;
+}
+
+.aisa-card__sub {
+	color: var(--aisa-ink);
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.aisa-split {
+	display: grid;
+	gap: 20px;
+}
+
+/* A row or split holding one item (no Google Ads, no search table) gives it the full width. */
+.aisa-row > :only-child,
+.aisa-split > :only-child {
+	grid-column: 1 / -1;
+}
+
+.aisa-pending {
+	max-inline-size: 60ch;
+	padding: 14px 16px;
+	border: 1px dashed var(--aisa-border);
+	border-radius: 10px;
+	color: var(--aisa-muted);
+}
+
+/* ---- Enquiries --------------------------------------------------------------------------------- */
+
+.aisa-sources {
+	display: grid;
+	gap: 12px;
+}
+
+.aisa-source__line {
+	display: grid;
+	grid-template-columns: 1fr auto minmax(8ch, auto);
+	align-items: baseline;
+	gap: 12px;
+}
+
+.aisa-source__count {
+	font-size: 16px;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+.aisa-source__change {
+	font-size: 12px;
+	text-align: end;
+}
+
+.aisa-source--total {
+	padding-block-start: 12px;
+	border-block-start: 1px solid var(--aisa-border);
+	font-weight: 600;
+}
+
+.aisa-source--total .aisa-source__count {
+	font-size: 20px;
+}
+
+.aisa-meter {
+	display: block;
+	block-size: 6px;
+	margin-block-start: 6px;
+	border-radius: 3px;
+	background-color: var(--aisa-surface);
+	overflow: hidden;
+}
+
+.aisa-meter__value {
+	display: block;
+	block-size: 100%;
+	border-radius: 3px;
+	background-color: var(--aisa-primary);
+}
+
+.aisa-figure {
+	display: grid;
+	gap: 8px;
+	min-inline-size: 0;
+}
+
+/* The 12-week lines keep readable axis labels on a phone: the chart scrolls inside its own box. */
+.aisa-figure--wide {
+	container-type: inline-size;
+	overflow-x: auto;
+}
+
+/* The key stays in view (and wraps) while the chart scrolls under it. */
+.aisa-figure--wide figcaption {
+	position: sticky;
+	inset-inline-start: 0;
+	max-inline-size: 100cqi;
+}
+
+.aisa-chart--lines {
+	min-inline-size: 540px;
+}
+
+/* ---- Note -------------------------------------------------------------------------------------- */
+
+.aisa-note {
+	background-color: var(--aisa-tint);
+	border-color: var(--aisa-tint);
+}
+
+.aisa-note__h {
+	color: var(--aisa-muted);
+	font-size: 12px;
+	font-weight: 600;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+}
+
+.aisa-note__list {
+	display: grid;
+	gap: 6px;
+}
+
+.aisa-note__list li {
+	position: relative;
+	padding-inline-start: 16px;
+}
+
+.aisa-note__list li::before {
+	content: "";
+	position: absolute;
+	inset-block-start: 0.6em;
+	inset-inline-start: 0;
+	inline-size: 6px;
+	block-size: 6px;
+	border-radius: 50%;
+	background-color: var(--aisa-primary);
+}
+
+.aisa-sign {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	margin-block-start: 4px;
+	color: var(--aisa-muted);
+	font-size: 12px;
+	line-height: 1.4;
+}
+
+.aisa-sign strong {
+	color: var(--aisa-ink);
+	font-size: 13px;
+}
+
+.aisa-sign__mark {
+	display: grid;
+	place-items: center;
+	inline-size: 36px;
+	block-size: 36px;
+	border-radius: 50%;
+	background-color: var(--aisa-dark);
+	color: var(--aisa-on-dark);
+	font-size: 13px;
+	font-weight: 600;
+}
+
+/* ---- Metric tiles ------------------------------------------------------------------------------ */
+
+.aisa-tiles {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 12px;
+}
+
+.aisa-metric {
+	display: grid;
+	gap: 2px;
+	padding: 12px 14px;
+	border-radius: 10px;
+	background-color: var(--aisa-surface);
+}
+
+.aisa-metric__label {
+	color: var(--aisa-muted);
+	font-size: 12px;
+}
+
+.aisa-metric__value {
+	color: var(--aisa-ink);
+	font-size: 24px;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	line-height: 1.2;
+}
+
+.aisa-metric__change {
+	font-size: 12px;
+}
+
+/* The two tiles that double as the chart's key carry the line's colour on their edge. */
+.aisa-metric--key {
+	border-block-start: 3px solid var(--aisa-primary);
+}
+
+.aisa-metric--shown {
+	border-block-start-style: dashed;
+	border-block-start-color: var(--aisa-muted);
+}
+
+.aisa-tone--good {
+	color: var(--aisa-good);
+}
+
+.aisa-tone--bad {
+	color: var(--aisa-bad);
+}
+
+.aisa-tone--flat {
+	color: var(--aisa-muted);
+}
+
+/* ---- Table and lists --------------------------------------------------------------------------- */
+
+.aisa-tablewrap {
+	min-inline-size: 0;
+	overflow-x: auto;
+}
+
+.aisa-table {
+	inline-size: 100%;
+	border-collapse: collapse;
+	font-size: 13px;
+}
+
+.aisa-table caption {
+	padding-block-end: 8px;
+	color: var(--aisa-ink);
+	font-weight: 600;
+	text-align: start;
+}
+
+.aisa-table th {
+	padding: 6px 8px;
+	border-block-end: 1px solid var(--aisa-border);
+	color: var(--aisa-muted);
+	font-size: 12px;
+	font-weight: 400;
+	text-align: start;
+}
+
+.aisa-table td {
+	padding: 8px;
+	border-block-end: 1px solid var(--aisa-border);
+}
+
+.aisa-table tr:last-child td {
+	border-block-end: 0;
+}
+
+.aisa-table :where(th, td):first-child {
+	padding-inline-start: 0;
+}
+
+.aisa-table :where(th, td):last-child {
+	padding-inline-end: 0;
+}
+
+.aisa-report .aisa-num {
+	text-align: end;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.aisa-strong {
+	font-weight: 600;
+}
+
+.aisa-pages {
+	display: grid;
+}
+
+.aisa-pages li {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	padding-block: 8px;
+	border-block-end: 1px solid var(--aisa-border);
+}
+
+.aisa-pages li:last-child {
+	border-block-end: 0;
+}
+
+.aisa-page {
+	min-inline-size: 0;
+	overflow-wrap: anywhere;
+}
+
+.aisa-pages .aisa-num {
+	color: var(--aisa-muted);
+}
+
+/* ---- Ads budget -------------------------------------------------------------------------------- */
+
+.aisa-budget__line {
+	display: flex;
+	justify-content: space-between;
+	color: var(--aisa-muted);
+	font-size: 13px;
+}
+
+.aisa-budget__line strong {
+	color: var(--aisa-ink);
+}
+
+.aisa-meter--budget {
+	block-size: 8px;
+}
+
+/* ---- Charts ------------------------------------------------------------------------------------ */
+
+.aisa-chart {
+	display: block;
+	inline-size: 100%;
+	block-size: auto;
+	overflow: visible;
+}
+
+.aisa-chart .aisa-grid {
+	stroke: var(--aisa-border);
+	stroke-width: 1;
+}
+
+.aisa-chart .aisa-axis {
+	stroke: var(--aisa-muted-light);
+	stroke-width: 1;
+}
+
+.aisa-chart .aisa-bar {
+	fill: var(--aisa-muted-light);
+}
+
+.aisa-chart .aisa-bar--now {
+	fill: var(--aisa-primary);
+}
+
+.aisa-chart .aisa-bar-value {
+	fill: var(--aisa-ink);
+	font-size: 13px;
+	font-weight: 600;
+}
+
+.aisa-chart .aisa-tick {
+	fill: var(--aisa-muted);
+	font-size: 11px;
+}
+
+.aisa-chart .aisa-area {
+	fill: var(--aisa-primary);
+	fill-opacity: 0.08;
+}
+
+.aisa-chart .aisa-line {
+	fill: none;
+	stroke-width: 2.5;
+	stroke-linejoin: round;
+	stroke-linecap: round;
+}
+
+.aisa-chart .aisa-line--clicks {
+	stroke: var(--aisa-primary);
+}
+
+.aisa-chart .aisa-line--shown {
+	stroke: var(--aisa-muted);
+	stroke-dasharray: 6 5;
+	stroke-width: 2;
+}
+
+.aisa-chart .aisa-dot {
+	stroke: var(--aisa-bg);
+	stroke-width: 2;
+}
+
+.aisa-chart .aisa-dot--clicks {
+	fill: var(--aisa-primary);
+}
+
+.aisa-chart .aisa-dot--shown {
+	fill: var(--aisa-muted);
+}
+
+/* ---- Footer and empty state -------------------------------------------------------------------- */
+
+.aisa-foot {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	color: var(--aisa-muted);
+	font-size: 12px;
+}
+
+.aisa-previews {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(min(100%, 210px), 1fr));
+	gap: var(--aisa-gap);
+}
+
+.aisa-card--preview {
+	gap: 8px;
+	border-style: dashed;
+	color: var(--aisa-muted);
+}
+
+.aisa-card--preview .aisa-icon {
+	color: var(--aisa-primary);
+}
+
+.aisa-card--preview .aisa-card__title {
+	font-size: 15px;
+}
+
+/* ---- Agency-only delivery panel (standard admin styling, kept below the report) ----------------- */
+
+.aisa-delivery {
+	max-inline-size: 1200px;
+	margin-block-start: 32px;
+	padding-block-start: 16px;
+	border-block-start: 1px solid var(--aisa-admin-divider);
+}
+
+/* ---- Wider screens ----------------------------------------------------------------------------- */
+
+@media (min-width: 700px) {
+	.aisa-tiles--search {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+	}
+
+	.aisa-tiles--plain:not(.aisa-tiles--two) {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+
+	.aisa-split {
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		align-items: start;
+	}
+}
+
+@media (min-width: 1100px) {
+	.aisa-row {
+		grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
+	}
+
+	.aisa-row--even {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.aisa-split--chart {
+		grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+	}
+}
+
+@media print {
+	.aisa-weeks,
+	.aisa-delivery {
+		display: none;
+	}
+
+	.aisa-hero {
+		print-color-adjust: exact;
+	}
+}

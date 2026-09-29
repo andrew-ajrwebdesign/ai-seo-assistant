@@ -44,7 +44,12 @@ jobs:
             --exclude='*.zip' \
             --exclude='.env' \
             --exclude='.env.*' \
-            --exclude='.gitignore'
+            --exclude='.gitignore' \
+            --exclude='tests' \
+            --exclude='phpunit.xml' \
+            --exclude='phpcs.xml' \
+            --exclude='PRODUCT.md' \
+            --exclude='.phpunit.result.cache'
 
       - name: Create the zip
         run: |

@@ -24,7 +24,7 @@ class Markdown_Page {
 			'ai-seo-assistant',
 			'Markdown for AI',
 			'Markdown for AI',
-			'manage_options',
+			\AJR\SEOAssistant\Report\Access::TOOLS_CAP,
 			'ai-seo-assistant-markdown',
 			[ $this, 'render_page' ]
 		);
@@ -80,7 +80,7 @@ class Markdown_Page {
 	}
 
 	public function render_page(): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( \AJR\SEOAssistant\Report\Access::TOOLS_CAP ) ) {
 			return;
 		}
 
@@ -371,7 +371,7 @@ class Markdown_Page {
 
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( ! empty( $_GET['wpmai_delete_llms'] ) && wp_verify_nonce( sanitize_key( $_GET['_wpnonce'] ?? '' ), 'wpmai_delete_llms' ) ) {
-			if ( current_user_can( 'manage_options' ) && $file_exists ) {
+			if ( current_user_can( \AJR\SEOAssistant\Report\Access::TOOLS_CAP ) && $file_exists ) {
 				wp_delete_file( $physical_llms );
 				$file_exists = false;
 				$conflicts[] = [
@@ -677,7 +677,7 @@ class Markdown_Page {
 	}
 
 	public function handle_clear_cache(): void {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( \AJR\SEOAssistant\Report\Access::TOOLS_CAP ) ) {
 			wp_die( esc_html__( 'You do not have permission to do this.', 'ai-seo-assistant' ) );
 		}
 

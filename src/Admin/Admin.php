@@ -462,10 +462,14 @@ class Admin {
 	}
 
 	public function add_settings_page() {
+		// A client (no tools capability) gets a top-level "Weekly report" menu from Report\Report_Page instead.
+		if ( ! current_user_can( \AJR\SEOAssistant\Report\Access::TOOLS_CAP ) ) {
+			return;
+		}
 		add_menu_page(
 			'AI SEO Assistant',
 			'AI SEO Assistant',
-			'manage_options',
+			\AJR\SEOAssistant\Report\Access::TOOLS_CAP,
 			'ai-seo-assistant',
 			[ $this, 'render_settings_page' ],
 			'dashicons-chart-line',
@@ -476,7 +480,7 @@ class Admin {
 			'ai-seo-assistant',
 			'Settings',
 			'Settings',
-			'manage_options',
+			\AJR\SEOAssistant\Report\Access::TOOLS_CAP,
 			'ai-seo-assistant',
 			[ $this, 'render_settings_page' ]
 		);
@@ -765,7 +769,7 @@ class Admin {
 	}
 
 	public function render_settings_page() {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( \AJR\SEOAssistant\Report\Access::TOOLS_CAP ) ) {
 			return;
 		}
 
@@ -1239,7 +1243,7 @@ class Admin {
 	 * or the masked reason it failed.
 	 */
 	public function test_claude_connection() {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( \AJR\SEOAssistant\Report\Access::TOOLS_CAP ) ) {
 			wp_die( esc_html__( 'You do not have permission to test the Claude connection.', 'ai-seo-assistant' ) );
 		}
 

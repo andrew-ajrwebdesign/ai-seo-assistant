@@ -25,16 +25,16 @@ class Report_Page {
 	public function add_report_page() {
 		add_submenu_page(
 			'ai-seo-assistant',
-			'Client Report',
-			'Client Report',
-			'manage_options',
+			__( 'Metadata report', 'ai-seo-assistant' ),
+			__( 'Metadata report', 'ai-seo-assistant' ),
+			\AJR\SEOAssistant\Report\Access::TOOLS_CAP,
 			'ai-seo-assistant-report',
 			[ $this, 'render_report_page' ]
 		);
 	}
 
 	public function render_report_page() {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( \AJR\SEOAssistant\Report\Access::TOOLS_CAP ) ) {
 			return;
 		}
 

@@ -29,14 +29,14 @@ class Indexing_Tools_Page {
 			'ai-seo-assistant',
 			'Indexing Tools',
 			'Indexing Tools',
-			'manage_options',
+			\AJR\SEOAssistant\Report\Access::TOOLS_CAP,
 			'ai-seo-assistant-indexing',
 			[ $this, 'render_page' ]
 		);
 	}
 
 	public function render_page() {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( \AJR\SEOAssistant\Report\Access::TOOLS_CAP ) ) {
 			return;
 		}
 
@@ -277,7 +277,7 @@ class Indexing_Tools_Page {
 	}
 
 	public function apply_recommended_noindex() {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( \AJR\SEOAssistant\Report\Access::TOOLS_CAP ) ) {
 			wp_die( esc_html__( 'You do not have permission to manage indexing tools.', 'ai-seo-assistant' ) );
 		}
 
@@ -313,7 +313,7 @@ class Indexing_Tools_Page {
 	}
 
 	private function validate_single_action( $action ) {
-		if ( ! current_user_can( 'manage_options' ) ) {
+		if ( ! current_user_can( \AJR\SEOAssistant\Report\Access::TOOLS_CAP ) ) {
 			return new \WP_Error( 'permission_denied', 'Permission denied.' );
 		}
 

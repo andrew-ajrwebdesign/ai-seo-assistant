@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<phpunit
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:noNamespaceSchemaLocation="vendor/phpunit/phpunit/phpunit.xsd"
+    bootstrap="tests/bootstrap.php"
+    colors="true"
+    testdox="true"
+>
+    <testsuites>
+        <testsuite name="Unit">
+            <directory>tests/Unit</directory>
+        </testsuite>
+    </testsuites>
+
+    <!-- PHPUnit 9 syntax: WP_Mock 1.x pins phpunit ^9.6, so this is <coverage>, not <source>. -->
+    <coverage>
+        <include>
+            <directory>src</directory>
+        </include>
+    </coverage>
+</phpunit>

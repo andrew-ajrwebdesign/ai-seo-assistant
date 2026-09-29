@@ -26,6 +26,7 @@ use AJR\SEOAssistant\Redirects\Redirect_Store;
 use AJR\SEOAssistant\Redirects\Redirect_Handler;
 use AJR\SEOAssistant\Redirects\Core_Suggestions;
 use AJR\SEOAssistant\Admin\Redirects_Page;
+use AJR\SEOAssistant\Report;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -141,6 +142,17 @@ class Plugin {
 		$this->gsc_page->init();
 		$this->indexing_tools_page->init();
 		$this->ajax->init();
+
+		/*
+		 * Weekly report (4.3.0). The figures arrive by a signed push from the agency's machine;
+		 * this site stores the snapshots and holds no Google keys. Access keeps the tool screens
+		 * for agency users, so the client's Administrator sees the report only.
+		 */
+		$report_store = new Report\Snapshot_Store();
+		( new Report\Access() )->register();
+		( new Report\Push_Endpoint( $report_store ) )->register();
+		( new Report\Report_Page( $report_store ) )->register();
+		( new Report\Stale_Alert( $report_store ) )->register();
 
 		/*
 		 * ⛔ REDIRECTS HAVE MOVED TO AJR CORE. ONE FEATURE, ONE PLUGIN.
