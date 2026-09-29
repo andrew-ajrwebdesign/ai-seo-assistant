@@ -134,6 +134,15 @@ class Ajax {
 			);
 		}
 
+		// Every call here spends the agency's Claude key, so only agency users may make one
+		// (4.3.0). Every AJAX action passes through this check, so one gate covers them all.
+		if ( ! current_user_can( \AJR\SEOAssistant\Report\Access::TOOLS_CAP ) ) {
+			return new \WP_Error(
+				'ai_seo_agency_only',
+				'The AI SEO tools are available to agency users only.'
+			);
+		}
+
 		$post = get_post( $post_id );
 
 		if ( ! $post ) {

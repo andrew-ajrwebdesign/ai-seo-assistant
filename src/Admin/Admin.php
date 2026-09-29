@@ -104,6 +104,11 @@ class Admin {
 	}
 
 	public function add_meta_box() {
+		// The editor box calls Claude on the agency's key: agency users only (4.3.0). Without the box
+		// there is no nonce in the form, so save_metadata_fields() does nothing for anyone else.
+		if ( ! current_user_can( \AJR\SEOAssistant\Report\Access::TOOLS_CAP ) ) {
+			return;
+		}
 		$post_types = get_option( 'ai_seo_assistant_post_types', [ 'post', 'page' ] );
 
 		if ( ! is_array( $post_types ) || empty( $post_types ) ) {
@@ -388,7 +393,8 @@ class Admin {
 	}
 
 	public function enqueue_admin_assets( $hook ) {
-		$is_editor   = in_array( $hook, [ 'post.php', 'post-new.php' ], true );
+		// The editor box is agency-only (see add_meta_box()), so its assets are too.
+		$is_editor   = in_array( $hook, [ 'post.php', 'post-new.php' ], true ) && current_user_can( \AJR\SEOAssistant\Report\Access::TOOLS_CAP );
 		$is_settings = 'toplevel_page_ai-seo-assistant' === $hook;
 		$is_audit    = 'ai-seo-assistant_page_ai-seo-assistant-audit' === $hook;
 		$is_report   = 'ai-seo-assistant_page_ai-seo-assistant-report' === $hook;
