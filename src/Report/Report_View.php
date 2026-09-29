@@ -4,8 +4,8 @@
  *
  * Built from the approved Figma mockup (architecture map §12): a dark AJR header with the enquiries
  * headline and week navigation; Search Console as the first card (moved up from third, 2026-09-29);
- * enquiries by source beside the agency's note; Analytics and Google Ads side by side; a footer saying what the figures cover and that the site holds no Google
- * keys. Three states: a normal week, a LATE week (the Monday update did not arrive) and EMPTY (before the
+ * enquiries by source beside the agency's note; Analytics and Google Ads side by side; a footer saying
+ * what the figures cover and that the site holds no Google keys. Three states: a normal week, a LATE week (the Monday update did not arrive) and EMPTY (before the
  * first update).
  *
  * Semantics: the headline is the page's h1; each card is a <section> named by its h2; the note is an
