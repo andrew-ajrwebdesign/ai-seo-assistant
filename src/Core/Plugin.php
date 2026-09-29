@@ -225,7 +225,25 @@ class Plugin {
 	 * @return bool
 	 */
 	public static function core_owns_redirects() {
-		return class_exists( '\AJR\Core\Redirects\Redirect_Store' );
+		if ( class_exists( '\AJR\Core\Redirects\Redirect_Store' ) ) {
+			return true;
+		}
+
+		/*
+		 * A site's OWN core plugin (4.3.2) — e.g. ocb-core on Office Coffee Break, which has run the
+		 * site's redirects since its build — says so through this filter, and the empty Redirects
+		 * screen here goes away. ⛔ Never while this plugin holds rules of its own: AJR Core copies
+		 * our rules across on first run, a site core does not, so stepping back with rules held
+		 * would silently drop live redirects. The map is autoloaded, so this costs nothing.
+		 *
+		 * @param bool $owns Whether the site's core plugin runs this site's redirects.
+		 */
+		if ( ! (bool) apply_filters( 'ai_seo_assistant_core_owns_redirects', false ) ) {
+			return false;
+		}
+		$map = get_option( 'ai_seo_assistant_redirect_map', [] );
+
+		return ! is_array( $map ) || [] === $map;
 	}
 
 	/**
@@ -247,7 +265,15 @@ class Plugin {
 	 */
 	public static function core_owns_markdown() {
 		if ( ! class_exists( '\AJR\Core\Markdown\Module' ) ) {
-			return false;
+			/*
+			 * A site's OWN core plugin that carries Markdown for AI (4.3.2; ocb-core 1.8.0) says so
+			 * through this filter. It answers true only when its copy is serving, and its copy only
+			 * serves beside this plugin from 4.3.2 on (it stands down for anything older), so the two
+			 * never both answer /llms.txt and never both stay silent, whichever is updated first.
+			 *
+			 * @param bool $owns Whether the site's core plugin serves Markdown for AI.
+			 */
+			return (bool) apply_filters( 'ai_seo_assistant_core_owns_markdown', false );
 		}
 
 		/*
