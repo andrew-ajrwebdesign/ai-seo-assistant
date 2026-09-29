@@ -216,7 +216,7 @@ class Plugin {
 	}
 
 	/**
-	 * Whether AJR Core is present and owns redirects on this site.
+	 * Whether AJR Core — or, from 4.3.2, the site's own core plugin — owns redirects on this site.
 	 *
 	 * Checks for the class rather than the plugin file, so it is true exactly when AJR
 	 * Core has actually loaded — a plugin that is installed but not active, or active but
@@ -225,11 +225,34 @@ class Plugin {
 	 * @return bool
 	 */
 	public static function core_owns_redirects() {
-		return class_exists( '\AJR\Core\Redirects\Redirect_Store' );
+		if ( class_exists( '\AJR\Core\Redirects\Redirect_Store' ) ) {
+			return true;
+		}
+
+		/*
+		 * A site's OWN core plugin (4.3.2) — e.g. ocb-core on Office Coffee Break, which has run the
+		 * site's redirects since its build — says so through this filter, and the empty Redirects
+		 * screen here goes away. ⛔ Never while this plugin holds ENABLED rules of its own: AJR Core
+		 * copies our rules across on first run, a site core does not, so stepping back would silently
+		 * drop live redirects. The lookup map holds exactly the enabled rules and is autoloaded, so
+		 * this costs nothing; disabled rules (which never fire) stay in the table, screen hidden.
+		 *
+		 * ⏱ Answer from the core plugin's FILE load, never on plugins_loaded: this is asked on
+		 * plugins_loaded:10, and a site core loads after this plugin (alphabetical), so a later
+		 * registration is not seen and both plugins would run.
+		 *
+		 * @param bool $owns Whether the site's core plugin runs this site's redirects.
+		 */
+		if ( ! (bool) apply_filters( 'ai_seo_assistant_core_owns_redirects', false ) ) {
+			return false;
+		}
+		$map = get_option( 'ai_seo_assistant_redirect_map', [] );
+
+		return ! is_array( $map ) || [] === $map;
 	}
 
 	/**
-	 * Whether AJR Core (0.8.0+) is present and owns Markdown for AI on this site.
+	 * Whether AJR Core (0.8.0+) — or, from 4.3.2, the site's own core plugin — owns Markdown for AI.
 	 *
 	 * ⛔ MARKDOWN FOR AI HAS MOVED TO AJR CORE. ONE FEATURE, ONE PLUGIN — the same hand-over as
 	 * redirects in 4.1.0, and for the same reason: two copies answering /llms.txt, the REST
@@ -247,7 +270,19 @@ class Plugin {
 	 */
 	public static function core_owns_markdown() {
 		if ( ! class_exists( '\AJR\Core\Markdown\Module' ) ) {
-			return false;
+			/*
+			 * A site's OWN core plugin that carries Markdown for AI (4.3.2; ocb-core 1.8.0) says so
+			 * through this filter. It answers true only when its copy is serving, and its copy only
+			 * serves beside this plugin from 4.3.2 on (it stands down for anything older), so the two
+			 * never both answer /llms.txt and never both stay silent, whichever is updated first.
+			 *
+			 * ⏱ Register from the core plugin's FILE load and work the answer out INSIDE the callback
+			 * (the same check that decides whether it serves): this is asked on plugins_loaded:10,
+			 * before a site core's own plugins_loaded code runs.
+			 *
+			 * @param bool $owns Whether the site's core plugin serves Markdown for AI.
+			 */
+			return (bool) apply_filters( 'ai_seo_assistant_core_owns_markdown', false );
 		}
 
 		/*

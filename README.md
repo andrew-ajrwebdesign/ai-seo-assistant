@@ -101,6 +101,8 @@ In the block editor, the active SEO plugin's snippet preview updates live after 
 
 ### Markdown and LLMs.txt
 
+> **4.3.2: a site's own core plugin can take it too.** Besides AJR Core, any site core can take over Markdown for AI and redirects by answering two filters, `ai_seo_assistant_core_owns_markdown` and `ai_seo_assistant_core_owns_redirects`, from plugin-file load time. It must only answer true for Markdown while its copy is serving, and it must stand its copy down beside an AI SEO Assistant older than 4.3.2, so the two never both serve and never both go quiet. `ocb-core` 1.8.0 (Office Coffee Break) is the first. This plugin never steps back from redirects while it holds enabled rules of its own, because a site core does not copy them across the way AJR Core does.
+
 > **4.2.0: moved to AJR Core.** On a site running AJR Core 0.8.0 or later, AJR Core serves every endpoint below and its screen is **AJR Core → Markdown for AI**. This plugin stands its copy down, the same hand-over redirects made in 4.1.0. Both plugins read the same `wpmai_settings`, caches and filters, so nothing migrates, and either update order is safe: AJR Core stays quiet while this plugin is older than 4.2.0. On a site without AJR Core, this plugin keeps serving exactly as before. The code is removed in 5.0.
 
 The plugin can generate a machine-readable Markdown index and full-content export of the site for use with AI tools and LLM context.
