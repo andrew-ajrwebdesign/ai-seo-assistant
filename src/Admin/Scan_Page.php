@@ -25,6 +25,7 @@ use AJR\SEOAssistant\Report\Access;
 use AJR\SEOAssistant\Report\Chart;
 use AJR\SEOAssistant\Review\Page_Review;
 use AJR\SEOAssistant\Scan\Opportunity;
+use AJR\SEOAssistant\Scan\Page_Role;
 use AJR\SEOAssistant\Scan\Ranking;
 use AJR\SEOAssistant\Scan\Rules;
 use AJR\SEOAssistant\Scan\Scan_Store;
@@ -202,12 +203,14 @@ class Scan_Page {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- display-only result code from our own redirect.
 		$code     = isset( $_GET['aisa'] ) ? sanitize_key( wp_unslash( $_GET['aisa'] ) ) : '';
 		$messages = [
-			'rescan'   => [ 'info', __( 'Rescan started. It runs in the background in steps; this screen updates when you reload it.', 'ai-seo-assistant' ) ],
-			'kept'     => [ 'warning', __( 'Some fields were not undone: they were changed again after the plugin applied them, and undo never overwrites later work.', 'ai-seo-assistant' ) ],
-			'undone'   => [ 'success', __( 'Undone: the earlier values are back.', 'ai-seo-assistant' ) ],
-			'nothing'  => [ 'info', __( 'Nothing was applied: every field was skipped or already had that value.', 'ai-seo-assistant' ) ],
-			'genfail'  => [ 'error', __( 'Claude could not write suggestions for this page. Try again in a minute.', 'ai-seo-assistant' ) ],
-			'capped'   => [ 'warning', __( 'The monthly AI cap is reached, so no new suggestions were written.', 'ai-seo-assistant' ) ],
+			'rescan'      => [ 'info', __( 'Rescan started. It runs in the background in steps; this screen updates when you reload it.', 'ai-seo-assistant' ) ],
+			'kept'        => [ 'warning', __( 'Some fields were not undone: they were changed again after the plugin applied them, and undo never overwrites later work.', 'ai-seo-assistant' ) ],
+			'undone'      => [ 'success', __( 'Undone: the earlier values are back.', 'ai-seo-assistant' ) ],
+			'nothing'     => [ 'info', __( 'Nothing was applied: every field was skipped or already had that value.', 'ai-seo-assistant' ) ],
+			'genfail'     => [ 'error', __( 'Claude could not write suggestions for this page. Try again in a minute.', 'ai-seo-assistant' ) ],
+			'capped'      => [ 'warning', __( 'The monthly AI cap is reached, so no new suggestions were written.', 'ai-seo-assistant' ) ],
+			'role'        => [ 'success', __( 'Role saved. The opportunity score now counts it.', 'ai-seo-assistant' ) ],
+			'role_failed' => [ 'error', __( 'The role was not changed.', 'ai-seo-assistant' ) ],
 		];
 		if ( isset( $messages[ $code ] ) ) {
 			echo Ui::notice( $messages[ $code ][0], '<p>' . esc_html( $messages[ $code ][1] ) . '</p>' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped piecewise.
@@ -348,7 +351,10 @@ class Scan_Page {
 
 		// Bulk bar: the JS enables it; without JS each page's Review screen generates one at a time.
 		echo '<div class="aisa-bulk" data-aisa-bulk data-per-page="' . esc_attr( (string) round( $per, 4 ) ) . '" data-left="' . esc_attr( (string) round( $left, 2 ) ) . '">';
-		echo '<label class="aisa-check"><input type="checkbox" data-aisa-select-all' . disabled( $capped, true, false ) . '> <span data-aisa-selected>' . esc_html__( 'Select pages to generate suggestions', 'ai-seo-assistant' ) . '</span></label>';
+		echo '<label class="aisa-check"><input type="checkbox" data-aisa-select-all> <span data-aisa-selected>' . esc_html__( 'Select pages to generate suggestions or set their role', 'ai-seo-assistant' ) . '</span></label>';
+		echo '<span class="aisa-bulk__role"><label class="screen-reader-text" for="aisa-bulk-role">' . esc_html__( 'Role for the selected pages', 'ai-seo-assistant' ) . '</label>'
+			. '<select id="aisa-bulk-role" data-aisa-bulk-role>' . self::role_options( '', true ) . '</select>'
+			. '<button type="button" class="aisa-btn" data-aisa-set-role disabled>' . esc_html__( 'Set role', 'ai-seo-assistant' ) . '</button></span>';
 		if ( $capped ) {
 			echo '<span class="aisa-bulk__note aisa-tone--warn">' . esc_html__( 'Paused: monthly cap reached', 'ai-seo-assistant' ) . '</span><button type="button" class="aisa-btn" disabled>' . Ui::icon( 'admin-customizer' ) . esc_html__( 'Generate for selected', 'ai-seo-assistant' ) . '</button>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		} else {
@@ -381,9 +387,10 @@ class Scan_Page {
 			$below = null !== $r['ctr'] && null !== $r['expected'] ? $r['expected'] - $r['ctr'] : null;
 			$label = sprintf( /* translators: %s: page title. */ __( 'Select %s', 'ai-seo-assistant' ), $r['title'] );
 			echo '<tr data-aisa-row="' . esc_attr( (string) $id ) . '">'
-				. '<td class="aisa-col-check"><input type="checkbox" value="' . esc_attr( (string) $id ) . '" data-aisa-select aria-label="' . esc_attr( $label ) . '"' . disabled( $capped, true, false ) . '></td>'
-				. '<th scope="row" class="aisa-pagecell"><a class="aisa-pagecell__title" href="' . esc_url( $this->url( [ 'post' => $id ] ) ) . '">' . esc_html( $r['title'] ) . '</a><span class="aisa-pagecell__meta"><span class="aisa-path">' . esc_html( $r['path'] ) . '</span> ' . $badge . '<span class="aisa-row-status" data-aisa-row-status></span></span></th>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pills escaped in Ui.
-				. '<td><span class="aisa-score"><strong>' . esc_html( (string) $r['score'] ) . '</strong><span class="aisa-meter aisa-meter--score' . ( $r['score'] >= 60 ? ' is-high' : '' ) . '" aria-hidden="true"><span class="aisa-meter__value" style="inline-size:' . esc_attr( (string) max( 2, $r['score'] ) ) . '%"></span></span></span></td>'
+				. '<td class="aisa-col-check"><input type="checkbox" value="' . esc_attr( (string) $id ) . '" data-aisa-select aria-label="' . esc_attr( $label ) . '"></td>'
+				. '<th scope="row" class="aisa-pagecell"><a class="aisa-pagecell__title" href="' . esc_url( $this->url( [ 'post' => $id ] ) ) . '">' . esc_html( $r['title'] ) . '</a><span class="aisa-pagecell__meta"><span class="aisa-path">' . esc_html( $r['path'] ) . '</span> ' . $this->role_tag( (int) $id, $r ) . ' ' . $badge . '<span class="aisa-row-status" data-aisa-row-status></span></span></th>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pills escaped in Ui; role_tag escapes.
+				. '<td><span class="aisa-score"><strong>' . esc_html( (string) $r['score'] ) . '</strong><span class="aisa-meter aisa-meter--score' . ( $r['score'] >= 60 ? ' is-high' : '' ) . '" aria-hidden="true"><span class="aisa-meter__value" style="inline-size:' . esc_attr( (string) max( 2, $r['score'] ) ) . '%"></span></span></span>'
+				. ( $r['seen'] ? '<span class="aisa-small aisa-score__clicks">' . esc_html( self::extra_clicks( (float) $r['missed'] ) ) . '</span>' : '' ) . '</td>'
 				. '<td class="aisa-num">' . esc_html( number_format_i18n( $r['impressions'] ) ) . '</td>'
 				. '<td class="aisa-num">' . esc_html( $r['position'] > 0 ? number_format_i18n( $r['position'], 1 ) : '–' ) . '</td>'
 				. '<td class="aisa-num">' . esc_html( Ui::pct( $r['ctr'] ) . ' / ' . Ui::pct( $r['expected'] ) ) . ( null !== $below ? '<br><span class="aisa-small ' . ( $below >= 1 ? 'aisa-tone--bad' : 'aisa-tone--flat' ) . '">' . esc_html( $below > 0 ? sprintf( /* translators: %s: percentage points. */ __( '%s below', 'ai-seo-assistant' ), number_format_i18n( $below, 1 ) ) : __( 'at or above', 'ai-seo-assistant' ) ) . '</span>' : '' ) . '</td>'
@@ -397,8 +404,13 @@ class Scan_Page {
 		}
 		echo '</tbody></table></div>';
 		$this->pagination( count( $filtered ), $paged );
-		/* translators: 1: pages shown, 2: pages in all. */
-		echo '<p class="aisa-small">' . esc_html( sprintf( __( 'Opportunity = impressions × (expected CTR at that position − actual CTR), weighted by enquiries from Google Analytics. Pages Google barely shows rank low even with many issues. Showing %1$d of %2$d pages.', 'ai-seo-assistant' ), count( $shown ), $all ) ) . '</p>';
+		$curve = Ranking::curve();
+		$used  = $curve['site']
+			/* translators: %s: number of searches (impressions). */
+			? sprintf( __( 'click curve: this site’s own (from %s searches)', 'ai-seo-assistant' ), number_format_i18n( $curve['searches'] ) )
+			: __( 'click curve: standard', 'ai-seo-assistant' );
+		/* translators: 1: which click curve, 2: pages shown, 3: pages in all. */
+		echo '<p class="aisa-small">' . esc_html( sprintf( __( 'Opportunity = the clicks each search could add at its position (impressions × expected CTR − actual CTR; searches past position 20 add almost nothing), × the page’s role (money 1.5, location 1.2, info 0.6) × its enquiries from Google Analytics. Extra clicks are over the 90-day window. %1$s. Showing %2$d of %3$d pages.', 'ai-seo-assistant' ), ucfirst( $used ), count( $shown ), $all ) ) . '</p>';
 		echo '</section>';
 	}
 
@@ -528,6 +540,9 @@ class Scan_Page {
 		if ( null !== $r && Page_Data::has_data() ) {
 			/* translators: 1: score, 2: rank (ordinal number), 3: page count. */
 			$sub[] = sprintf( __( 'Opportunity %1$d, %2$s of %3$d pages', 'ai-seo-assistant' ), $r['score'], self::ordinal( (int) $r['rank'] ), count( $ranked ) );
+			if ( $r['seen'] ) {
+				$sub[] = self::extra_clicks( (float) $r['missed'] );
+			}
 		}
 		$fixable = count( array_filter( (array) $row['issues'], static fn( $i ) => 'claude' === ( $i['who'] ?? '' ) ) );
 		$applied = is_array( $row['suggestions'] ) && ! empty( $row['suggestions']['applied']['batch'] );
@@ -549,6 +564,16 @@ class Scan_Page {
 		$edit    = get_edit_post_link( $post_id, 'url' );
 		if ( $edit ) {
 			$actions .= '<a class="aisa-btn aisa-btn--dark" href="' . esc_url( $edit ) . '">' . Ui::icon( 'edit' ) . esc_html__( 'Open in editor', 'ai-seo-assistant' ) . '</a>';
+		}
+		if ( null !== $r ) {
+			$labels   = Page_Role::labels();
+			$actions .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="aisa-inline aisa-roleform">'
+				. wp_nonce_field( Tools_Actions::ROLE, '_wpnonce', true, false )
+				. '<input type="hidden" name="action" value="' . esc_attr( Tools_Actions::ROLE ) . '">'
+				. '<input type="hidden" name="post" value="' . esc_attr( (string) $post_id ) . '">'
+				. '<label for="aisa-role">' . esc_html__( 'Role', 'ai-seo-assistant' ) . '</label>'
+				. '<select id="aisa-role" name="role" data-aisa-role-submit>' . self::role_options( $r['role_set'] ? $r['role'] : 'auto', false, $labels[ $r['role'] ] ?? '' ) . '</select>'
+				. '<button type="submit" class="aisa-btn aisa-btn--dark" data-aisa-role-button>' . esc_html__( 'Set', 'ai-seo-assistant' ) . '</button></form>';
 		}
 		echo Ui::hero( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 			[
@@ -574,7 +599,7 @@ class Scan_Page {
 
 		echo '<div class="aisa-review">';
 		echo '<div class="aisa-review__main">';
-		$this->searches_card( $page );
+		$this->searches_card( $page, $r );
 		$this->doing_card( $page );
 		$this->found_card( $row );
 		echo '</div><div class="aisa-review__side">';
@@ -590,9 +615,13 @@ class Scan_Page {
 	/**
 	 * "What people search for".
 	 *
+	 * With the ranking row, a "Clicks missed" column says where the page's opportunity is (per search, and the
+	 * rest of its impressions at its average position).
+	 *
 	 * @param array<string,mixed>|null $page Page data.
+	 * @param array<string,mixed>|null $r    Ranking row.
 	 */
-	protected function searches_card( ?array $page ): void {
+	protected function searches_card( ?array $page, ?array $r = null ): void {
 		$meta = Page_Data::meta();
 		echo '<section class="aisa-card" aria-labelledby="aisa-searches">';
 		/* translators: %s: date. */
@@ -602,12 +631,29 @@ class Scan_Page {
 			echo '<p class="aisa-pending">' . esc_html( null === $page ? __( 'No search data for this page yet. It arrives with the weekly push; until then Claude writes from the page content alone.', 'ai-seo-assistant' ) : __( 'Google showed this page for no searches in the last 90 days.', 'ai-seo-assistant' ) ) . '</p></section>';
 			return;
 		}
-		echo '<div class="aisa-tablewrap"><table class="aisa-table"><caption class="screen-reader-text">' . esc_html__( 'Searches that showed this page', 'ai-seo-assistant' ) . '</caption><thead><tr><th scope="col">' . esc_html__( 'Search', 'ai-seo-assistant' ) . '</th><th scope="col" class="aisa-num">' . esc_html__( 'Clicks', 'ai-seo-assistant' ) . '</th><th scope="col" class="aisa-num">' . esc_html__( 'Impressions', 'ai-seo-assistant' ) . '</th><th scope="col" class="aisa-num">' . esc_html__( 'Position', 'ai-seo-assistant' ) . '</th><th scope="col" class="aisa-num">' . esc_html__( 'CTR', 'ai-seo-assistant' ) . '</th></tr></thead><tbody>';
-		$main = Scanner::main_query( $page );
+		echo '<div class="aisa-tablewrap"><table class="aisa-table"><caption class="screen-reader-text">' . esc_html__( 'Searches that showed this page', 'ai-seo-assistant' ) . '</caption><thead><tr><th scope="col">' . esc_html__( 'Search', 'ai-seo-assistant' ) . '</th><th scope="col" class="aisa-num">' . esc_html__( 'Clicks', 'ai-seo-assistant' ) . '</th><th scope="col" class="aisa-num">' . esc_html__( 'Impressions', 'ai-seo-assistant' ) . '</th><th scope="col" class="aisa-num">' . esc_html__( 'Position', 'ai-seo-assistant' ) . '</th><th scope="col" class="aisa-num">' . esc_html__( 'CTR', 'ai-seo-assistant' ) . '</th>'
+			. ( null !== $r ? '<th scope="col" class="aisa-num">' . esc_html__( 'Clicks missed', 'ai-seo-assistant' ) . '</th>' : '' ) . '</tr></thead><tbody>';
+		$main   = Scanner::main_query( $page );
+		$missed = [];
+		$rest   = null;
+		foreach ( (array) ( $r['breakdown'] ?? [] ) as $b ) {
+			if ( $b['remain'] ) {
+				$rest = $b;
+			} else {
+				$missed[ $b['query'] ] = (float) $b['missed'];
+			}
+		}
 		foreach ( $queries as $q ) {
-			echo '<tr><th scope="row"' . ( $q['query'] === $main ? ' class="aisa-strong"' : '' ) . '>' . esc_html( $q['query'] ) . '</th><td class="aisa-num">' . esc_html( number_format_i18n( $q['clicks'] ) ) . '</td><td class="aisa-num">' . esc_html( number_format_i18n( $q['impressions'] ) ) . '</td><td class="aisa-num">' . esc_html( null === $q['position'] ? '–' : number_format_i18n( $q['position'], 1 ) ) . '</td><td class="aisa-num">' . esc_html( Ui::pct( $q['ctr'] ) ) . '</td></tr>';
+			echo '<tr><th scope="row"' . ( $q['query'] === $main ? ' class="aisa-strong"' : '' ) . '>' . esc_html( $q['query'] ) . '</th><td class="aisa-num">' . esc_html( number_format_i18n( $q['clicks'] ) ) . '</td><td class="aisa-num">' . esc_html( number_format_i18n( $q['impressions'] ) ) . '</td><td class="aisa-num">' . esc_html( null === $q['position'] ? '–' : number_format_i18n( $q['position'], 1 ) ) . '</td><td class="aisa-num">' . esc_html( Ui::pct( $q['ctr'] ) ) . '</td>'
+				. ( null !== $r ? '<td class="aisa-num">' . esc_html( self::missed_cell( $missed[ $q['query'] ] ?? 0.0 ) ) . '</td>' : '' ) . '</tr>';
+		}
+		if ( null !== $rest ) {
+			echo '<tr class="aisa-table__rest"><th scope="row">' . esc_html__( 'Other searches (not named by Google)', 'ai-seo-assistant' ) . '</th><td class="aisa-num">' . esc_html( number_format_i18n( $rest['clicks'] ) ) . '</td><td class="aisa-num">' . esc_html( number_format_i18n( $rest['impressions'] ) ) . '</td><td class="aisa-num">' . esc_html( number_format_i18n( $rest['position'], 1 ) ) . '</td><td class="aisa-num">' . esc_html( Ui::pct( $rest['ctr'] ) ) . '</td><td class="aisa-num">' . esc_html( self::missed_cell( (float) $rest['missed'] ) ) . '</td></tr>';
 		}
 		echo '</tbody></table></div>';
+		if ( null !== $r && 'query' === $r['method'] ) {
+			echo '<p class="aisa-small">' . esc_html__( 'Clicks missed = impressions × (expected CTR at that position − actual CTR). Searches past position 20 add almost nothing: a better title does not win clicks on page 3.', 'ai-seo-assistant' ) . '</p>';
+		}
 		$total = (int) ( $page['gsc']['queries_total'] ?? 0 );
 		/* translators: 1: searches shown, 2: searches in all. */
 		echo '<p class="aisa-small">' . esc_html( $total > count( $queries ) ? sprintf( __( 'Top %1$d of %2$d searches. Claude writes for the first one: most clicks.', 'ai-seo-assistant' ), count( $queries ), $total ) : __( 'Claude writes for the search with the most clicks (in bold).', 'ai-seo-assistant' ) ) . '</p>';
@@ -1073,6 +1119,72 @@ class Scan_Page {
 	protected static function duration( int $secs ): string {
 		/* translators: 1: minutes, 2: seconds. */
 		return $secs >= 60 ? sprintf( __( '%1$dm %2$02ds', 'ai-seo-assistant' ), intdiv( $secs, 60 ), $secs % 60 ) : sprintf( /* translators: %d: seconds. */ __( '%ds', 'ai-seo-assistant' ), $secs );
+	}
+
+	/**
+	 * A search's missed clicks: "–" for none, one decimal under 10, whole above.
+	 *
+	 * @param float $missed Missed clicks.
+	 */
+	protected static function missed_cell( float $missed ): string {
+		if ( $missed < 0.05 ) {
+			return '–';
+		}
+
+		return number_format_i18n( $missed, $missed < 10 ? 1 : 0 );
+	}
+
+	/**
+	 * "≈ 40 extra clicks / 90 days" ("< 5" for a handful).
+	 *
+	 * @param float $missed Missed clicks over the window.
+	 */
+	protected static function extra_clicks( float $missed ): string {
+		$n = Opportunity::rounded( $missed );
+		if ( null === $n ) {
+			return __( '< 5 extra clicks / 90 days', 'ai-seo-assistant' );
+		}
+
+		/* translators: %s: number of clicks. */
+		return sprintf( _n( '≈ %s extra click / 90 days', '≈ %s extra clicks / 90 days', $n, 'ai-seo-assistant' ), number_format_i18n( $n ) );
+	}
+
+	/**
+	 * The role options for a select.
+	 *
+	 * @param string $current Selected role ('' none).
+	 * @param bool   $bulk    For the bulk bar (a "Role…" prompt first).
+	 * @param string $default The default role's label, for the "Default" option.
+	 */
+	protected static function role_options( string $current, bool $bulk = false, string $default = '' ): string {
+		$out = $bulk ? '<option value="">' . esc_html__( 'Role…', 'ai-seo-assistant' ) . '</option>' : '';
+		foreach ( Page_Role::labels() as $key => $label ) {
+			$out .= '<option value="' . esc_attr( $key ) . '"' . selected( $current, $key, false ) . '>' . esc_html( $label ) . '</option>';
+		}
+		/* translators: %s: the default role. */
+		$out .= '<option value="auto"' . selected( $current, 'auto', false ) . '>' . esc_html( '' !== $default ? sprintf( __( 'Default (%s)', 'ai-seo-assistant' ), $default ) : __( 'Default', 'ai-seo-assistant' ) ) . '</option>';
+
+		return $out;
+	}
+
+	/**
+	 * The role tag on a list row: a small select (one click to change, via the script).
+	 *
+	 * @param int                 $id Post ID.
+	 * @param array<string,mixed> $r  Ranking row.
+	 */
+	protected function role_tag( int $id, array $r ): string {
+		$labels = Page_Role::labels();
+		$title  = $r['role_set'] ? __( 'Role set by you', 'ai-seo-assistant' ) : __( 'Role by default', 'ai-seo-assistant' );
+		if ( $r['bumped'] ) {
+			$title .= ' · ' . __( 'counted one step higher: enquiry rate twice the site’s', 'ai-seo-assistant' );
+		}
+		/* translators: %s: page title. */
+		$aria = sprintf( __( 'Role of %s', 'ai-seo-assistant' ), $r['title'] );
+
+		return '<select class="aisa-roletag aisa-roletag--' . esc_attr( $r['role'] ) . ( $r['role_set'] ? ' is-set' : '' ) . '" data-aisa-role="' . esc_attr( (string) $id ) . '" aria-label="' . esc_attr( $aria ) . '" title="' . esc_attr( $title ) . '">'
+			. self::role_options( $r['role_set'] ? $r['role'] : 'auto', false, $labels[ $r['role'] ] ?? '' ) . '</select>'
+			. ( $r['bumped'] ? '<span class="aisa-small aisa-tone--good" title="' . esc_attr( $title ) . '">↑</span>' : '' );
 	}
 
 	/**

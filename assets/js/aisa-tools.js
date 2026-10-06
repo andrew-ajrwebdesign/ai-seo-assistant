@@ -149,6 +149,53 @@
 		refresh();
 	}
 
+	/* ---- Page roles: the list's tag, the bulk bar, the review header ----------------------------- */
+
+	async function setRole( ids, role, status ) {
+		if ( status ) {
+			status.textContent = t.savingRole;
+		}
+		const res = await post( 'aisa_set_role', { posts: ids.join( ',' ), role } );
+		if ( res.success ) {
+			window.location.reload();
+			return;
+		}
+		if ( status ) {
+			status.textContent = ( res.data && res.data.message ) || t.roleFailed;
+		}
+	}
+
+	document.querySelectorAll( '[data-aisa-role]' ).forEach( ( select ) => {
+		select.addEventListener( 'change', () => {
+			select.disabled = true;
+			setRole( [ select.dataset.aisaRole ], select.value, select.closest( 'tr' ).querySelector( '[data-aisa-row-status]' ) );
+		} );
+	} );
+
+	const bulkRole = document.querySelector( '[data-aisa-bulk-role]' );
+	const bulkRoleButton = document.querySelector( '[data-aisa-set-role]' );
+	if ( bulkRole && bulkRoleButton ) {
+		const picks = Array.from( document.querySelectorAll( '[data-aisa-select]' ) );
+		const all = document.querySelector( '[data-aisa-select-all]' );
+		const update = () => {
+			bulkRoleButton.disabled = '' === bulkRole.value || ! picks.some( ( box ) => box.checked );
+		};
+		[ bulkRole, all, ...picks ].forEach( ( el ) => el && el.addEventListener( 'change', update ) );
+		bulkRoleButton.addEventListener( 'click', () => {
+			bulkRoleButton.disabled = true;
+			setRole( picks.filter( ( box ) => box.checked ).map( ( box ) => box.value ), bulkRole.value, document.querySelector( '[data-aisa-bulk-status]' ) );
+		} );
+		update();
+	}
+
+	document.querySelectorAll( '[data-aisa-role-submit]' ).forEach( ( select ) => {
+		const button = select.form.querySelector( '[data-aisa-role-button]' );
+		if ( button ) {
+			button.hidden = true;
+		}
+		select.addEventListener( 'change', () => select.form.submit() );
+	} );
+
 	/* ---- One page: "Writing…" while Claude works (C2) ------------------------------------------- */
 
 	document.querySelectorAll( '[data-aisa-generate-one]' ).forEach( ( form ) => {

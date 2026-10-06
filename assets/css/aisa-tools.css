@@ -444,6 +444,71 @@ a.aisa-pagecell__title:hover {
 	overflow-wrap: anywhere;
 }
 
+/* Role tag: a select dressed as a small pill, one click to change. */
+.aisa-tool select.aisa-roletag {
+	min-block-size: 22px;
+	padding: 0 22px 0 8px;
+	border: 1px solid var(--aisa-border);
+	border-radius: 999px;
+	background-color: var(--aisa-surface);
+	background-position: right 4px center;
+	background-size: 14px;
+	color: var(--aisa-muted);
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 20px;
+	cursor: pointer;
+}
+
+.aisa-tool select.aisa-roletag--money {
+	border-color: var(--aisa-primary);
+	background-color: var(--aisa-accent-bg);
+	color: var(--aisa-primary-ink);
+}
+
+.aisa-tool select.aisa-roletag--location {
+	background-color: var(--aisa-info-bg);
+	color: var(--aisa-info);
+}
+
+.aisa-tool select.aisa-roletag:not(.is-set) {
+	border-style: dashed;
+}
+
+.aisa-tool select.aisa-roletag:focus-visible {
+	outline: 2px solid var(--aisa-primary);
+	outline-offset: 1px;
+}
+
+.aisa-score__clicks {
+	color: var(--aisa-muted);
+	white-space: nowrap;
+}
+
+.aisa-bulk__role {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.aisa-roleform {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--aisa-muted-light);
+	font-size: 12px;
+}
+
+.aisa-roleform [hidden] {
+	display: none;
+}
+
+.aisa-table__rest th {
+	color: var(--aisa-muted);
+	font-style: italic;
+	font-weight: 400;
+}
+
 .aisa-row-status {
 	font-size: 12px;
 }

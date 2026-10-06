@@ -16,6 +16,7 @@ namespace AJR\SEOAssistant\Admin;
 use AJR\SEOAssistant\Changes\Change_Log;
 use AJR\SEOAssistant\Report\Access;
 use AJR\SEOAssistant\Review\Page_Review;
+use AJR\SEOAssistant\Scan\Page_Role;
 use AJR\SEOAssistant\Scan\Scan_Store;
 use AJR\SEOAssistant\Scan\Scheduler;
 
@@ -44,6 +45,9 @@ class Tools_Actions {
 	/** Confirm the 4.x redirects are in AJR Core, so the old table can go. */
 	public const REDIRECTS = 'aisa_redirects_moved';
 
+	/** Set a page's role (money, location, info, unclassified, or back to the default). */
+	public const ROLE = 'aisa_set_role';
+
 	/**
 	 * Register hooks.
 	 */
@@ -54,6 +58,8 @@ class Tools_Actions {
 		add_action( 'admin_post_' . self::UNDO, [ $this, 'undo' ] );
 		add_action( 'admin_post_' . self::CLEAR, [ $this, 'clear' ] );
 		add_action( 'admin_post_' . self::REDIRECTS, [ $this, 'redirects_moved' ] );
+		add_action( 'admin_post_' . self::ROLE, [ $this, 'set_role' ] );
+		add_action( 'wp_ajax_' . self::ROLE, [ $this, 'ajax_set_role' ] );
 		Changes_Page::register_export();
 		add_action( 'wp_ajax_aisa_scan_start', [ $this, 'ajax_scan_start' ] );
 		add_action( 'wp_ajax_aisa_scan_step', [ $this, 'ajax_scan_step' ] );
@@ -213,6 +219,56 @@ class Tools_Actions {
 			$args['post'] = $first['post_id'];
 		}
 		$this->back( $args );
+	}
+
+	/**
+	 * Set one page's role (no-JS path: the review header's form).
+	 */
+	public function set_role(): void {
+		$this->guard( self::ROLE );
+		$post_id = isset( $_POST['post'] ) ? absint( $_POST['post'] ) : 0;
+		$role    = isset( $_POST['role'] ) ? sanitize_key( wp_unslash( $_POST['role'] ) ) : '';
+		$done    = self::apply_role( [ $post_id ], $role );
+		$this->back(
+			[
+				'post' => $post_id,
+				'aisa' => $done > 0 ? 'role' : 'role_failed',
+			]
+		);
+	}
+
+	/**
+	 * AJAX: set the role of one page (the list's tag) or of the selected pages (the bulk bar).
+	 */
+	public function ajax_set_role(): void {
+		$this->guard_ajax();
+		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verified in guard_ajax().
+		$ids  = isset( $_POST['posts'] ) ? array_filter( array_map( 'absint', explode( ',', sanitize_text_field( wp_unslash( $_POST['posts'] ) ) ) ) ) : [];
+		$role = isset( $_POST['role'] ) ? sanitize_key( wp_unslash( $_POST['role'] ) ) : '';
+		// phpcs:enable
+		$done = self::apply_role( array_slice( $ids, 0, 500 ), $role );
+		if ( 0 === $done ) {
+			wp_send_json_error( [ 'message' => __( 'The role was not changed.', 'ai-seo-assistant' ) ], 400 );
+		}
+		wp_send_json_success( [ 'done' => $done ] );
+	}
+
+	/**
+	 * Set a role on pages the user may edit.
+	 *
+	 * @param array<int,int> $ids  Post IDs.
+	 * @param string         $role Role key or 'auto'.
+	 * @return int Pages changed.
+	 */
+	protected static function apply_role( array $ids, string $role ): int {
+		$done = 0;
+		foreach ( $ids as $id ) {
+			if ( $id > 0 && current_user_can( 'edit_post', $id ) && Page_Role::set( $id, $role ) ) {
+				++$done;
+			}
+		}
+
+		return $done;
 	}
 
 	/**

@@ -64,6 +64,7 @@ $ai_seo_assistant_options = [
 	'ai_seo_assistant_scan_meta',
 	'ai_seo_assistant_scan_queue',
 	'ai_seo_assistant_pages_meta',
+	'ai_seo_assistant_ctr_curve', // Scan/Ranking::CURVE_OPTION (the site's own click curve).
 	'ai_seo_assistant_spend',
 	'ai_seo_assistant_spend_cap',
 	'ai_seo_assistant_billing_day',
@@ -75,6 +76,7 @@ foreach ( $ai_seo_assistant_options as $ai_seo_assistant_option ) {
 	delete_option( $ai_seo_assistant_option );
 }
 \AJR\SEOAssistant\Core\Schema::drop();
+delete_post_meta_by_key( '_aisa_page_role' ); // Scan/Page_Role::META.
 wp_clear_scheduled_hook( 'ai_seo_assistant_report_stale_check' );
 wp_clear_scheduled_hook( 'aisa_scan_run' );
 wp_unschedule_hook( 'aisa_scan_post' );

@@ -30,6 +30,7 @@ use AJR\SEOAssistant\Content\Business;
 use AJR\SEOAssistant\Content\Content_Extractor;
 use AJR\SEOAssistant\Core\Utils;
 use AJR\SEOAssistant\Scan\Opportunity;
+use AJR\SEOAssistant\Scan\Ranking;
 use AJR\SEOAssistant\Scan\Rules;
 use AJR\SEOAssistant\Scan\Scan_Store;
 use AJR\SEOAssistant\Scan\Scanner;
@@ -200,6 +201,9 @@ class Page_Review {
 			'keyphrase'   => (string) $this->adapter->get_keyphrase( $post_id ),
 		];
 
+		if ( null !== $page ) {
+			Ranking::curve(); // The site's own expected CTR, as the scan uses.
+		}
 		$prompt = ( new Prompt_Builder() )->build_review_prompt(
 			[
 				'post_title'          => wp_strip_all_tags( get_the_title( $post ) ),

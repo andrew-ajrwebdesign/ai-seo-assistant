@@ -51,23 +51,25 @@ class Ui {
 				'nonce' => wp_create_nonce( self::NONCE ),
 				'i18n'  => [
 					/* translators: 1: pages done, 2: pages in all. */
-					'scanning'   => __( 'Scanning: %1$d of %2$d pages', 'ai-seo-assistant' ),
-					'finishing'  => __( 'Checking links, duplicates and the sitemap…', 'ai-seo-assistant' ),
-					'done'       => __( 'Scan finished. Reloading…', 'ai-seo-assistant' ),
-					'failed'     => __( 'The scan stopped. Try again, or wait: it carries on in the background.', 'ai-seo-assistant' ),
+					'scanning'     => __( 'Scanning: %1$d of %2$d pages', 'ai-seo-assistant' ),
+					'finishing'    => __( 'Checking links, duplicates and the sitemap…', 'ai-seo-assistant' ),
+					'done'         => __( 'Scan finished. Reloading…', 'ai-seo-assistant' ),
+					'failed'       => __( 'The scan stopped. Try again, or wait: it carries on in the background.', 'ai-seo-assistant' ),
 					/* translators: 1: page number, 2: pages in all. */
-					'writing'    => __( 'Writing suggestions: page %1$d of %2$d', 'ai-seo-assistant' ),
-					'written'    => __( 'Suggestions written. Reloading…', 'ai-seo-assistant' ),
+					'writing'      => __( 'Writing suggestions: page %1$d of %2$d', 'ai-seo-assistant' ),
+					'written'      => __( 'Suggestions written. Reloading…', 'ai-seo-assistant' ),
 					'writingField' => __( 'Writing…', 'ai-seo-assistant' ),
 					/* translators: 1: page count, 2: estimated cost, e.g. "$0.09". */
-					'generateN'  => __( 'Generate for selected (%1$d), about %2$s', 'ai-seo-assistant' ),
+					'generateN'    => __( 'Generate for selected (%1$d), about %2$s', 'ai-seo-assistant' ),
 					/* translators: %d: page count. */
-					'selected'   => __( '%d pages selected', 'ai-seo-assistant' ),
-					'selectHint' => __( 'Select pages to generate suggestions', 'ai-seo-assistant' ),
+					'selected'     => __( '%d pages selected', 'ai-seo-assistant' ),
+					'selectHint'   => __( 'Select pages to generate suggestions or set their role', 'ai-seo-assistant' ),
+					'savingRole'   => __( 'Saving the role…', 'ai-seo-assistant' ),
+					'roleFailed'   => __( 'The role was not changed.', 'ai-seo-assistant' ),
 					/* translators: 1: width in px, 2: limit in px. */
-					'fitPx'      => __( '%1$d px of about %2$d px', 'ai-seo-assistant' ),
+					'fitPx'        => __( '%1$d px of about %2$d px', 'ai-seo-assistant' ),
 					/* translators: 1: characters, 2: limit. */
-					'fitChars'   => __( '%1$d of about %2$d characters', 'ai-seo-assistant' ),
+					'fitChars'     => __( '%1$d of about %2$d characters', 'ai-seo-assistant' ),
 				],
 			]
 		);
