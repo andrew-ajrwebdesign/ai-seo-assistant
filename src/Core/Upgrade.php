@@ -73,6 +73,9 @@ class Upgrade {
 	/** Seconds between admin-load retries after a failed attempt. */
 	public const RETRY_AFTER = 86400;
 
+	/** Set when the 5.0 step held a Google grant that Google did not confirm revoking: one agency notice. */
+	public const REVOKE_FAILED = 'ai_seo_assistant_google_revoke_failed';
+
 	/** Google's OAuth revocation endpoint. */
 	public const REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
 
@@ -213,7 +216,13 @@ class Upgrade {
 	 * @return bool Whether Google confirmed the revoke (false also when there was nothing to revoke).
 	 */
 	public static function retire_search_console(): bool {
-		$revoked = self::revoke_google( Secret_Store::get_array( 'ai_seo_assistant_gsc_token_data' ) );
+		$token   = Secret_Store::get_array( 'ai_seo_assistant_gsc_token_data' );
+		$revoked = self::revoke_google( $token );
+		if ( ! $revoked && ( ! empty( $token['refresh_token'] ) || ! empty( $token['access_token'] ) ) ) {
+			// The grant may still be live at Google (a copy in an old backup would still work): the agency is
+			// told once to remove it by hand. The local token is deleted either way.
+			update_option( self::REVOKE_FAILED, time(), false );
+		}
 		foreach ( self::GSC_OPTIONS as $option ) {
 			delete_option( $option );
 		}

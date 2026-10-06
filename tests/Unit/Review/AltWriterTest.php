@@ -70,4 +70,26 @@ class AltWriterTest extends TestCase {
 		$this->assertSame( self::DIVI, $r['content'] );
 		$this->assertSame( 'boise-map', Alt_Writer::stem( 'https://x.test/u/boise-map-1024x683.jpg?ver=2' ) );
 	}
+
+	/**
+	 * Same file name in another month, or a module / tag naming another attachment: never written.
+	 */
+	public function test_other_attachment_never_written(): void {
+		$content = '[et_pb_image src="https://x.test/wp-content/uploads/2023/04/kitchen.jpg"][/et_pb_image]'
+			. '[et_pb_image src="https://x.test/wp-content/uploads/2024/05/kitchen-1024x683.jpg"][/et_pb_image]';
+		$r       = Alt_Writer::splice( $content, 0, 'https://x.test/wp-content/uploads/2024/05/kitchen.jpg', 'A kitchen' );
+		$this->assertSame( 1, $r['matches'], 'the 2023 kitchen.jpg is a different image' );
+		$this->assertStringContainsString( '2024/05/kitchen-1024x683.jpg" alt="A kitchen"', $r['content'] );
+		$this->assertStringNotContainsString( '2023/04/kitchen.jpg" alt=', $r['content'] );
+
+		$divi = '[et_pb_image src="https://x.test/wp-content/uploads/2024/05/kitchen.jpg" image_id="88"][/et_pb_image]';
+		$this->assertSame( 0, Alt_Writer::splice( $divi, 12, 'https://x.test/wp-content/uploads/2024/05/kitchen.jpg', 'x' )['matches'] );
+		$this->assertSame( 1, Alt_Writer::splice( $divi, 88, 'https://x.test/wp-content/uploads/2024/05/kitchen.jpg', 'x' )['matches'] );
+
+		$img = '<img class="wp-image-90" src="https://x.test/wp-content/uploads/2024/05/kitchen.jpg" alt="">';
+		$r   = Alt_Writer::splice( $img, 12, 'https://x.test/wp-content/uploads/2024/05/kitchen.jpg', 'x' );
+		$this->assertSame( 0, $r['matches'], 'wp-image-90 is another attachment' );
+		$this->assertSame( $img, $r['content'] );
+		$this->assertSame( '2024/05/kitchen', Alt_Writer::key( 'https://x.test/wp-content/uploads/2024/05/kitchen-300x200.jpg' ) );
+	}
 }

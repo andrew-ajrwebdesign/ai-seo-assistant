@@ -179,11 +179,15 @@ class Change_Log {
 	/**
 	 * The effect of a change: frozen when measured, else worked out now from the pushed weekly figures.
 	 *
-	 * @param array<string,mixed>      $row  A change row.
-	 * @param array<string,mixed>|null $page The page's pushed data (Search\Page_Data), or null.
+	 * Reading never writes unless asked: only the agency's Changes screen freezes a newly measured effect
+	 * (the client's report screen stays read-only and works it out each time).
+	 *
+	 * @param array<string,mixed>      $row    A change row.
+	 * @param array<string,mixed>|null $page   The page's pushed data (Search\Page_Data), or null.
+	 * @param bool                     $freeze Save a newly measured effect.
 	 * @return array<string,mixed> state: 'measured' | 'waiting' | 'not_measured' | 'undone' | 'no_data'
 	 */
-	public function effect( array $row, ?array $page ): array {
+	public function effect( array $row, ?array $page, bool $freeze = false ): array {
 		if ( null !== $row['undone_at'] ) {
 			return [ 'state' => 'undone' ];
 		}
@@ -194,7 +198,7 @@ class Change_Log {
 			return $row['effect'];
 		}
 		$effect = self::measure( (int) strtotime( $row['applied_at'] . ' UTC' ), (array) ( $page['gsc']['weeks'] ?? [] ) );
-		if ( 'measured' === $effect['state'] ) {
+		if ( $freeze && 'measured' === $effect['state'] ) {
 			$this->save_effect( (int) $row['id'], $effect );
 		}
 

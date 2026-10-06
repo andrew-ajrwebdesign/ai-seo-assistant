@@ -50,7 +50,7 @@ class Changes_Page {
 		$rows    = $log->find( [ 'limit' => 500 ] );
 		$effects = [];
 		foreach ( $rows as $row ) {
-			$effects[ $row['id'] ] = $log->effect( $row, $data->get( (string) $row['path'] ) );
+			$effects[ $row['id'] ] = $log->effect( $row, $data->get( (string) $row['path'] ), true );
 		}
 
 		$export = '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="aisa-inline">' . wp_nonce_field( self::EXPORT, '_wpnonce', true, false )

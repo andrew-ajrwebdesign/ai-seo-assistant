@@ -157,6 +157,7 @@ class MenuUpgradeTest extends TestCase {
 		$this->assertSame( '5.0.0', $this->options[ Upgrade::OPTION ] );
 		$this->assertSame( '1//r', $revokes[0]['body']['token'] );
 		$this->assertSame( 3, $revokes[0]['timeout'] );
+		$this->assertArrayHasKey( Upgrade::REVOKE_FAILED, $this->options, 'Google unreachable: the agency is told to revoke by hand' );
 		foreach ( Upgrade::GSC_OPTIONS as $option ) {
 			$this->assertArrayNotHasKey( $option, $this->options, $option . ' deleted' );
 		}

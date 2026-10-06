@@ -7,7 +7,8 @@
  *    already treats it as absent; this says which one to re-enter.
  * 2. The 4.4.0 upgrade could not seal a secret on this server (Core\Upgrade::attempt()).
  * 3. A secret was found in plain text after the upgrade and has just been sealed (shown once).
- * 4. The auth salts are not usable constants in wp-config.php, so WordPress keeps them in the database
+ * 4. The 5.0 upgrade could not get Google to revoke the old Search Console grant (shown once).
+ * 5. The auth salts are not usable constants in wp-config.php, so WordPress keeps them in the database
  *    beside the sealed secrets, and anyone with the database can open them.
  *
  * Shown on this plugin's screens, the Dashboard and the Plugins screen only: the check reads the secret
@@ -83,6 +84,12 @@ class Secret_Notices {
 				)
 			) . '</p></div>';
 			delete_option( Secret_Store::RESEALED_OPTION );
+		}
+
+		// 5.0: Google did not confirm revoking the old on-site Search Console grant. Shown once.
+		if ( false !== get_option( Upgrade::REVOKE_FAILED, false ) ) {
+			echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'AI SEO Assistant 5.0 removed its old Search Console connection, but Google did not confirm revoking the access it held. Remove "AI SEO Assistant" (or the Google Cloud app it used) from the Google account’s third-party access:', 'ai-seo-assistant' ) . ' <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">myaccount.google.com/permissions</a></p></div>';
+			delete_option( Upgrade::REVOKE_FAILED );
 		}
 
 		// 5.0: the old redirects table still holds enabled rules, which 5.0 no longer serves. Never deleted

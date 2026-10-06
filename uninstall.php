@@ -73,7 +73,23 @@ $ai_seo_assistant_options = [
 	'ai_seo_assistant_spend_cap',
 	'ai_seo_assistant_billing_day',
 	'ai_seo_assistant_billing_day_pushed',
+	'ai_seo_assistant_spend_lock', // AI/Spend::LOCK_OPTION (left only if a request died holding it).
 	'ai_seo_assistant_redirects_pending',
+	'ai_seo_assistant_google_revoke_failed', // Core/Upgrade::REVOKE_FAILED (a pending notice).
+	// Writing preferences: 4.x settings screens saved them; 5.0 still reads them for Claude's prompts.
+	'ai_seo_assistant_brand_context',
+	'ai_seo_assistant_tone',
+	'ai_seo_assistant_avoid_phrases',
+	'ai_seo_assistant_include_brand',
+	'ai_seo_assistant_title_length',
+	'ai_seo_assistant_description_length',
+	'ai_seo_assistant_focus_mode',
+	'ai_seo_assistant_local_notes',
+	'ai_seo_assistant_secondary_locations',
+	'ai_seo_assistant_metadata_guidance',
+	'ai_seo_assistant_recommendation_guidance',
+	'ai_seo_assistant_gsc_guidance',
+	'ai_seo_assistant_post_types',
 ];
 
 foreach ( $ai_seo_assistant_options as $ai_seo_assistant_option ) {

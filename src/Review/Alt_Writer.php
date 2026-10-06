@@ -7,8 +7,10 @@
  * block and a classic <img> carry it in the saved markup. Writing only `_wp_attachment_image_alt` reported
  * success while the page kept "Our Services" on a kitchen photo.
  *
- * HOW, guarded. The image is found by its file name (size suffixes ignored) in a Divi module's image
- * attribute, or by its `wp-image-{id}` class (or file name) on an <img> tag. EXACTLY ONE place must match;
+ * HOW, guarded. The image is found by its uploads-relative path (size suffixes ignored, so
+ * 2024/05/kitchen.jpg and 2025/01/kitchen.jpg are different images) in a Divi module's image attribute, or
+ * by its `wp-image-{id}` class (or path) on an <img> tag. A module or tag that names ANOTHER attachment
+ * (a different wp-image-N, or a Divi image id) is never written, whatever its file. EXACTLY ONE place must match;
  * none or several and nothing is written (the caller reports "not on the page" / "ambiguous"). Only that one
  * attribute changes: every other byte of the content round-trips unchanged, which the caller verifies after
  * saving. Text is made safe for its home: in a Divi attribute, straight double quotes become curly ones and
@@ -48,16 +50,19 @@ class Alt_Writer {
 	 * @return array{content:string,matches:int,where:string} where: 'divi' | 'html' | '' (no single match).
 	 */
 	public static function splice( string $content, int $id, string $src, string $alt ): array {
-		$stem  = self::stem( $src );
+		$has   = '' !== self::key( $src );
 		$found = [];
 
 		// Divi module opening tags.
 		$modules = implode( '|', array_map( 'preg_quote', array_keys( self::DIVI ) ) );
-		if ( '' !== $stem && preg_match_all( '/\[(' . $modules . ')\b[^\]]*\]/', $content, $m, PREG_OFFSET_CAPTURE ) ) {
+		if ( $has && preg_match_all( '/\[(' . $modules . ')\b[^\]]*\]/', $content, $m, PREG_OFFSET_CAPTURE ) ) {
 			foreach ( $m[0] as $i => $tag ) {
 				[ $url_attr ] = self::DIVI[ $m[1][ $i ][0] ];
 				$url          = self::attr( $tag[0], $url_attr );
-				if ( '' !== $url && self::stem( $url ) === $stem ) {
+				if ( self::other_attachment( self::divi_id( $tag[0] ), $id ) ) {
+					continue; // Another attachment's module, even when the file name is the same.
+				}
+				if ( '' !== $url && self::same_image( $url, $src ) ) {
 					$found[] = [ 'divi', $tag[1], $tag[0], $m[1][ $i ][0] ];
 				}
 			}
@@ -65,8 +70,12 @@ class Alt_Writer {
 		// <img> tags (core Image block markup, classic content).
 		if ( preg_match_all( '/<img\b[^>]*>/i', $content, $m, PREG_OFFSET_CAPTURE ) ) {
 			foreach ( $m[0] as $tag ) {
-				$by_id  = $id > 0 && preg_match( '/\bclass\s*=\s*"[^"]*\bwp-image-' . $id . '\b/i', $tag[0] );
-				$by_src = '' !== $stem && self::stem( self::attr( $tag[0], 'src' ) ) === $stem;
+				$tag_id = preg_match( '/\bclass\s*=\s*"[^"]*\bwp-image-(\d+)\b/i', $tag[0], $cm ) ? (int) $cm[1] : 0;
+				if ( self::other_attachment( $tag_id, $id ) ) {
+					continue; // Another attachment's image, even when the file name is the same.
+				}
+				$by_id  = $id > 0 && $tag_id === $id;
+				$by_src = $has && self::same_image( self::attr( $tag[0], 'src' ), $src );
 				if ( $by_id || $by_src ) {
 					$found[] = [ 'html', $tag[1], $tag[0], 'img' ];
 				}
@@ -104,6 +113,65 @@ class Alt_Writer {
 		$alt = (string) preg_replace( '/"([^"]*)"/u', "\u{201C}$1\u{201D}", $alt );
 
 		return trim( str_replace( [ '"', '[', ']', '<', '>' ], [ "\u{201D}", '', '', '', '' ], $alt ) );
+	}
+
+	/**
+	 * How an image URL is matched: its path under uploads without the size suffix and extension
+	 * (".../uploads/2024/05/map-300x200.jpg" → "2024/05/map"); just the file stem when the URL is not under
+	 * uploads, or when either side is a bare file name.
+	 *
+	 * @param string $url URL or file name.
+	 */
+	public static function key( string $url ): string {
+		$path = strtolower( (string) strtok( $url, '?#' ) );
+		$at   = strpos( $path, '/uploads/' );
+		if ( false === $at ) {
+			return self::stem( $url );
+		}
+		$rel = substr( $path, $at + 9 );
+
+		return (string) preg_replace( '/(-\d+x\d+)?(-scaled)?\.[a-z0-9]+$/', '', $rel );
+	}
+
+	/**
+	 * Whether two URLs are the same image: same uploads-relative path when both have one, else same stem.
+	 *
+	 * @param string $a URL or file name.
+	 * @param string $b URL or file name.
+	 */
+	public static function same_image( string $a, string $b ): bool {
+		if ( '' === $a || '' === $b ) {
+			return false;
+		}
+		$both = false !== stripos( $a, '/uploads/' ) && false !== stripos( $b, '/uploads/' );
+
+		return $both ? self::key( $a ) === self::key( $b ) : self::stem( $a ) === self::stem( $b );
+	}
+
+	/**
+	 * The attachment id a Divi module names (image_id or attachment_id; 0 when it names none).
+	 *
+	 * @param string $tag Module opening tag.
+	 */
+	protected static function divi_id( string $tag ): int {
+		foreach ( [ 'image_id', 'attachment_id' ] as $name ) {
+			$value = self::attr( $tag, $name );
+			if ( ctype_digit( $value ) ) {
+				return (int) $value;
+			}
+		}
+
+		return 0;
+	}
+
+	/**
+	 * True when a module or tag names a different attachment from the one being written.
+	 *
+	 * @param int $named The id it names (0 = none).
+	 * @param int $id    The attachment being written (0 = unknown).
+	 */
+	protected static function other_attachment( int $named, int $id ): bool {
+		return $named > 0 && $id > 0 && $named !== $id;
 	}
 
 	/**
