@@ -26,6 +26,19 @@ The product cut (decision 2026-10-06, `work/coding-projects/ai-seo-assistant/dec
   - Taps are never added to the total.
   - The endpoint checks size first, then the signature, then decodes.
 
+### Added (round 2, same day)
+- **Opportunity v3:**
+  - yearly quick win and top-3 prize per search;
+  - search-intent weighting: keyword rules, then one Haiku pass per push, cached and counted in the cap;
+  - an enquiry estimate, shown only with 10 or more tracked enquiries;
+  - High / Medium / Low tiers in place of the 0–100 score.
+- **Page types from AJR Core** (`_ajr_page_type`) replace the plugin's own page role, set from the list, in bulk or from the review. Old roles are migrated: location → area, info → article, money left for the agency to choose. Post listings count as information.
+- **"What Google reads on this page"** in the review. Schema findings come from rules only, and Claude never writes schema advice.
+- **Google listing issue group:** pinned differences are kept on purpose and not counted. The stored check goes to AJR Core through `ajr_core_business_profile_check`.
+- **Full-width screens** with AJR Core's "Need a hand?" card column (AJR Core 0.22).
+- **Alt text rows** show "shown on the page", "Media Library" and "suggested" on separate lines.
+- **phpcs** now also covers src/Scan, src/Review, src/Changes, src/Search and src/Admin.
+
 ### Removed
 - Markdown for AI, Redirects, the `core_owns_*` hand-over filters, the Metadata report, Indexing Tools, the Google Search Console OAuth screen and client, and the runtime Composer dependency (no `vendor/` in the zip).
 

@@ -14,6 +14,8 @@ AI SEO Assistant is AJR Web Design's retainer plugin. The client sees one screen
 | **Changes** | agency | Every applied change with its before and after, its effect on clicks after 4 full weeks, Undo, and a CSV export. |
 | **Settings** | agency | Claude key and model, monthly spend cap, brand tone, who sees the tools, report delivery. |
 
+Every screen uses the full admin width. With AJR Core 0.22, its "Need a hand?" card (`Support::render_card()`) sits in a right-hand column, below the content on narrow screens; the Report shows it too.
+
 An Administrator who is not agency staff sees **Report** only. "Agency" is AJR Core's `Support::is_agency_user()`, or the list ticked under **Who sees the tools**. If neither names a current Administrator, every Administrator keeps the tools, so an update locks no one out. This keeps the menu tidy for the client; it is not a security boundary.
 
 ## The data comes to the site; the site holds no Google login
@@ -57,27 +59,34 @@ Opening a page review also rescans that page if it was edited since its last sca
 
 ### Opportunity
 
-Pages are ranked by the extra clicks a better listing could win (`src/Scan/Opportunity.php`, decision 2026-10-06):
+Pages are ranked by the extra visits a year a better listing could win (`src/Scan/Opportunity.php`, `src/Scan/Intent.php`; decisions 2026-10-06).
 
 ```
-missed clicks = Σ per top search: impressions × max(0, expected CTR at its position − its CTR) × reach
-              + the rest of the page's impressions at its average position
-weighted      = missed clicks × role value × (1 + ln(1 + enquiries))
-score         = 0–100, the top page 100
+quick win (a year) = Σ per top search: impressions × max(0, expected CTR at its position − its CTR) × reach × 365/90
+                     + the unnamed rest at the page's average position
+top-3 prize        = the same at position 3
+value              = Σ quick win × intent weight × page-type value × (1 + ln(1 + enquiries))
+tier               = High from 300, Medium from 60, Low from 1   (filter: ai_seo_assistant_opportunity_tiers)
 ```
 
-* `reach` is 1 up to position 20 and fades to 0 at 30. Pages pushed with v1 data use the page-level formula.
-* The list and the review show **≈ N extra clicks / 90 days**. The review splits the number search by search.
-* **Expected CTR is the site's own when there is enough data.** Positions are bucketed: 1–10 one by one, then 11–15, 16–20, 21–30 and 31–50.
-  * A bucket with 1,000 impressions uses the site's CTR.
-  * A thinner bucket takes the standard value × own ÷ standard at the nearest calibrated bucket.
-  * The curve is then smoothed so it never rises as position falls, and cached per push.
-  * The `ai_seo_assistant_expected_ctr` filter overrides it.
-* **Role values:** money 1.5, location 1.2, unclassified 1.0, info 0.6.
-  * By default posts are info.
-  * A page is money when it is AJR Core's booking page, when it holds a form (Gravity Forms, WPForms, CF7, Fluent, Ninja, Formidable, AJR Forms, Divi) or a form or booking embed (Calendly, HubSpot, Typeform…, plus AJR Core's `google.booking_domains`), or when the main menu links to it at the top level.
-  * A page whose enquiry rate is twice the site's counts one role higher, but only when the site had 10 or more enquiries.
-  * The agency sets a role in one click (post meta `_aisa_page_role`, never shown to the client).
+- **Intent weights:** lead 3, commercial 2, informational 1, navigational 0.5.
+  - Searches are sorted by keyword rules first (filter: `ai_seo_assistant_intent_rules`).
+  - Searches the rules leave go to Claude Haiku 4.5 once per push. The call counts toward the cap and the answers are cached.
+- **Page-type value** comes from AJR Core's page type (`_ajr_page_type`): service and contact 1.5, area 1.2, article, FAQ and team member 0.6, other 1.0.
+  - Without a page type: posts and post listings count as information; forms, booking embeds, AJR Core's booking page and top-level menu pages count as money.
+- **Enquiry estimate:** "≈ N enquiries a year", shown only when the site tracked 10 or more enquiries in 90 days.
+- **Expected CTR:** the site's own when there is enough data. Thin buckets are scaled to the site's level and the curve never rises as position falls. The `ai_seo_assistant_expected_ctr` filter overrides it.
+
+### What Google reads and the Google listing
+
+- **Schema is never an editor job.** AJR Core prints the structured data from the page type and the business details. The scan's only page-level schema finding is "Page type not set" (one click), and Claude never writes schema advice.
+- **The review's "What Google reads on this page" panel** shows:
+  - the page type, with AJR Core's suggestion;
+  - the link to the business;
+  - the structured data on the rendered page, in plain words;
+  - a link to the Rich Results Test.
+- **The SEO scan's "Google listing" group** lists the pushed `business_profile_check`. Differences pinned in AJR Core → Business details are "Kept on purpose" and not counted.
+- **Hand-over to AJR Core:** the plugin returns the stored check on `ajr_core_business_profile_check`.
 
 ### Page review
 

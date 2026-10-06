@@ -526,6 +526,11 @@ a.aisa-pagecell__title:hover {
 	white-space: nowrap;
 }
 
+.aisa-table th .aisa-intent {
+	display: table;
+	margin-block-start: 3px;
+}
+
 .aisa-intent--lead {
 	background-color: var(--aisa-accent-bg);
 	color: var(--aisa-primary-ink);

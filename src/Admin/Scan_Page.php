@@ -244,6 +244,10 @@ class Scan_Page {
 				return sprintf( __( '%s not on your Google listing', 'ai-seo-assistant' ), $label );
 		}
 
+		if ( 'hours' === (string) $f['field'] ) {
+			return __( 'Hours differ from your Google listing', 'ai-seo-assistant' );
+		}
+
 		/* translators: %s: detail. */
 		return sprintf( __( '%s differs from your Google listing', 'ai-seo-assistant' ), $label );
 	}
@@ -717,24 +721,22 @@ class Scan_Page {
 		$extra = null !== $r;
 		echo '<div class="aisa-tablewrap"><table class="aisa-table aisa-table--searches"><caption class="screen-reader-text">' . esc_html__( 'Searches that showed this page', 'ai-seo-assistant' ) . '</caption><thead><tr>'
 			. '<th scope="col">' . esc_html__( 'Search', 'ai-seo-assistant' ) . '</th>'
-			. ( $extra ? '<th scope="col">' . esc_html__( 'Intent', 'ai-seo-assistant' ) . '</th>' : '' )
 			. '<th scope="col" class="aisa-num">' . esc_html__( 'Clicks', 'ai-seo-assistant' ) . '</th>'
 			. '<th scope="col" class="aisa-num">' . esc_html__( 'Impressions', 'ai-seo-assistant' ) . '</th>'
 			. '<th scope="col" class="aisa-num">' . esc_html__( 'Position', 'ai-seo-assistant' ) . '</th>'
 			. '<th scope="col" class="aisa-num">' . esc_html__( 'CTR', 'ai-seo-assistant' ) . '</th>'
-			. ( $extra ? '<th scope="col" class="aisa-num">' . esc_html__( 'Quick win / yr', 'ai-seo-assistant' ) . '</th><th scope="col" class="aisa-num">' . esc_html__( 'Top-3 prize / yr', 'ai-seo-assistant' ) . '</th>' : '' )
+			. ( $extra ? '<th scope="col" class="aisa-num"><abbr title="' . esc_attr__( 'Quick win: extra visits a year from a better listing at today’s position', 'ai-seo-assistant' ) . '">' . esc_html__( 'Quick win', 'ai-seo-assistant' ) . '</abbr></th><th scope="col" class="aisa-num"><abbr title="' . esc_attr__( 'Top-3 prize: extra visits a year at position 3', 'ai-seo-assistant' ) . '">' . esc_html__( 'Top 3', 'ai-seo-assistant' ) . '</abbr></th>' : '' )
 			. '</tr></thead><tbody>';
 		$main = Scanner::main_query( $page );
 		foreach ( $queries as $q ) {
 			$b = $by[ $q['query'] ] ?? null;
-			echo '<tr><th scope="row"' . ( $q['query'] === $main ? ' class="aisa-strong"' : '' ) . '>' . esc_html( $q['query'] ) . '</th>'
-				. ( $extra ? '<td>' . self::intent_tag( (string) ( $b['intent'] ?? 'unknown' ) ) . '</td>' : '' ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in intent_tag().
+			echo '<tr><th scope="row"' . ( $q['query'] === $main ? ' class="aisa-strong"' : '' ) . '>' . esc_html( $q['query'] ) . ( $extra ? ' ' . self::intent_tag( (string) ( $b['intent'] ?? 'unknown' ) ) : '' ) . '</th>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in intent_tag().
 				. '<td class="aisa-num">' . esc_html( number_format_i18n( $q['clicks'] ) ) . '</td><td class="aisa-num">' . esc_html( number_format_i18n( $q['impressions'] ) ) . '</td><td class="aisa-num">' . esc_html( null === $q['position'] ? '–' : number_format_i18n( $q['position'], 1 ) ) . '</td><td class="aisa-num">' . esc_html( Ui::pct( $q['ctr'] ) ) . '</td>'
 				. ( $extra ? '<td class="aisa-num">' . esc_html( self::missed_cell( Opportunity::yearly( (float) ( $b['missed'] ?? 0 ) ) ) ) . '</td><td class="aisa-num">' . esc_html( self::missed_cell( Opportunity::yearly( (float) ( $b['prize'] ?? 0 ) ) ) ) . '</td>' : '' )
 				. '</tr>';
 		}
 		if ( null !== $rest ) {
-			echo '<tr class="aisa-table__rest"><th scope="row">' . esc_html__( 'Other searches (not named by Google)', 'ai-seo-assistant' ) . '</th><td>' . self::intent_tag( 'unnamed' ) . '</td><td class="aisa-num">' . esc_html( number_format_i18n( $rest['clicks'] ) ) . '</td><td class="aisa-num">' . esc_html( number_format_i18n( $rest['impressions'] ) ) . '</td><td class="aisa-num">' . esc_html( number_format_i18n( $rest['position'], 1 ) ) . '</td><td class="aisa-num">' . esc_html( Ui::pct( $rest['ctr'] ) ) . '</td><td class="aisa-num">' . esc_html( self::missed_cell( Opportunity::yearly( (float) $rest['missed'] ) ) ) . '</td><td class="aisa-num">' . esc_html( self::missed_cell( Opportunity::yearly( (float) $rest['prize'] ) ) ) . '</td></tr>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in intent_tag().
+			echo '<tr class="aisa-table__rest"><th scope="row">' . esc_html__( 'Other searches (not named by Google)', 'ai-seo-assistant' ) . ' ' . self::intent_tag( 'unnamed' ) . '</th><td class="aisa-num">' . esc_html( number_format_i18n( $rest['clicks'] ) ) . '</td><td class="aisa-num">' . esc_html( number_format_i18n( $rest['impressions'] ) ) . '</td><td class="aisa-num">' . esc_html( number_format_i18n( $rest['position'], 1 ) ) . '</td><td class="aisa-num">' . esc_html( Ui::pct( $rest['ctr'] ) ) . '</td><td class="aisa-num">' . esc_html( self::missed_cell( Opportunity::yearly( (float) $rest['missed'] ) ) ) . '</td><td class="aisa-num">' . esc_html( self::missed_cell( Opportunity::yearly( (float) $rest['prize'] ) ) ) . '</td></tr>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in intent_tag().
 		}
 		echo '</tbody></table></div>';
 		if ( $extra && 'none' !== $r['method'] ) {
@@ -744,7 +746,7 @@ class Scan_Page {
 			echo '<p class="aisa-opp-sum"><strong>' . esc_html( sprintf( __( 'Quick win %1$s · Top-3 prize %2$s', 'ai-seo-assistant' ), self::visits_year( (float) $r['quick_win'] ), self::visits_year( (float) $r['prize'] ) ) ) . '</strong>'
 				/* translators: 1: enquiries from the quick win, 2: from the prize. */
 				. ( '' !== $enq ? '<br><span class="aisa-small">' . esc_html( sprintf( __( 'At this page’s enquiry rate: quick win %1$s, top-3 prize %2$s.', 'ai-seo-assistant' ), $enq, $prize ) ) . '</span>' : '' ) . '</p>';
-			echo '<p class="aisa-small">' . esc_html__( 'Estimates. Quick win = impressions × (expected CTR at today’s position − actual CTR): what a better title and description could bring; searches past position 20 add almost nothing. Top-3 prize = the same if each search reached position 3. Ranking also weighs each search by its intent.', 'ai-seo-assistant' ) . '</p>';
+			echo '<p class="aisa-small">' . esc_html__( 'Estimates, extra visits a year. Quick win = impressions × (expected CTR at today’s position − actual CTR): what a better title and description could bring; searches past position 20 add almost nothing. Top 3 = the same if each search reached position 3. Ranking also weighs each search by its intent (the tag under it).', 'ai-seo-assistant' ) . '</p>';
 		}
 		$total = (int) ( $page['gsc']['queries_total'] ?? 0 );
 		/* translators: 1: searches shown, 2: searches in all. */
@@ -1181,7 +1183,14 @@ class Scan_Page {
 	 * @param \WP_Post            $post    Post.
 	 */
 	protected function google_reads( int $post_id, array $row, \WP_Post $post ): void {
-		$nodes   = (array) ( $row['facts']['schema_nodes'] ?? [] );
+		$nodes   = (array) ( $row['facts']['schema_nodes'] ?? array_map(
+			static fn( $t ) => [
+				'type' => (string) $t,
+				'name' => '',
+				'id'   => '',
+			],
+			(array) ( $row['facts']['schema'] ?? [] )
+		) ); // Older scans have only the @type list; the next scan reads the nodes.
 		$core    = Page_Role::core();
 		$type    = Page_Role::type_of( $post_id );
 		$types   = Page_Role::types();

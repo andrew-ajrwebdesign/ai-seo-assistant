@@ -65,6 +65,10 @@ $ai_seo_assistant_options = [
 	'ai_seo_assistant_scan_queue',
 	'ai_seo_assistant_pages_meta',
 	'ai_seo_assistant_ctr_curve', // Scan/Ranking::CURVE_OPTION (the site's own click curve).
+	'ai_seo_assistant_intent_cache', // Scan/Intent::CACHE_OPTION (Claude's intent per search).
+	'ai_seo_assistant_intent_done', // Scan/Intent::DONE_OPTION (the push the intent pass last ran for).
+	'ai_seo_assistant_role_notes', // Scan/Page_Role::NOTES_OPTION (old "money" roles left for the agency).
+	'ai_seo_assistant_roles_migrated', // The one-off move of old roles into AJR Core page types.
 	'ai_seo_assistant_spend',
 	'ai_seo_assistant_spend_cap',
 	'ai_seo_assistant_billing_day',
@@ -76,7 +80,7 @@ foreach ( $ai_seo_assistant_options as $ai_seo_assistant_option ) {
 	delete_option( $ai_seo_assistant_option );
 }
 \AJR\SEOAssistant\Core\Schema::drop();
-delete_post_meta_by_key( '_aisa_page_role' ); // Scan/Page_Role::META.
+delete_post_meta_by_key( '_aisa_page_role' ); // Scan/Page_Role::LEGACY_META (page types belong to AJR Core and stay).
 wp_clear_scheduled_hook( 'ai_seo_assistant_report_stale_check' );
 wp_clear_scheduled_hook( 'aisa_scan_run' );
 wp_unschedule_hook( 'aisa_scan_post' );
