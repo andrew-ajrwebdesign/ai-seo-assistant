@@ -285,13 +285,24 @@ class Rules {
 		$missing   = 0;
 		$weak      = [];
 		$unprinted = [];
+		$mismatch  = [];
+		$shared    = self::shared_alts( $images );
 		foreach ( $images as $img ) {
 			$alt    = $img['alt'] ?? null;
 			$file   = (string) ( $img['file'] ?? '' );
 			$stored = trim( (string) ( $img['stored_alt'] ?? '' ) );
+			if ( null !== $alt && isset( $shared[ self::alt_key( (string) $alt ) ] ) ) {
+				$weak[] = (string) $alt; // The same alt on different photos.
+				continue;
+			}
 			$poor   = null === $alt || '' === trim( (string) $alt ) || self::weak_alt( (string) $alt, $file );
-			if ( $poor && '' !== $stored && ! self::weak_alt( $stored, $file ) ) {
+			$good_s = '' !== $stored && ! self::weak_alt( $stored, $file );
+			if ( $poor && $good_s ) {
 				$unprinted[] = $file; // The Media Library has a good alt the page does not print.
+				continue;
+			}
+			if ( ! $poor && $good_s && self::alt_key( (string) $alt ) !== self::alt_key( $stored ) ) {
+				$mismatch[] = $file; // The page prints a different alt (often a builder module's copy-pasted one).
 				continue;
 			}
 			if ( null === $alt || '' === trim( (string) $alt ) ) {
@@ -309,9 +320,22 @@ class Rules {
 				sprintf( _n( '%d image has good alt text the page does not show', '%d images have good alt text the page does not show', count( $unprinted ), 'ai-seo-assistant' ), count( $unprinted ) ),
 				/* translators: %s: file names. */
 				sprintf( __( 'The Media Library describes %s, but the page prints the image without it (a builder module with its own empty alt field).', 'ai-seo-assistant' ), implode( ', ', array_slice( $unprinted, 0, 3 ) ) ),
-				__( 'Fix: copy the alt text into the image module, or set the module to use the Media Library’s alt.', 'ai-seo-assistant' ),
-				'editor',
+				__( 'Fix: the page review writes the right alt into the page as well as the Media Library.', 'ai-seo-assistant' ),
+				'claude',
 				[ 'files' => $unprinted ]
+			);
+		}
+		if ( [] !== $mismatch ) {
+			$out[] = self::issue(
+				'alt',
+				'alt_mismatch',
+				/* translators: %d: number of images. */
+				sprintf( _n( '%d image shows different alt text than the Media Library', '%d images show different alt text than the Media Library', count( $mismatch ), 'ai-seo-assistant' ), count( $mismatch ) ),
+				/* translators: %s: file names. */
+				sprintf( __( 'The page prints its own alt for %s, which may describe a different photo.', 'ai-seo-assistant' ), implode( ', ', array_slice( $mismatch, 0, 3 ) ) ),
+				__( 'Fix: the page review looks at each photo and writes the right alt where the page prints it.', 'ai-seo-assistant' ),
+				'claude',
+				[ 'files' => $mismatch ]
 			);
 		}
 		if ( $missing > 0 || [] !== $weak ) {
@@ -342,6 +366,37 @@ class Rules {
 		}
 
 		return $out;
+	}
+
+	/**
+	 * Alt texts the page prints on two or more DIFFERENT images (a builder module's copy-pasted alt, e.g.
+	 * "Moving To Boise Services" on a kitchen and a porch): such an alt describes at most one of them.
+	 *
+	 * @param array<int,array<string,mixed>> $images Page images.
+	 * @return array<string,true> alt_key() => true.
+	 */
+	public static function shared_alts( array $images ): array {
+		$files = [];
+		foreach ( $images as $img ) {
+			$key = self::alt_key( (string) ( $img['alt'] ?? '' ) );
+			if ( '' !== $key ) {
+				$files[ $key ][ (string) ( $img['file'] ?? '' ) ] = true;
+			}
+		}
+
+		return array_map( static fn() => true, array_filter( $files, static fn( $f ) => count( $f ) > 1 ) );
+	}
+
+	/**
+	 * Alt text for comparison: entities decoded, quotes straightened, lower case, spaces collapsed.
+	 *
+	 * @param string $alt Alt text.
+	 */
+	public static function alt_key( string $alt ): string {
+		$alt = html_entity_decode( $alt, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
+		$alt = str_replace( [ "\u{201C}", "\u{201D}", "\u{2018}", "\u{2019}" ], [ '"', '"', "'", "'" ], $alt );
+
+		return trim( (string) preg_replace( '/\s+/u', ' ', mb_strtolower( $alt ) ) );
 	}
 
 	/**

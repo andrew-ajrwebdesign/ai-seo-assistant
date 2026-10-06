@@ -740,7 +740,7 @@ class Scan_Page {
 			return;
 		}
 
-		echo '<p class="aisa-small aisa-lead">' . Ui::icon( 'info-outline' ) . esc_html( sprintf( /* translators: %s: SEO plugin name. */ __( 'Nothing changes on the site until you apply. Title, description and focus keyphrase are saved in %s; alt text in the Media Library.', 'ai-seo-assistant' ), $adapter->get_name() ) ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- icon escaped in Ui.
+		echo '<p class="aisa-small aisa-lead">' . Ui::icon( 'info-outline' ) . esc_html( sprintf( /* translators: %s: SEO plugin name. */ __( 'Nothing changes on the site until you apply. Title, description and focus keyphrase are saved in %s; alt text in the Media Library and where the page prints it (Divi module, Image block or image tag), checked on the page afterwards.', 'ai-seo-assistant' ), $adapter->get_name() ) ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- icon escaped in Ui.
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="aisa-suggest" data-aisa-apply>';
 		wp_nonce_field( Tools_Actions::APPLY );
 		echo '<input type="hidden" name="action" value="' . esc_attr( Tools_Actions::APPLY ) . '"><input type="hidden" name="post" value="' . esc_attr( (string) $post_id ) . '">';
@@ -854,14 +854,19 @@ class Scan_Page {
 		foreach ( $alts as $alt ) {
 			$id    = (int) $alt['id'];
 			$thumb = wp_get_attachment_image( $id, [ 56, 56 ], false, [ 'class' => 'aisa-alt__img', 'alt' => '' ] );
-			$check = 'check' === ( $alt['mode'] ?? 'write' );
-			$now   = '' === (string) $alt['now'] ? __( 'Now: no alt text', 'ai-seo-assistant' ) : sprintf( /* translators: %s: current alt. */ __( 'Now: “%s”', 'ai-seo-assistant' ), (string) $alt['now'] );
+			$mode    = (string) ( $alt['mode'] ?? 'write' );
+			$check   = 'write' !== $mode;
+			$printed = (string) ( $alt['printed'] ?? $alt['now'] );
+			$stored  = (string) ( $alt['stored'] ?? '' );
+			/* translators: 1: alt the page prints, 2: alt in the Media Library. */
+			$now = sprintf( __( 'On the page: %1$s · Media Library: %2$s', 'ai-seo-assistant' ), '' === $printed ? __( 'none', 'ai-seo-assistant' ) : '“' . $printed . '”', '' === $stored ? __( 'none', 'ai-seo-assistant' ) : '“' . $stored . '”' );
 			echo '<li class="aisa-alt' . ( $check ? ' aisa-alt--check' : '' ) . '">' . ( $thumb ? $thumb : '<span class="aisa-alt__img" aria-hidden="true"></span>' ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- core-built image tag.
 				. '<div class="aisa-alt__body"><label for="aisa-alt-' . esc_attr( (string) $id ) . '"><strong>' . esc_html( (string) $alt['file'] ) . '</strong> <span class="' . ( $check ? 'aisa-alt__now' : 'aisa-tone--bad' ) . '">' . esc_html( $now ) . '</span></label>'
-				. ( $check ? '<p class="aisa-small aisa-tone--warn">' . esc_html__( 'Claude looked at the photo and thinks the current alt is wrong. Not ticked: keep the current one unless you agree.', 'ai-seo-assistant' ) . '</p>' : '' )
+				. ( 'check' === $mode ? '<p class="aisa-small aisa-tone--warn">' . esc_html__( 'Claude looked at the photo and thinks the current alt is wrong. Not ticked: keep the current one unless you agree.', 'ai-seo-assistant' ) . '</p>' : '' )
+				. ( 'sync' === $mode ? '<p class="aisa-small aisa-tone--warn">' . esc_html__( 'The page prints a different alt than the Media Library. Claude looked at the photo; applying writes this alt to both.', 'ai-seo-assistant' ) . '</p>' : '' )
 				. '<textarea id="aisa-alt-' . esc_attr( (string) $id ) . '" name="alt[' . esc_attr( (string) $id ) . '][value]" rows="2">' . esc_textarea( (string) $alt['value'] ) . '</textarea>'
 				. ( '' !== (string) ( $alt['why'] ?? '' ) ? '<p class="aisa-small">' . esc_html( sprintf( /* translators: %s: reason. */ __( 'Why: %s', 'ai-seo-assistant' ), (string) $alt['why'] ) ) . '</p>' : '' ) . '</div>'
-				. '<input type="checkbox" class="aisa-alt__tick" name="alt[' . esc_attr( (string) $id ) . '][apply]" value="1"' . checked( ! $check && '' !== (string) $alt['value'], true, false ) . ' aria-label="' . esc_attr( sprintf( /* translators: %s: file name. */ __( 'Apply the alt text for %s', 'ai-seo-assistant' ), (string) $alt['file'] ) ) . '"></li>';
+				. '<input type="checkbox" class="aisa-alt__tick" name="alt[' . esc_attr( (string) $id ) . '][apply]" value="1"' . checked( ( $alt['tick'] ?? ! $check ) && '' !== (string) $alt['value'], true, false ) . ' aria-label="' . esc_attr( sprintf( /* translators: %s: file name. */ __( 'Apply the alt text for %s', 'ai-seo-assistant' ), (string) $alt['file'] ) ) . '"></li>';
 		}
 		echo '</ul></fieldset>';
 	}
@@ -901,7 +906,7 @@ class Scan_Page {
 	 */
 	protected function applied_notice( array $applied, array $changes ): void {
 		$user = get_userdata( (int) $applied['user'] );
-		$live = count( array_filter( $changes, static fn( $c ) => null === $c['undone_at'] ) );
+		$live = count( array_filter( $changes, static fn( $c ) => null === $c['undone_at'] && 'content' !== $c['field'] ) );
 		if ( 0 === $live ) {
 			return; // All undone: the panel says so, with "Start a new review".
 		}
@@ -931,8 +936,8 @@ class Scan_Page {
 		echo Ui::card_head( 'aisa-applied', 'admin-customizer', __( 'Applied changes', 'ai-seo-assistant' ), sprintf( __( 'Applied %s', 'ai-seo-assistant' ), wp_date( 'D j M, g:ia', (int) $s['applied']['at'] ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		$alts = array_filter( $changes, static fn( $c ) => 'alt' === $c['field'] );
 		foreach ( array_reverse( $changes ) as $c ) {
-			if ( 'alt' === $c['field'] ) {
-				continue;
+			if ( in_array( $c['field'], [ 'alt', 'content' ], true ) ) {
+				continue; // Alt rows are listed below; the content row is the page-side copy of them.
 			}
 			echo '<div class="aisa-sfield"><div class="aisa-sfield__head"><strong>' . esc_html( $labels[ $c['field'] ] ?? $c['field'] ) . '</strong>' . ( null === $c['undone_at'] ? Ui::pill( __( 'Applied', 'ai-seo-assistant' ), 'good' ) : Ui::pill( __( 'Undone', 'ai-seo-assistant' ), 'muted' ) ) . $this->undo_button( [ (int) $c['id'] ], __( 'Undo', 'ai-seo-assistant' ), null !== $c['undone_at'] ) . '</div>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui / undo_button().
 				. '<p class="aisa-sfield__label">' . esc_html__( 'Before', 'ai-seo-assistant' ) . '</p><p class="aisa-before">' . esc_html( '' !== $c['before_value'] ? (string) $c['before_value'] : __( '(empty)', 'ai-seo-assistant' ) ) . '</p>'
@@ -948,7 +953,7 @@ class Scan_Page {
 				/* translators: %s: alt before. */
 				$before = '' === $c['before_value'] ? __( 'Before: no alt text', 'ai-seo-assistant' ) : sprintf( __( 'Before: “%s”', 'ai-seo-assistant' ), (string) $c['before_value'] );
 				echo '<li class="aisa-alt">' . ( $thumb ? $thumb : '<span class="aisa-alt__img" aria-hidden="true"></span>' ) . '<div class="aisa-alt__body"><p><strong>' . esc_html( $file ) . '</strong> <span class="aisa-small">' . esc_html( $before ) . '</span></p><p class="aisa-after">' . esc_html( (string) $c['after_value'] ) . '</p></div>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- core-built image tag.
-					. ( null === $c['undone_at'] ? Ui::pill( __( 'Applied', 'ai-seo-assistant' ), 'good' ) : Ui::pill( __( 'Undone', 'ai-seo-assistant' ), 'muted' ) ) . '</li>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+					. $this->alt_state( $c, (array) ( $s['applied']['alts'][ (int) $c['object_id'] ] ?? [] ) ) . '</li>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in alt_state().
 			}
 			echo '</ul></div>';
 		}
@@ -963,6 +968,23 @@ class Scan_Page {
 			echo '<input type="hidden" name="action" value="' . esc_attr( Tools_Actions::CLEAR ) . '"><input type="hidden" name="post" value="' . esc_attr( (string) $post_id ) . '"><button type="submit" class="aisa-btn">' . esc_html__( 'Start a new review', 'ai-seo-assistant' ) . '</button></form>';
 		}
 		echo '</section>';
+	}
+
+	/**
+	 * An applied alt's state: Applied (and shown on the page), Not visible on the page (and why), Undone.
+	 *
+	 * @param array<string,mixed> $c     Change row.
+	 * @param array<string,mixed> $check verify_alts() result for the image.
+	 */
+	protected function alt_state( array $c, array $check ): string {
+		if ( null !== $c['undone_at'] ) {
+			return Ui::pill( __( 'Undone', 'ai-seo-assistant' ), 'muted' );
+		}
+		if ( isset( $check['visible'] ) && ! $check['visible'] ) {
+			return '<span class="aisa-altstate">' . Ui::pill( __( 'Not visible on the page', 'ai-seo-assistant' ), 'warn' ) . '<span class="aisa-small">' . esc_html( (string) $check['reason'] ) . '</span></span>';
+		}
+
+		return Ui::pill( __( 'Applied', 'ai-seo-assistant' ), 'good' );
 	}
 
 	/**

@@ -170,6 +170,21 @@ class ScanRulesTest extends TestCase {
 		$this->assertContains( 'alt', $this->codes( $img( 'team van' ) ), 'the file name is weak' );
 		$this->assertContains( 'alt_unprinted', $this->codes( $img( '', 'Northfield Plumbing van outside a customer’s home' ) ) );
 		$this->assertNotContains( 'alt', $this->codes( $img( '', 'Northfield Plumbing van outside a customer’s home' ) ) );
+		$pasted = [
+			'images' => [
+				[
+					'file' => 'kitchen.jpg',
+					'alt'  => 'Moving To Boise Services',
+					'id'   => 404,
+				],
+				[
+					'file' => 'porch.jpg',
+					'alt'  => 'Moving To Boise Services',
+					'id'   => 406,
+				],
+			],
+		];
+		$this->assertContains( 'alt', $this->codes( $pasted ), 'one alt pasted on different photos is poor' );
 		$this->assertTrue( Rules::weak_alt( 'IMG_2041', 'IMG_2041.jpg' ) );
 		$this->assertFalse( Rules::weak_alt( 'Old water heater removed from a basement', 'x.jpg' ) );
 		$issue = Rules::evaluate( $img( null ) + self::clean_page(), [ 'inbound' => 3 ] );

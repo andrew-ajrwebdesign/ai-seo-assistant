@@ -236,7 +236,9 @@ class Prompt_Builder {
 		if ( ! empty( $args['images'] ) ) {
 			$p[] = 'Attached photos (each introduced by its image_id above):';
 			foreach ( (array) $args['images'] as $img ) {
-				if ( 'check' === ( $img['mode'] ?? 'write' ) ) {
+				if ( 'sync' === ( $img['mode'] ?? 'write' ) ) {
+					$p[] = sprintf( '- image_id %d (file %s): the page shows the alt "%s" but the Media Library has "%s". Look at the photo: return the one that describes it correctly (unchanged), or a corrected alt if neither does, and say in the why which was wrong.', $img['id'], $img['file'], $img['printed'] ?? '', $img['stored'] ?? '' );
+				} elseif ( 'check' === ( $img['mode'] ?? 'write' ) ) {
 					$p[] = sprintf( '- image_id %d (file %s) already has the alt "%s". CHECK ONLY: if that alt matches what the photo shows, return it unchanged; only if it is clearly wrong (describes something not in the photo), return a corrected alt and say in the why what is wrong. Never reword a correct alt.', $img['id'], $img['file'], $img['alt'] ?? '' );
 				} else {
 					$p[] = sprintf( '- image_id %d (file %s) has no useful alt (now "%s"): write one from what the photo shows.', $img['id'], $img['file'], $img['alt'] ?? '' );

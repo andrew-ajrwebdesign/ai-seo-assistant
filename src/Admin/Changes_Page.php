@@ -220,7 +220,7 @@ class Changes_Page {
 			echo '<tr><td><strong>' . esc_html( wp_date( 'D j M', (int) strtotime( $row['applied_at'] . ' UTC' ) ) ) . '</strong><br><span class="aisa-small">' . esc_html( $user ? $user->display_name : '' ) . '</span></td>'
 				. '<td><a href="' . esc_url( $edit ) . '"><strong>' . esc_html( '' !== $title ? $title : $row['path'] ) . '</strong></a><br><span class="aisa-path">' . esc_html( $row['path'] ) . '</span></td>'
 				. '<td>' . esc_html( $labels[ $row['field'] ] ?? $row['field'] ) . '</td>'
-				. '<td><dl class="aisa-ba"><dt>' . esc_html__( 'Before', 'ai-seo-assistant' ) . '</dt><dd class="aisa-before">' . esc_html( '' !== $row['before_value'] ? (string) $row['before_value'] : __( '(empty)', 'ai-seo-assistant' ) ) . '</dd><dt>' . esc_html__( 'After', 'ai-seo-assistant' ) . '</dt><dd>' . esc_html( (string) $row['after_value'] ) . '</dd></dl></td>'
+				. '<td>' . ( 'content' === $row['field'] ? '<p class="aisa-small">' . esc_html( self::content_summary( (string) $row['before_value'], (string) $row['after_value'] ) ) . '</p>' : '<dl class="aisa-ba"><dt>' . esc_html__( 'Before', 'ai-seo-assistant' ) . '</dt><dd class="aisa-before">' . esc_html( '' !== $row['before_value'] ? (string) $row['before_value'] : __( '(empty)', 'ai-seo-assistant' ) ) . '</dd><dt>' . esc_html__( 'After', 'ai-seo-assistant' ) . '</dt><dd>' . esc_html( (string) $row['after_value'] ) . '</dd></dl>' ) . '</td>'
 				. '<td>' . Ui::pill( $pill, $tone ) . '<p class="aisa-small">' . esc_html( $text ) . '</p></td>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 				. '<td>' . $undo . '</td></tr>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above.
 		}
@@ -242,7 +242,7 @@ class Changes_Page {
 				/* translators: 1: date, 2: who. */
 				return [ sprintf( __( 'Undone %s', 'ai-seo-assistant' ), wp_date( 'j M', (int) strtotime( (string) $row['undone_at'] . ' UTC' ) ) ), 'muted', sprintf( __( 'Undone by %s. Not measured.', 'ai-seo-assistant' ), $who ? $who->display_name : '' ) ];
 			case 'not_measured':
-				return [ __( 'Not measured', 'ai-seo-assistant' ), 'muted', 'alt' === $row['field'] ? __( 'Alt text has no click-rate measure; logged for the record.', 'ai-seo-assistant' ) : __( 'A setting in the SEO plugin; it does not change what Google shows.', 'ai-seo-assistant' ) ];
+				return [ __( 'Not measured', 'ai-seo-assistant' ), 'muted', in_array( $row['field'], [ 'alt', 'content' ], true ) ? __( 'Alt text has no click-rate measure; logged for the record.', 'ai-seo-assistant' ) : __( 'A setting in the SEO plugin; it does not change what Google shows.', 'ai-seo-assistant' ) ];
 			case 'measured':
 				$d     = (float) ( $e['delta'] ?? 0 );
 				$pts   = number_format_i18n( abs( $d ), 1 );
@@ -262,6 +262,22 @@ class Changes_Page {
 	}
 
 	/**
+	 * The page-content change in words: which alt attributes changed (the whole content is kept in the log
+	 * for Undo, but never printed).
+	 *
+	 * @param string $before Content before.
+	 * @param string $after  Content after.
+	 */
+	public static function content_summary( string $before, string $after ): string {
+		preg_match_all( '/\b(?:alt|image_alt)="([^"]*)"/', $before, $b );
+		preg_match_all( '/\b(?:alt|image_alt)="([^"]*)"/', $after, $a );
+		$new = array_values( array_diff( $a[1], $b[1] ) );
+
+		/* translators: 1: count, 2: the new alt texts. */
+		return sprintf( _n( '%1$d alt attribute written into the page: %2$s', '%1$d alt attributes written into the page: %2$s', count( $new ), 'ai-seo-assistant' ), count( $new ), '“' . implode( '”, “', array_slice( $new, 0, 4 ) ) . '”' );
+	}
+
+	/**
 	 * Field names.
 	 *
 	 * @return array<string,string>
@@ -272,6 +288,7 @@ class Changes_Page {
 			'description' => __( 'Meta description', 'ai-seo-assistant' ),
 			'keyphrase'   => __( 'Focus keyphrase', 'ai-seo-assistant' ),
 			'alt'         => __( 'Alt text', 'ai-seo-assistant' ),
+			'content'     => __( 'Alt text in the page', 'ai-seo-assistant' ),
 		];
 	}
 
@@ -297,7 +314,7 @@ class Changes_Page {
 				$out,
 				array_map(
 					[ self::class, 'cell' ],
-					[ $row['applied_at'], $user ? $user->display_name : '', wp_strip_all_tags( (string) get_the_title( $row['post_id'] ) ), $row['path'], $row['field'], $row['before_value'], $row['after_value'], $effect['verdict'] ?? $effect['state'], $effect['ctr_before'] ?? '', $effect['ctr_after'] ?? '', (string) $row['undone_at'] ]
+					[ $row['applied_at'], $user ? $user->display_name : '', wp_strip_all_tags( (string) get_the_title( $row['post_id'] ) ), $row['path'], $row['field'], 'content' === $row['field'] ? self::content_summary( (string) $row['before_value'], (string) $row['after_value'] ) : $row['before_value'], 'content' === $row['field'] ? '' : $row['after_value'], $effect['verdict'] ?? $effect['state'], $effect['ctr_before'] ?? '', $effect['ctr_after'] ?? '', (string) $row['undone_at'] ]
 				)
 			);
 		}

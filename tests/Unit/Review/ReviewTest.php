@@ -116,6 +116,13 @@ class ReviewTest extends TestCase {
 	protected array $alts = [];
 
 	/**
+	 * The page's post content.
+	 *
+	 * @var string
+	 */
+	protected string $content = '';
+
+	/**
 	 * WP basics and post meta in memory.
 	 */
 	public function setUp(): void {
@@ -163,13 +170,32 @@ class ReviewTest extends TestCase {
 				],
 			],
 		];
+		$facts['images'][] = [
+			'id'         => 491,
+			'file'       => 'boise_spring_sized.jpg',
+			'alt'        => 'Boise Depot clock tower behind spring flowers',
+			'stored_alt' => 'Boise Depot clock tower behind spring flowers',
+		];
+		$facts['images'][] = [
+			'id'         => 404,
+			'file'       => 'Boise-Mid-Century-Home.jpg',
+			'alt'        => 'Moving To Boise Services',
+			'stored_alt' => 'White kitchen with a gas range',
+		];
 		$images = Page_Review::images_needing_alt( $facts );
 		$modes  = array_column( $images, 'mode', 'id' );
-		$this->assertSame( 'check', $modes[489] );
+		$ticks  = array_column( $images, 'tick', 'id' );
+		$this->assertSame( 'sync', $modes[489], 'a good library alt the page does not print' );
+		$this->assertTrue( $ticks[489], 'the page prints nothing: ticked' );
+		$this->assertSame( 'sync', $modes[404], 'the page prints a different alt' );
+		$this->assertFalse( $ticks[404], 'a descriptive printed alt is never replaced unticked-by-default' );
+		$this->assertSame( 'check', $modes[491], 'page and library agree: only checked against the photo' );
+		$this->assertFalse( $ticks[491] );
 		$this->assertSame( 'write', $modes[9] );
 		$this->assertSame( 'write', $modes[10] );
 		$this->assertSame( 'write', $images[0]['mode'], 'missing alts first' );
 		$this->assertSame( 'Boise\'s Capitol Building', array_column( $images, 'alt', 'id' )[489], 'the old alt is shown' );
+		$this->assertTrue( Page_Review::same_alt( '“Discover Boise” guide', '"discover boise"  GUIDE' ) );
 	}
 
 	/**
@@ -196,6 +222,17 @@ class ReviewTest extends TestCase {
 				'editor'      => [],
 			],
 		];
+		$store->row['suggestions']['alts'][0]['src'] = 'https://x.test/wp-content/uploads/boise_spring_sized.jpg';
+		$this->content = '[et_pb_image src="https://x.test/wp-content/uploads/boise_spring_sized.jpg" alt="Boise Depot - Moving To Boise" _builder_version="4.27"][/et_pb_image]';
+		$original      = $this->content;
+		\WP_Mock::userFunction( 'get_post_field' )->andReturnUsing( fn() => $this->content );
+		\WP_Mock::userFunction( 'current_user_can' )->andReturn( true );
+		\WP_Mock::userFunction( 'wp_update_post' )->andReturnUsing(
+			function ( $post ) {
+				$this->content = $post['post_content'];
+				return 1;
+			}
+		);
 		$log    = new Fake_Log();
 		$review = new Testable_Review( new \AJR\SEOAssistant\AI\Claude_Client(), $store, $log, $adapter );
 
@@ -224,7 +261,10 @@ class ReviewTest extends TestCase {
 		$this->assertSame( 'Boise Idaho Weather | Snow, Sun & Seasons', $adapter->meta['_t'] );
 		$this->assertArrayNotHasKey( '_d', $adapter->meta );
 		$this->assertSame( 'Boise Depot clock tower behind spring flowers', $this->alts[491] );
-		$this->assertSame( [ 'title', 'keyphrase', 'alt' ], array_column( $log->rows, 'field' ) );
+		$this->assertSame( [ 'title', 'keyphrase', 'alt', 'content' ], array_column( $log->rows, 'field' ) );
+		$this->assertSame( str_replace( 'alt="Boise Depot - Moving To Boise"', 'alt="Boise Depot clock tower behind spring flowers"', $original ), $this->content, 'the alt is written where the page prints it, nothing else' );
+		$this->assertSame( $original, $log->rows[4]['before_value'] );
+		$this->assertFalse( $store->row['suggestions']['applied']['alts'][491]['visible'], 'not seen on the rendered page (no rescan here): never reported as visible' );
 		$this->assertSame( 'Old title', $log->rows[1]['before_value'] );
 		$this->assertSame( 491, $log->rows[3]['object_id'] );
 		$this->assertSame( 1, $review->rescans, 'rescanned right away' );
@@ -232,8 +272,9 @@ class ReviewTest extends TestCase {
 
 		// Someone edits the title by hand afterwards: undo keeps their work and says so.
 		$adapter->meta['_t'] = 'Hand-edited title';
-		$undo                = $review->undo( [ 1, 2, 3 ], 3 );
-		$this->assertSame( 2, $undo['undone'] );
+		$undo                = $review->undo( [ 1, 2, 3, 4 ], 3 );
+		$this->assertSame( 3, $undo['undone'] );
+		$this->assertSame( $original, $this->content, 'post content restored byte for byte' );
 		$this->assertSame( [ 'title' ], $undo['kept'] );
 		$this->assertSame( 'Hand-edited title', $adapter->meta['_t'] );
 		$this->assertSame( '', $adapter->meta['_k'], 'keyphrase back to empty' );
