@@ -120,6 +120,41 @@ class SnapshotV2Test extends TestCase {
 	}
 
 	/**
+	 * PR #144 final: gbp_call_taps is a tap (never in the total), `form` is a counted source, `complete:false`
+	 * reads "figures still settling", and business_profile_check comes through (checked:false kept as such).
+	 */
+	public function test_pr144_final_schema(): void {
+		$errors = [];
+		$snap   = self::parse( self::fixture( 'snapshot-v2.week.example.json' ), $errors );
+		$by     = array_column( $snap['enquiries']['sources'], null, 'key' );
+		$this->assertSame( 'tap', $by['gbp_call_taps']['kind'] );
+		$this->assertFalse( Snapshot_V2::counts( $by['gbp_call_taps'] ) );
+		$this->assertSame( 'form', $by['form']['kind'] );
+		$this->assertTrue( Snapshot_V2::counts( $by['form'] ) );
+		$this->assertTrue( $snap['listing']['checked'], 'the fixture’s business_profile_check comes through' );
+		$this->assertGreaterThan( 0, $snap['listing']['problems'] );
+
+		$month                      = self::fixture( 'snapshot-v2.month.example.json' );
+		$month['month']['complete'] = false;
+		$snap                       = self::parse( $month, $errors );
+		$this->assertFalse( $snap['month']['complete'], 'complete:false kept (settling or partial)' );
+
+		$week                           = self::fixture( 'snapshot-v2.week.example.json' );
+		$week['business_profile_check'] = [
+			'version' => 1,
+			'checked' => false,
+			'reason'  => 'Places lookup failed <script>',
+			'summary' => null,
+			'fields'  => [],
+		];
+		$snap = self::parse( $week, $errors );
+		$this->assertNotNull( $snap, implode( '; ', $errors ) );
+		$this->assertFalse( $snap['listing']['checked'], 'not checked never reads as a match' );
+		$this->assertSame( 0, $snap['listing']['problems'] );
+		$this->assertStringNotContainsString( '<', $snap['listing']['reason'] );
+	}
+
+	/**
 	 * The hostile fixture leaves exactly the schema doc's survivors, with no "<" or ">" anywhere.
 	 */
 	public function test_hostile_fixture_survivors(): void {
