@@ -11,10 +11,13 @@
  *
  * The rules (decision 2026-10-06, step 2): title missing / too wide in px / duplicate / missing the page's
  * main search; description missing / too long / too short / duplicate; H1 missing / several / heading order;
- * image alt missing or a single word; image weight; internal links in (orphans) and out; broken internal
- * links; links through a redirect; noindex or a canonical elsewhere while in the sitemap, or an indexable
- * page missing from it; thin content; OG image; schema for the page type (the Service advice only names
- * AJR Core's Custom schema module as on when it is).
+ * image alt missing, empty (alt="", reported apart: right for decoration) or a single word; image weight;
+ * internal links in (orphans; menu and footer links count) and out; broken internal links; links through a
+ * redirect; noindex or a canonical elsewhere while in the sitemap, or an indexable page missing from it;
+ * a short page (not for contact, team, "other" pages, forms or calculators); OG image; the page type.
+ *
+ * An editor finding on more than half the pages is a template's, not a page's: Scanner::finalize() takes
+ * it off the pages and reports it once for the site (site_wide()).
  *
  * Pure PHP apart from translation, unit-tested.
  *
@@ -281,8 +284,9 @@ class Rules {
 	 * @return array<int,array<string,mixed>>
 	 */
 	protected static function images( array $facts, array $ctx ): array {
-		$images    = (array) ( $facts['images'] ?? [] );
+		$images    = array_values( array_filter( (array) ( $facts['images'] ?? [] ), static fn( $i ) => empty( $i['decorative'] ) ) );
 		$missing   = 0;
+		$empty     = 0;
 		$weak      = [];
 		$unprinted = [];
 		$mismatch  = [];
@@ -291,22 +295,26 @@ class Rules {
 			$alt    = $img['alt'] ?? null;
 			$file   = (string) ( $img['file'] ?? '' );
 			$stored = trim( (string) ( $img['stored_alt'] ?? '' ) );
+			$good_s = '' !== $stored && ! self::weak_alt( $stored, $file ) && ! isset( $shared[ self::alt_key( $stored ) ] );
 			if ( null !== $alt && isset( $shared[ self::alt_key( (string) $alt ) ] ) ) {
-				$weak[] = (string) $alt; // The same alt on different photos.
+				if ( $good_s ) {
+					$mismatch[] = $file; // A copy-pasted alt printed over the Media Library's good one.
+				} else {
+					$weak[] = (string) $alt; // The same alt on different photos.
+				}
 				continue;
 			}
-			$poor   = null === $alt || '' === trim( (string) $alt ) || self::weak_alt( (string) $alt, $file );
-			$good_s = '' !== $stored && ! self::weak_alt( $stored, $file );
+			$poor = null === $alt || '' === trim( (string) $alt ) || self::weak_alt( (string) $alt, $file );
 			if ( $poor && $good_s ) {
 				$unprinted[] = $file; // The Media Library has a good alt the page does not print.
 				continue;
 			}
-			if ( ! $poor && $good_s && self::alt_key( (string) $alt ) !== self::alt_key( $stored ) ) {
-				$mismatch[] = $file; // The page prints a different alt (often a builder module's copy-pasted one).
-				continue;
-			}
-			if ( null === $alt || '' === trim( (string) $alt ) ) {
+			// A good printed alt is left alone, even when the Media Library says something else: a builder
+			// module's alt is often the right label for its place on the page.
+			if ( null === $alt ) {
 				++$missing;
+			} elseif ( '' === trim( (string) $alt ) ) {
+				++$empty;
 			} elseif ( self::weak_alt( (string) $alt, $file ) ) {
 				$weak[] = (string) $alt;
 			}
@@ -330,9 +338,9 @@ class Rules {
 				'alt',
 				'alt_mismatch',
 				/* translators: %d: number of images. */
-				sprintf( _n( '%d image shows different alt text than the Media Library', '%d images show different alt text than the Media Library', count( $mismatch ), 'ai-seo-assistant' ), count( $mismatch ) ),
+				sprintf( _n( '%d image shows copied alt text over a good Media Library one', '%d images show copied alt text over good Media Library ones', count( $mismatch ), 'ai-seo-assistant' ), count( $mismatch ) ),
 				/* translators: %s: file names. */
-				sprintf( __( 'The page prints its own alt for %s, which may describe a different photo.', 'ai-seo-assistant' ), implode( ', ', array_slice( $mismatch, 0, 3 ) ) ),
+				sprintf( __( 'The page prints the same alt on different photos (%s), so it describes at most one of them; the Media Library has a better one.', 'ai-seo-assistant' ), implode( ', ', array_slice( $mismatch, 0, 3 ) ) ),
 				__( 'Fix: the page review looks at each photo and writes the right alt where the page prints it.', 'ai-seo-assistant' ),
 				'claude',
 				[ 'files' => $mismatch ]
@@ -348,6 +356,18 @@ class Rules {
 				$title     = '' === $title ? ucfirst( $weak_text ) : $title . '; ' . $weak_text;
 			}
 			$out[] = self::issue( 'alt', 'alt', $title, __( 'Screen readers and Google Images cannot tell what the photos show.', 'ai-seo-assistant' ), __( 'Fix: describe each photo in plain words.', 'ai-seo-assistant' ), 'claude', [ 'missing' => $missing ] );
+		}
+		if ( $empty > 0 ) {
+			$out[] = self::issue(
+				'alt',
+				'alt_empty',
+				/* translators: %d: number of images. */
+				sprintf( _n( '%d image is marked as decoration (empty alt)', '%d images are marked as decoration (empty alt)', $empty, 'ai-seo-assistant' ), $empty ),
+				__( 'An empty alt is right for a pattern, an icon, or a photo whose link or caption already names it; not for a photo that carries meaning.', 'ai-seo-assistant' ),
+				__( 'Fix: check them in the page review; it describes the ones that carry meaning and leaves the rest empty.', 'ai-seo-assistant' ),
+				'claude',
+				[ 'empty' => $empty ]
+			);
 		}
 		$heavy = (array) ( $ctx['heavy'] ?? [] );
 		if ( [] !== $heavy ) {
@@ -424,7 +444,7 @@ class Rules {
 	 */
 	protected static function links( array $facts, array $ctx ): array {
 		$out     = [];
-		$inbound = (int) ( $ctx['inbound'] ?? 0 );
+		$inbound = (int) ( $ctx['inbound'] ?? 0 ) + ( empty( $ctx['in_menu'] ) ? 0 : 2 ); // In the menu or footer: linked from every page.
 		$from    = array_slice( (array) ( $ctx['suggest_from'] ?? [] ), 0, 2 );
 		$fix     = [] === $from ? __( 'Fix: link to this page from related pages.', 'ai-seo-assistant' )
 			/* translators: %s: pages to link from. */
@@ -492,17 +512,53 @@ class Rules {
 	 * Thin content.
 	 *
 	 * @param array<string,mixed> $facts Facts.
-	 * @param array<string,mixed> $ctx   Context (is_front, is_utility).
+	 * @param array<string,mixed> $ctx   Context (is_front, is_utility, page_type, is_tool).
 	 * @return array<int,array<string,mixed>>
 	 */
 	protected static function thin( array $facts, array $ctx ): array {
 		$words = (int) ( $facts['words'] ?? 0 );
-		if ( ! empty( $ctx['is_front'] ) || ! empty( $ctx['is_utility'] ) || $words >= self::THIN_WORDS ) {
+		if ( ! empty( $ctx['is_front'] ) || ! empty( $ctx['is_utility'] ) || ! empty( $ctx['is_tool'] ) || $words >= self::THIN_WORDS ) {
+			return [];
+		}
+		// A contact page, a team member's page or an "other" page is short by nature: not a finding.
+		if ( in_array( (string) ( $ctx['page_type'] ?? '' ), [ 'contact', 'team_member', 'other' ], true ) ) {
 			return [];
 		}
 
 		/* translators: %d: number of words. */
-		return [ self::issue( 'thin', 'thin', sprintf( _n( 'Thin content: %d word', 'Thin content: %d words', $words, 'ai-seo-assistant' ), $words ), __( 'Google rarely ranks a page that says little about its subject.', 'ai-seo-assistant' ), __( 'Fix: answer the questions people search for, in your own words.', 'ai-seo-assistant' ), 'editor', [ 'words' => $words ] ) ];
+		return [ self::issue( 'thin', 'thin', sprintf( _n( 'Short page: %d word', 'Short page: %d words', $words, 'ai-seo-assistant' ), $words ), __( 'If this page should rank, more of what visitors ask about its subject usually helps.', 'ai-seo-assistant' ), __( 'Fix (if it should rank): answer the questions people search for, in your own words.', 'ai-seo-assistant' ), 'editor', [ 'words' => $words ] ) ];
+	}
+
+	/**
+	 * Editor findings that are on more than half the pages (at least 6 pages scanned): a template's, not a
+	 * page's. Claude and one-click findings stay per page (each page is its own fix).
+	 *
+	 * @param array<int,array<int,array<string,mixed>>> $issues Issues by post ID.
+	 * @return array<string,array{issue:array<string,mixed>,pages:int}> code => one example issue and its count.
+	 */
+	public static function site_wide( array $issues ): array {
+		$pages = count( $issues );
+		if ( $pages < 6 ) {
+			return [];
+		}
+		$seen = [];
+		foreach ( $issues as $list ) {
+			foreach ( $list as $issue ) {
+				if ( 'editor' !== ( $issue['who'] ?? '' ) ) {
+					continue;
+				}
+				$code = (string) $issue['code'];
+				if ( ! isset( $seen[ $code ] ) ) {
+					$seen[ $code ] = [
+						'issue' => $issue,
+						'pages' => 0,
+					];
+				}
+				++$seen[ $code ]['pages'];
+			}
+		}
+
+		return array_filter( $seen, static fn( $s ) => $s['pages'] * 2 > $pages );
 	}
 
 	/**

@@ -16,7 +16,7 @@ AI SEO Assistant is AJR Web Design's retainer plugin. The client sees one screen
 
 Every screen uses the full admin width. With AJR Core 0.22, its "Need a hand?" card (`Support::render_card()`) sits in a right-hand column, below the content on narrow screens; the Report shows it too.
 
-An Administrator who is not agency staff sees **Report** only. "Agency" is AJR Core's `Support::is_agency_user()`, or the list ticked under **Who sees the tools**. If neither names a current Administrator, every Administrator keeps the tools, so an update locks no one out. This keeps the menu tidy for the client; it is not a security boundary.
+An Administrator who is not agency staff sees **Report** only. "Agency" is AJR Core's `Support::is_agency_user()`, or the list ticked under **Who sees the tools**. If neither names a current Administrator, every Administrator keeps the tools, so an update locks no one out, and a warning stays on the plugin's screens, the Dashboard and the Plugins screen until someone is named. This keeps the menu tidy for the client; it is not a security boundary.
 
 ## The data comes to the site; the site holds no Google login
 
@@ -123,7 +123,7 @@ Claude calls are priced from their real token usage and counted against a cap pe
 * Yoast SEO, Rank Math or The SEO Framework for titles and descriptions
 * A Claude API key (Settings, or `AI_SEO_ASSISTANT_ANTHROPIC_API_KEY` in `wp-config.php`)
 
-Secrets saved on the settings screens (the Claude key and the report push key) are sealed with libsodium `secretbox`, using a key derived from the site's `AUTH_*` and `SECURE_AUTH_*` salts. The fields are write-only. A `wp-config.php` constant always wins over a saved value.
+Secrets saved on the settings screens (the Claude key and the report push key) are sealed with libsodium `secretbox`, using a key derived from the site's `AUTH_*` and `SECURE_AUTH_*` salts. The fields are write-only. A `wp-config.php` constant always wins over a saved value. Every write to a secret option is checked and sealed on every request, so options.php or another plugin cannot swap in a plain-text key. None of this protects against a hostile Administrator, who can install code or read `wp-config.php`.
 
 ## Install and release
 

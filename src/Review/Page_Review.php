@@ -117,8 +117,8 @@ class Page_Review {
 		$shared = Rules::shared_alts( (array) ( $facts['images'] ?? [] ) );
 		foreach ( (array) ( $facts['images'] ?? [] ) as $img ) {
 			$id = (int) ( $img['id'] ?? 0 );
-			if ( $id <= 0 || isset( $seen[ $id ] ) ) {
-				continue;
+			if ( $id <= 0 || isset( $seen[ $id ] ) || ! empty( $img['decorative'] ) ) {
+				continue; // role="presentation" / aria-hidden: decoration on purpose, no alt owed.
 			}
 			$seen[ $id ] = true;
 			$file        = (string) ( $img['file'] ?? '' );

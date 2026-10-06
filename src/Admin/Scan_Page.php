@@ -371,6 +371,16 @@ class Scan_Page {
 		if ( ! empty( $meta['discouraged'] ) ) {
 			echo '<p class="aisa-small aisa-tone--warn">' . esc_html__( 'Search engines are discouraged on this site (Settings › Reading), as on a staging or local copy, so every page says noindex: indexing and sitemap checks are skipped.', 'ai-seo-assistant' ) . '</p>';
 		}
+		$site = (array) ( $meta['site_issues'] ?? [] );
+		if ( [] !== $site ) {
+			echo '<h3 class="aisa-small"><strong>' . esc_html__( 'Across the site', 'ai-seo-assistant' ) . '</strong></h3>';
+			echo '<p class="aisa-small">' . esc_html__( 'On most pages, so it comes from the theme or a template: fixed once there, not page by page. Not counted in the issues above.', 'ai-seo-assistant' ) . '</p><ul class="aisa-small">';
+			foreach ( $site as $issue ) {
+				/* translators: 1: finding, 2: pages it is on, 3: what to do. */
+				echo '<li>' . esc_html( sprintf( _n( '%1$s (on %2$d page). %3$s', '%1$s (on %2$d pages). %3$s', (int) $issue['pages'], 'ai-seo-assistant' ), (string) $issue['title'], (int) $issue['pages'], (string) $issue['fix'] ) ) . '</li>';
+			}
+			echo '</ul>';
+		}
 		if ( $fallback > 0 ) {
 			/* translators: %d: number of pages. */
 			echo '<p class="aisa-small aisa-tone--bad">' . esc_html( sprintf( _n( '%d page could not be loaded as Google sees it, so it was checked from its post content and SEO fields; it is marked in the list.', '%d pages could not be loaded as Google sees them, so they were checked from their post content and SEO fields; they are marked in the list.', $fallback, 'ai-seo-assistant' ), $fallback ) ) . '</p>';

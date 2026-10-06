@@ -253,8 +253,12 @@ class Scanner {
 		$descs  = [];
 		$in     = [];
 		$links  = [];
+		$menu   = [];
 		foreach ( $rows as $id => $row ) {
 			$f = $row['facts'];
+			foreach ( (array) ( $f['nav_links'] ?? [] ) as $nav ) {
+				$menu[ self::norm_path( (string) $nav ) ] = true; // The menu or footer of any page: on every page.
+			}
 			$t = mb_strtolower( (string) ( $f['title'] ?? '' ) );
 			$d = mb_strtolower( (string) ( $f['description'] ?? '' ) );
 			if ( '' !== $t ) {
@@ -288,10 +292,11 @@ class Scanner {
 		$front      = (int) get_option( 'page_on_front' );
 		$discourage = '0' === (string) get_option( 'blog_public', '1' );
 		$popular    = self::popular_paths( $data );
+		$topics     = self::topics( $rows );
 		$has_types  = Page_Role::core();
 		$type_names = $has_types ? array_map( static fn( $t ) => $t['label'], Page_Role::types() ) : [];
 
-		$total    = 0;
+		$all      = [];
 		$rendered = 0;
 		foreach ( $rows as $id => $row ) {
 			$f    = $row['facts'];
@@ -303,7 +308,8 @@ class Scanner {
 				'title_dupes'      => count( $titles[ mb_strtolower( (string) ( $f['title'] ?? '' ) ) ] ?? [] ) - 1,
 				'desc_dupes'       => '' === (string) ( $f['description'] ?? '' ) ? 0 : count( $descs[ mb_strtolower( (string) $f['description'] ) ] ?? [] ) - 1,
 				'inbound'          => count( array_unique( $in[ $path ] ?? [] ) ),
-				'suggest_from'     => array_slice( array_values( array_diff( $popular, $in[ $path ] ?? [], [ $row['path'] ] ) ), 0, 2 ),
+				'in_menu'          => isset( $menu[ $path ] ),
+				'suggest_from'     => self::related_from( $path, $topics, $popular, $in[ $path ] ?? [] ),
 				'broken'           => [],
 				'redirected'       => [],
 				'in_sitemap'       => null === $sitemap ? null : isset( $sitemap[ Rules::bare_url( (string) ( $f['url'] ?? '' ) ) ] ),
@@ -312,6 +318,7 @@ class Scanner {
 				'top_query'        => self::main_query( $page, (string) ( $f['title'] ?? '' ) . ' ' . str_replace( [ '/', '-' ], ' ', $path ) ),
 				'is_front'         => $id === $front || '/' === $path,
 				'is_utility'       => (bool) preg_match( '#/(contact|privacy|terms|cookie|thank|accessibility|sitemap|login|account|cart|checkout)#i', $path ),
+				'is_tool'          => false !== strpos( (string) ( $row['flags'] ?? '' ), 'form' ) || (bool) preg_match( '/\b(calculator|estimator|quiz|form)\b/i', $path . ' ' . (string) ( $f['title'] ?? '' ) ),
 				'is_service'       => 'page' === $row['post_type'] && self::matches_service( $f, $path, $services ),
 				'custom_schema_on' => $schema_on,
 				'page_types'       => $has_types,
@@ -334,12 +341,20 @@ class Scanner {
 					$ctx['heavy'][] = [ (string) $img['file'], (int) $img['kb'] ];
 				}
 			}
-			$issues = Rules::evaluate( $f, $ctx );
-			if ( (string) wp_json_encode( $issues ) !== (string) ( $row['issues_json'] ?? '' ) ) {
+			$all[ $id ] = Rules::evaluate( $f, $ctx );
+			$rendered  += 'rendered' === $row['source'] ? 1 : 0;
+		}
+
+		// A finding on most pages belongs to the template (the author box, the theme's heading order): it is
+		// reported once for the site and taken off the pages.
+		$site  = Rules::site_wide( $all );
+		$total = 0;
+		foreach ( $all as $id => $issues ) {
+			$issues = array_values( array_filter( $issues, static fn( $i ) => ! isset( $site[ $i['code'] ] ) ) );
+			if ( (string) wp_json_encode( $issues ) !== (string) ( $rows[ $id ]['issues_json'] ?? '' ) ) {
 				$this->store->save_issues( $id, $issues ); // Unchanged pages are not rewritten.
 			}
-			$total    += count( $issues );
-			$rendered += 'rendered' === $row['source'] ? 1 : 0;
+			$total += count( $issues );
 		}
 
 		$summary = [
@@ -350,6 +365,18 @@ class Scanner {
 			'fallback'    => count( $rows ) - $rendered,
 			'sitemap'     => null !== $sitemap,
 			'discouraged' => $discourage,
+			'site_issues' => array_values(
+				array_map(
+					static fn( $s ) => [
+						'title'  => (string) $s['issue']['title'],
+						'detail' => (string) $s['issue']['detail'],
+						'fix'    => (string) $s['issue']['fix'],
+						'kind'   => (string) $s['issue']['kind'],
+						'pages'  => (int) $s['pages'],
+					],
+					$site
+				)
+			),
 		];
 		update_option( Scan_Store::META_OPTION, $summary, false );
 
@@ -415,7 +442,62 @@ class Scanner {
 		uasort( $data, static fn( $a, $b ) => (int) ( $b['gsc']['impressions'] ?? 0 ) <=> (int) ( $a['gsc']['impressions'] ?? 0 ) );
 		$data = array_filter( $data, static fn( $p ) => (int) ( $p['gsc']['impressions'] ?? 0 ) > 0 );
 
-		return array_slice( array_keys( $data ), 0, 10 );
+		return array_slice( array_keys( $data ), 0, 25 ); // Wide enough that a related page is usually in it.
+	}
+
+	/**
+	 * Each page's topic words (title and path, stemmed), without the words most pages share (the town, the
+	 * business): what makes a link suggestion related rather than just popular.
+	 *
+	 * @param array<int,array<string,mixed>> $rows all_facts() rows.
+	 * @return array<string,array<int,string>> norm_path => stems.
+	 */
+	protected static function topics( array $rows ): array {
+		$stems = [];
+		$df    = [];
+		foreach ( $rows as $row ) {
+			$path           = self::norm_path( (string) $row['path'] );
+			$stems[ $path ] = Rules::stems( (string) ( $row['facts']['title'] ?? '' ) . ' ' . str_replace( [ '/', '-' ], ' ', $path ) );
+			foreach ( $stems[ $path ] as $stem ) {
+				$df[ $stem ] = ( $df[ $stem ] ?? 0 ) + 1;
+			}
+		}
+		$limit = max( 3, (int) ceil( count( $rows ) * 0.3 ) );
+		foreach ( $stems as $path => $list ) {
+			$stems[ $path ] = array_values( array_filter( $list, static fn( $s ) => $df[ $s ] < $limit && mb_strlen( $s ) > 2 ) );
+		}
+
+		return $stems;
+	}
+
+	/**
+	 * Up to two pages to link FROM: well-visited pages on a related topic that do not link here yet.
+	 * Nothing when none is related (a generic "link from the home page" for every page is noise).
+	 *
+	 * @param string                          $path    This page (norm_path).
+	 * @param array<string,array<int,string>> $topics  topics().
+	 * @param array<int,string>               $popular Most-seen paths.
+	 * @param array<int,string>               $linking Paths already linking here.
+	 * @return array<int,string>
+	 */
+	protected static function related_from( string $path, array $topics, array $popular, array $linking ): array {
+		$mine    = $topics[ $path ] ?? [];
+		$linking = array_map( [ self::class, 'norm_path' ], $linking );
+		$out     = [];
+		foreach ( $popular as $candidate ) {
+			$norm = self::norm_path( (string) $candidate );
+			if ( $norm === $path || in_array( $norm, $linking, true ) ) {
+				continue;
+			}
+			if ( [] !== array_intersect( $mine, $topics[ $norm ] ?? [] ) ) {
+				$out[] = (string) $candidate;
+			}
+			if ( count( $out ) >= 2 ) {
+				break;
+			}
+		}
+
+		return $out;
 	}
 
 	/**

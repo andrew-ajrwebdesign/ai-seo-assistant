@@ -8,9 +8,12 @@
  * post content instead and says so per page.
  *
  * WHAT IT READS. From the whole document: the title tag, meta description, canonical, robots, og:image,
- * html lang and every JSON-LD @type. From the CONTENT AREA only (main / article, else the body without its
- * header, footer, nav, aside and builder header/footer areas): headings, images, links and the word count,
- * so the menu's 40 links and the footer logo do not count as the page's own.
+ * html lang and every JSON-LD @type. From the CONTENT AREA only (the post's entry content when the theme
+ * marks it, else main / article, else the body; always without header, footer, nav, aside, sidebar, author
+ * box, related posts, comments and builder header/footer areas): headings, images, links and the word
+ * count, so the menu's 40 links, the footer logo and the author box on every post are not the page's own.
+ * The links in the header, menus and footer are kept apart (nav_links): they still lead to a page, so they
+ * count as links IN to it.
  *
  * Pure PHP on DOMDocument (no WordPress), unit-tested.
  *
@@ -36,7 +39,10 @@ class Html_Parser {
 	public const MAX_LINKS    = 300;
 
 	/** Class or id fragments of site chrome that is not the page's own content. */
-	protected const CHROME = '/(^|[\s_-])(main-header|main-footer|site-header|site-footer|et-l--header|et-l--footer|elementor-location-header|elementor-location-footer|wp-block-template-part|menu|navbar|cookie|skip-link)([\s_-]|$)/i';
+	protected const CHROME = '/(^|[\s_-])(main-header|main-footer|site-header|site-footer|et-l--header|et-l--footer|elementor-location-header|elementor-location-footer|wp-block-template-part|menu|navbar|cookie|skip-link|sidebar|widget-area|author-box|author-bio|about-author|related-posts|comments-area|comment-respond|post-navigation|sharedaddy|breadcrumbs?)([\s_-]|$)/i';
+
+	/** Most header / menu / footer links kept per page. */
+	public const MAX_NAV_LINKS = 150;
 
 	/**
 	 * Read a page's facts.
@@ -64,6 +70,8 @@ class Html_Parser {
 			'schema_nodes' => self::schema_nodes( $xp ),
 		];
 		$facts['noindex'] = false !== strpos( $facts['robots'], 'noindex' );
+
+		$facts['nav_links'] = self::nav_links( $xp, $home );
 
 		$content = self::content_root( $xp );
 		self::drop_chrome( $xp, $content );
@@ -108,12 +116,13 @@ class Html_Parser {
 	}
 
 	/**
-	 * The content area: <main>, else the single <article>, else <body>.
+	 * The content area: the single .entry-content, else <main>, else #main-content, else the single
+	 * <article>, else <body>.
 	 *
 	 * @param \DOMXPath $xp XPath.
 	 */
 	protected static function content_root( \DOMXPath $xp ): \DOMNode {
-		foreach ( [ '//main', '//*[@id="main-content"]', '//article' ] as $query ) {
+		foreach ( [ '//*[contains(concat(" ",normalize-space(@class)," ")," entry-content ")]', '//main', '//*[@id="main-content"]', '//article' ] as $query ) {
 			$found = $xp->query( $query );
 			if ( $found && 1 === $found->length ) {
 				return $found->item( 0 );
@@ -175,18 +184,46 @@ class Html_Parser {
 			}
 			$seen[ $src ] = true;
 			$id           = preg_match( '/\bwp-image-(\d+)\b/', $img->getAttribute( 'class' ), $m ) ? (int) $m[1] : (int) $img->getAttribute( 'data-id' );
-			$out[]        = [
+			$image        = [
 				'src'  => mb_substr( $src, 0, 300 ),
 				'file' => mb_substr( (string) basename( (string) parse_url( $src, PHP_URL_PATH ) ), 0, 120 ), // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- pure PHP class (no WordPress).
 				'alt'  => $img->hasAttribute( 'alt' ) ? self::clean( $img->getAttribute( 'alt' ) ) : null,
 				'id'   => $id,
 			];
+			// Marked as decoration (role="presentation" / "none", aria-hidden): hidden from screen readers on
+			// purpose, so no alt is owed.
+			if ( in_array( strtolower( $img->getAttribute( 'role' ) ), [ 'presentation', 'none' ], true ) || 'true' === strtolower( $img->getAttribute( 'aria-hidden' ) ) ) {
+				$image['decorative'] = true;
+			}
+			$out[] = $image;
 			if ( count( $out ) >= self::MAX_IMAGES ) {
 				break;
 			}
 		}
 
 		return $out;
+	}
+
+	/**
+	 * Internal paths linked from the header, menus and footer (unique, capped).
+	 *
+	 * @param \DOMXPath $xp   XPath.
+	 * @param string    $home Home URL.
+	 * @return array<int,string>
+	 */
+	protected static function nav_links( \DOMXPath $xp, string $home ): array {
+		$paths = [];
+		$nodes = $xp->query( '//header|//nav|//footer|//*[contains(concat(" ",normalize-space(@class)," ")," menu ")]' );
+		foreach ( $nodes ? $nodes : [] as $node ) {
+			foreach ( self::links( $xp, $node, $home )[0] as $link ) {
+				$paths[ $link['p'] ] = true;
+			}
+			if ( count( $paths ) >= self::MAX_NAV_LINKS ) {
+				break;
+			}
+		}
+
+		return array_slice( array_keys( $paths ), 0, self::MAX_NAV_LINKS );
 	}
 
 	/**

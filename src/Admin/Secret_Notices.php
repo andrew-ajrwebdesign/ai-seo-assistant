@@ -8,7 +8,9 @@
  * 2. The 4.4.0 upgrade could not seal a secret on this server (Core\Upgrade::attempt()).
  * 3. A secret was found in plain text after the upgrade and has just been sealed (shown once).
  * 4. The 5.0 upgrade could not get Google to revoke the old Search Console grant (shown once).
- * 5. The auth salts are not usable constants in wp-config.php, so WordPress keeps them in the database
+ * 5. No Administrator counts as agency, so every Administrator has the tools (and the Claude budget).
+ *    Persistent until someone is named: the no-lockout fallback must not go unnoticed.
+ * 6. The auth salts are not usable constants in wp-config.php, so WordPress keeps them in the database
  *    beside the sealed secrets, and anyone with the database can open them.
  *
  * Shown on this plugin's screens, the Dashboard and the Plugins screen only: the check reads the secret
@@ -112,6 +114,10 @@ class Secret_Notices {
 			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><p>';
 			wp_nonce_field( Tools_Actions::REDIRECTS );
 			echo '<input type="hidden" name="action" value="' . esc_attr( Tools_Actions::REDIRECTS ) . '"><button type="submit" class="button">' . esc_html__( 'They are in AJR Core: retire the old table', 'ai-seo-assistant' ) . '</button></p></form></div>';
+		}
+
+		if ( in_array( Access::source(), [ 'fallback', 'none' ], true ) ) {
+			echo '<div class="notice notice-warning"><p>' . esc_html__( 'AI SEO Assistant: no Administrator is marked as agency staff, so every Administrator sees the SEO tools and can spend this site’s Claude budget. Mark the agency login in AJR Core, or tick who sees the tools in Settings.', 'ai-seo-assistant' ) . ' <a href="' . esc_url( admin_url( 'admin.php?page=' . Settings_Page::SLUG . '#aisa-s-access' ) ) . '">' . esc_html__( 'Who sees the tools', 'ai-seo-assistant' ) . '</a></p></div>';
 		}
 
 		if ( ! Secret_Store::salts_in_config() && $this->any_secret_stored() ) {

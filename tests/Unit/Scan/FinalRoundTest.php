@@ -278,6 +278,122 @@ class FinalRoundTest extends TestCase {
 	}
 
 	/**
+	 * Item 18: the noise fixes in the rules.
+	 */
+	public function test_scan_noise(): void {
+		$page  = [
+			'title'       => 'Water Heater Installation Northfield | Tank & Tankless',
+			'description' => 'Tank or tankless water heater installed by licensed Northfield plumbers, usually within the week. Upfront prices and the old unit taken away.',
+			'h1'          => [ 'Water heater installation' ],
+			'headings'    => [ [ 'l' => 1, 't' => 'Water heater installation' ] ],
+			'links'       => [ [ 'p' => '/a/' ], [ 'p' => '/b/' ] ],
+			'words'       => 120,
+			'og_image'    => 'https://x.test/o.jpg',
+			'images'      => [],
+		];
+		$codes = static fn( array $facts, array $ctx = [] ) => array_column( \AJR\SEOAssistant\Scan\Rules::evaluate( $facts + $page, $ctx + [ 'inbound' => 3 ] ), 'code' );
+		$img   = static fn( $alt, $stored = '', $extra = [] ) => [ 'images' => [ [ 'file' => 'van.jpg', 'alt' => $alt, 'id' => 9, 'stored_alt' => $stored ] + $extra ] ];
+
+		// alt="" is its own, softer finding; a missing attribute is "no alt"; decoration owes nothing.
+		$this->assertContains( 'alt_empty', $codes( $img( '' ) ) );
+		$this->assertNotContains( 'alt', $codes( $img( '' ) ) );
+		$this->assertContains( 'alt', $codes( $img( null ) ) );
+		$this->assertSame( [], array_intersect( [ 'alt', 'alt_empty' ], $codes( $img( null, '', [ 'decorative' => true ] ) ) ) );
+		// A good printed alt is never a mismatch, even when the Media Library says something else.
+		$this->assertNotContains( 'alt_mismatch', $codes( $img( 'Call our plumbers today', 'A white van parked outside a house' ) ) );
+		// A copy-pasted alt printed over good Media Library alts is.
+		$pasted = [
+			'images' => [
+				[ 'file' => 'kitchen.jpg', 'alt' => 'Our Services', 'id' => 1, 'stored_alt' => 'White kitchen with a gas range' ],
+				[ 'file' => 'porch.jpg', 'alt' => 'Our Services', 'id' => 2, 'stored_alt' => 'Covered porch with two chairs' ],
+			],
+		];
+		$this->assertContains( 'alt_mismatch', $codes( $pasted ) );
+
+		// Menu and footer links count as links in.
+		$this->assertContains( 'orphan', $codes( [], [ 'inbound' => 0 ] ) );
+		$this->assertSame( [], array_intersect( [ 'orphan', 'few_in' ], $codes( [], [ 'inbound' => 0, 'in_menu' => true ] ) ) );
+
+		// Short pages: not for contact, team, other, or a form / calculator page; the copy is softer.
+		$this->assertContains( 'thin', $codes( [] ) );
+		foreach ( [ 'contact', 'team_member', 'other' ] as $type ) {
+			$this->assertNotContains( 'thin', $codes( [], [ 'page_type' => $type ] ), $type );
+		}
+		$this->assertNotContains( 'thin', $codes( [], [ 'is_tool' => true ] ) );
+
+		// More than half the pages: a template finding, reported once.
+		$issues = [];
+		foreach ( range( 1, 8 ) as $id ) {
+			$issues[ $id ] = \AJR\SEOAssistant\Scan\Rules::evaluate( $page, [ 'inbound' => 3 ] + ( $id <= 5 ? [] : [ 'page_type' => 'contact' ] ) );
+		}
+		$site = \AJR\SEOAssistant\Scan\Rules::site_wide( $issues );
+		$this->assertSame( [ 'thin' ], array_keys( $site ), 'thin on 5 of 8 pages' );
+		$this->assertSame( 5, $site['thin']['pages'] );
+		$this->assertSame( [], \AJR\SEOAssistant\Scan\Rules::site_wide( array_slice( $issues, 0, 5, true ) ), 'too few pages to tell' );
+	}
+
+	/**
+	 * Item 18: link suggestions come from related pages (the town every title shares does not count), and
+	 * none when nothing is related.
+	 */
+	public function test_link_suggestions_are_related(): void {
+		\WP_Mock::userFunction( 'trailingslashit' )->andReturnUsing( fn( $s ) => rtrim( (string) $s, '/' ) . '/' );
+		$rows    = [];
+		$pages   = [
+			'/water-heaters/'        => 'Water Heater Installation Northfield',
+			'/tankless-water-heater/' => 'Tankless Water Heaters Northfield',
+			'/drain-cleaning/'       => 'Drain Cleaning Northfield',
+			'/about/'                => 'About Us Northfield',
+			'/blog/'                 => 'Blog Northfield',
+		];
+		foreach ( array_keys( $pages ) as $i => $path ) {
+			$rows[ $i + 1 ] = [
+				'path'  => $path,
+				'facts' => [ 'title' => $pages[ $path ] ],
+			];
+		}
+		$scanner = new class() extends Scanner {
+			/**
+			 * No store needed.
+			 */
+			public function __construct() {}
+
+			/**
+			 * Suggestions, exposed.
+			 *
+			 * @param array<int,array<string,mixed>> $rows    Rows.
+			 * @param string                         $path    Path.
+			 * @param array<int,string>              $popular Popular paths.
+			 * @return array<int,string>
+			 */
+			public function suggest( array $rows, string $path, array $popular ): array {
+				return self::related_from( $path, self::topics( $rows ), $popular, [] );
+			}
+		};
+		$popular = [ '/about/', '/blog/', '/drain-cleaning/', '/tankless-water-heater/' ];
+		$this->assertSame( [ '/tankless-water-heater/' ], $scanner->suggest( $rows, '/water-heaters/', $popular ) );
+		$this->assertSame( [], $scanner->suggest( $rows, '/about/', [ '/blog/', '/drain-cleaning/' ] ), 'nothing related: no suggestion' );
+	}
+
+	/**
+	 * Item 18: the content area is the entry content; sidebar, author box and related posts are not the
+	 * page's; header, menu and footer links are kept apart as links in.
+	 */
+	public function test_parser_content_area(): void {
+		$html  = '<html><head><title>T</title></head><body><header><nav><a href="/services/">S</a></nav></header>'
+			. '<div id="main-content"><article><h1>Post</h1><div class="entry-content"><h2>Real</h2><p>Body <a href="/one/">one</a></p><img src="https://x.test/a.jpg" alt=""><img src="https://x.test/b.jpg" role="presentation"></div>'
+			. '<div class="author-box"><h4>About the author</h4><img src="https://x.test/me.jpg"></div><div class="related-posts"><h3>Related</h3><a href="/two/">two</a></div></article>'
+			. '<div id="sidebar"><h4>Recent</h4><a href="/three/">three</a></div></div><footer><a href="/privacy/">P</a></footer></body></html>';
+		$facts = \AJR\SEOAssistant\Scan\Html_Parser::parse( $html, 'https://x.test/' );
+		$this->assertSame( [ 'Post' ], $facts['h1'], 'the theme H1 still counts' );
+		$this->assertSame( [ 1, 2 ], array_column( $facts['headings'], 'l' ), 'no H4/H3 from the author box or sidebar' );
+		$this->assertSame( [ '/one/' ], array_column( $facts['links'], 'p' ) );
+		$this->assertSame( [ '', null ], array_column( $facts['images'], 'alt' ) );
+		$this->assertTrue( $facts['images'][1]['decorative'] );
+		$this->assertSame( [ '/services/', '/privacy/' ], $facts['nav_links'] );
+	}
+
+	/**
 	 * Item 17: an oversized push is refused on rest_pre_dispatch (before WordPress decodes its JSON);
 	 * other routes and normal-sized pushes pass through untouched.
 	 */
