@@ -3,8 +3,8 @@ name: CI
 on:
   push:
     branches: [main]
+  # Every PR, stacked ones too (Andrew, 2026-10-06): a PR into a feature branch is checked as well.
   pull_request:
-    branches: [main]
 
 jobs:
   phpcs:

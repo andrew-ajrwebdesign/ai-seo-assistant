@@ -2,15 +2,16 @@
 /**
  * Access — the report is the owner's; the tools are the agency's.
  *
- * WHY (Andrew, 2026-09-29): the client — usually a WordPress Administrator — sees the Weekly report and
- * none of the plugin's tool screens (Settings, Audit, Recommendations, Search Console, Indexing, Markdown,
- * Redirects, Metadata report). Administrators all hold manage_options, so the tools move behind their own
- * capability, TOOLS_CAP, granted by this filter to the users named in the "Agency users" option.
+ * WHY (Andrew, 2026-09-29): the client — usually a WordPress Administrator — sees the Report and none of
+ * the plugin's tool screens (SEO scan, Search Console, Changes, Settings, and the editor box). Every one of
+ * them can spend the agency's Claude key or change the site's SEO fields. Administrators all hold
+ * manage_options, so the tools sit behind their own capability, TOOLS_CAP, granted by this filter.
  *
- * NO LIST. Until at least one existing Administrator is named (a list that names only deleted or demoted
- * users counts as none): with AJR Core active, AJR Core decides who is agency (4.4.0: one resolver for the
- * whole stack; Administrators whose login email is on the agency's domain); without AJR Core, every
- * Administrator keeps the tools, as before.
+ * WHO (5.0): AJR Core is required, and its Support::is_agency_user() is the stack's single agency resolver
+ * (Administrators whose login email is on the agency's domain). The older "Agency users" list is honoured
+ * only as an explicit override: when it names at least one current Administrator, it alone decides. Should
+ * AJR Core ever be missing, nobody holds the tools (the client still sees the Report): failing closed on a
+ * capability that spends money is the safe direction.
  *
  * @package AJR\SEOAssistant
  */
@@ -65,9 +66,9 @@ class Access {
 	/**
 	 * Whether a user is an agency user.
 	 *
-	 * In order: a list that names a current Administrator wins. With no list, AJR Core (when active) is
-	 * the stack's single agency resolver: its Support::is_agency_user() (login email on the agency's
-	 * domain, filter `ajr_core_is_agency_user`). Without AJR Core, every Administrator, as before 4.4.0.
+	 * In order: an override list that names a current Administrator wins. Otherwise AJR Core's
+	 * Support::is_agency_user() (login email on the agency's domain, filter `ajr_core_is_agency_user`).
+	 * Without AJR Core: nobody (5.0 requires it; see the class comment).
 	 *
 	 * @param int $user_id User ID.
 	 */
@@ -77,9 +78,18 @@ class Access {
 			return in_array( $user_id, $named, true );
 		}
 
-		$core = self::core_says_agency( $user_id );
+		return true === self::core_says_agency( $user_id );
+	}
 
-		return null === $core ? true : $core;
+	/**
+	 * Where the answer comes from, for the Settings screen: 'override', 'ajr-core' or 'none'.
+	 */
+	public static function source(): string {
+		if ( [] !== self::named() ) {
+			return 'override';
+		}
+
+		return class_exists( 'AJR\Core\Admin\Support' ) ? 'ajr-core' : 'none';
 	}
 
 	/**

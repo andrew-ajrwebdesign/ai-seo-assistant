@@ -12,6 +12,7 @@ class RankMath_Adapter {
 	const TITLE_FIELD       = 'rank_math_title';
 	const DESCRIPTION_FIELD = 'rank_math_description';
 	const ROBOTS_FIELD      = 'rank_math_robots';
+	const KEYPHRASE_FIELD   = 'rank_math_focus_keyword';
 
 	public function get_id() {
 		return 'rank_math';
@@ -33,7 +34,7 @@ class RankMath_Adapter {
 		update_post_meta(
 			$post_id,
 			self::TITLE_FIELD,
-			sanitize_text_field( $title )
+			wp_slash( sanitize_text_field( $title ) )
 		);
 	}
 
@@ -41,7 +42,7 @@ class RankMath_Adapter {
 		update_post_meta(
 			$post_id,
 			self::DESCRIPTION_FIELD,
-			sanitize_textarea_field( $description )
+			wp_slash( sanitize_textarea_field( $description ) )
 		);
 	}
 
@@ -87,35 +88,43 @@ class RankMath_Adapter {
 		return defined( 'RANK_MATH_VERSION' ) || class_exists( 'RankMath' ) || class_exists( '\RankMath\Runner' );
 	}
 
-	public function save_noindex( $post_id, $noindex = true ) {
-		$robots = get_post_meta( $post_id, 'rank_math_robots', true );
+	/**
+	 * Whether this SEO plugin has a focus keyphrase field (5.0 page review).
+	 *
+	 * @return bool
+	 */
+	public function supports_keyphrase() {
+		return true;
+	}
 
-		if ( ! is_array( $robots ) ) {
-			$robots = [];
-		}
+	/**
+	 * The primary focus keyword (Rank Math keeps a comma-separated list; the first is the primary).
+	 *
+	 * @param int $post_id Post ID.
+	 * @return string
+	 */
+	public function get_keyphrase( $post_id ) {
+		$list = explode( ',', (string) get_post_meta( $post_id, self::KEYPHRASE_FIELD, true ) );
 
-		if ( $noindex ) {
-			$robots[] = 'noindex';
-			$robots   = array_values( array_unique( $robots ) );
+		return trim( (string) $list[0] );
+	}
 
-			update_post_meta( $post_id, 'rank_math_robots', $robots );
+	/**
+	 * Replace the primary focus keyword and keep any secondary ones.
+	 *
+	 * @param int    $post_id   Post ID.
+	 * @param string $keyphrase Keyphrase ('' removes the primary).
+	 */
+	public function save_keyphrase( $post_id, $keyphrase ) {
+		$keyphrase = str_replace( ',', ' ', sanitize_text_field( $keyphrase ) );
+		$list      = array_filter( array_map( 'trim', explode( ',', (string) get_post_meta( $post_id, self::KEYPHRASE_FIELD, true ) ) ) );
+		$rest      = array_slice( array_values( $list ), 1 );
+		$value     = implode( ',', array_filter( array_merge( [ trim( $keyphrase ) ], $rest ) ) );
+		if ( '' === $value ) {
+			delete_post_meta( $post_id, self::KEYPHRASE_FIELD );
 			return;
 		}
-
-		$robots = array_values(
-			array_filter(
-				$robots,
-				function ( $robot ) {
-					return 'noindex' !== $robot;
-				}
-			)
-		);
-
-		if ( empty( $robots ) ) {
-			delete_post_meta( $post_id, 'rank_math_robots' );
-		} else {
-			update_post_meta( $post_id, 'rank_math_robots', $robots );
-		}
+		update_post_meta( $post_id, self::KEYPHRASE_FIELD, wp_slash( $value ) );
 	}
 
 	public function is_noindex( $post_id ) {

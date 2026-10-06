@@ -1,7 +1,8 @@
 name: Build release zip
 
-# Packages an install-ready plugin zip (correct folder name, Composer autoloader
-# included, dev files excluded) and publishes it to the Releases page.
+# Packages an install-ready plugin zip (correct folder name, dev files excluded) and
+# publishes it to the Releases page. 5.0 has no runtime dependency (the plugin carries
+# its own autoloader), so the zip holds no vendor/ and Composer never runs here.
 #
 #  - Every push to main refreshes a rolling "latest" pre-release, so the newest
 #    install-ready zip is ALWAYS downloadable from a stable URL:
@@ -29,9 +30,6 @@ jobs:
       - name: Check out the pushed commit
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - name: Install production dependencies
-        run: composer install --no-dev --optimize-autoloader --no-interaction --no-progress
-
       - name: Stage the plugin folder
         run: |
           mkdir -p build/ai-seo-assistant
@@ -40,6 +38,10 @@ jobs:
             --exclude='.github' \
             --exclude='.claude' \
             --exclude='node_modules' \
+            --exclude='vendor' \
+            --exclude='composer.json' \
+            --exclude='composer.lock' \
+            --exclude='CHANGELOG.md' \
             --exclude='build' \
             --exclude='*.zip' \
             --exclude='.env' \

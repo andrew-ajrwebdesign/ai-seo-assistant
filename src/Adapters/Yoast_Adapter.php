@@ -12,6 +12,7 @@ class Yoast_Adapter {
 	const TITLE_FIELD       = '_yoast_wpseo_title';
 	const DESCRIPTION_FIELD = '_yoast_wpseo_metadesc';
 	const NOINDEX_FIELD     = '_yoast_wpseo_meta-robots-noindex';
+	const KEYPHRASE_FIELD   = '_yoast_wpseo_focuskw';
 
 	public function get_id() {
 		return 'yoast';
@@ -33,7 +34,7 @@ class Yoast_Adapter {
 		update_post_meta(
 			$post_id,
 			self::TITLE_FIELD,
-			sanitize_text_field( $title )
+			wp_slash( sanitize_text_field( $title ) )
 		);
 	}
 
@@ -41,7 +42,7 @@ class Yoast_Adapter {
 		update_post_meta(
 			$post_id,
 			self::DESCRIPTION_FIELD,
-			sanitize_textarea_field( $description )
+			wp_slash( sanitize_textarea_field( $description ) )
 		);
 	}
 
@@ -86,12 +87,38 @@ class Yoast_Adapter {
 		return defined( 'WPSEO_VERSION' ) || defined( 'YOAST_SEO_VERSION' ) || class_exists( 'WPSEO_Options' );
 	}
 
-	public function save_noindex( $post_id, $noindex = true ) {
-		if ( $noindex ) {
-			update_post_meta( $post_id, '_yoast_wpseo_meta-robots-noindex', '1' );
-		} else {
-			delete_post_meta( $post_id, '_yoast_wpseo_meta-robots-noindex' );
+	/**
+	 * Whether this SEO plugin has a focus keyphrase field (5.0 page review).
+	 *
+	 * @return bool
+	 */
+	public function supports_keyphrase() {
+		return true;
+	}
+
+	/**
+	 * The page's focus keyphrase.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return string
+	 */
+	public function get_keyphrase( $post_id ) {
+		return (string) get_post_meta( $post_id, self::KEYPHRASE_FIELD, true );
+	}
+
+	/**
+	 * Save the focus keyphrase ('' removes it).
+	 *
+	 * @param int    $post_id   Post ID.
+	 * @param string $keyphrase Keyphrase.
+	 */
+	public function save_keyphrase( $post_id, $keyphrase ) {
+		$keyphrase = sanitize_text_field( $keyphrase );
+		if ( '' === $keyphrase ) {
+			delete_post_meta( $post_id, self::KEYPHRASE_FIELD );
+			return;
 		}
+		update_post_meta( $post_id, self::KEYPHRASE_FIELD, wp_slash( $keyphrase ) );
 	}
 
 	public function is_noindex( $post_id ) {

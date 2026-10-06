@@ -33,7 +33,7 @@ class TSF_Adapter {
 		update_post_meta(
 			$post_id,
 			self::TITLE_FIELD,
-			sanitize_text_field( $title )
+			wp_slash( sanitize_text_field( $title ) )
 		);
 	}
 
@@ -41,7 +41,7 @@ class TSF_Adapter {
 		update_post_meta(
 			$post_id,
 			self::DESCRIPTION_FIELD,
-			sanitize_textarea_field( $description )
+			wp_slash( sanitize_textarea_field( $description ) )
 		);
 	}
 
@@ -86,12 +86,33 @@ class TSF_Adapter {
 		return defined( 'THE_SEO_FRAMEWORK_VERSION' ) || class_exists( 'The_SEO_Framework\Load' );
 	}
 
-	public function save_noindex( $post_id, $noindex = true ) {
-		if ( $noindex ) {
-			update_post_meta( $post_id, '_genesis_noindex', 1 );
-		} else {
-			delete_post_meta( $post_id, '_genesis_noindex' );
-		}
+	/**
+	 * The SEO Framework has no focus keyphrase field (only its paid Focus extension does), so the page
+	 * review shows the keyphrase suggestion as advice and never writes it.
+	 *
+	 * @return bool
+	 */
+	public function supports_keyphrase() {
+		return false;
+	}
+
+	/**
+	 * No keyphrase field.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return string
+	 */
+	public function get_keyphrase( $post_id ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- adapter interface.
+		return '';
+	}
+
+	/**
+	 * No keyphrase field: nothing is written.
+	 *
+	 * @param int    $post_id   Post ID.
+	 * @param string $keyphrase Keyphrase.
+	 */
+	public function save_keyphrase( $post_id, $keyphrase ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- adapter interface.
 	}
 
 	public function is_noindex( $post_id ) {

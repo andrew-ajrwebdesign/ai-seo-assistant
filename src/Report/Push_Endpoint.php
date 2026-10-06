@@ -93,6 +93,11 @@ class Push_Endpoint {
 	 * @return true|\WP_Error
 	 */
 	public function authorize( \WP_REST_Request $request ) {
+		// 5.0: size first (declared, then actual), before any hashing or decoding of a body that big.
+		$declared = (int) $request->get_header( 'content_length' );
+		if ( $declared > Snapshot::MAX_BYTES_V2 || strlen( (string) $request->get_body() ) > Snapshot::MAX_BYTES_V2 ) {
+			return new \WP_Error( 'aisa_report_too_large', 'Body is larger than ' . Snapshot::MAX_BYTES_V2 . ' bytes.', [ 'status' => 413 ] );
+		}
 		$problem = Push_Key::verify( Push_Key::get(), (string) $request->get_body(), (string) $request->get_header( Push_Key::HEADER ), time() );
 		if ( '' === $problem ) {
 			return true;
@@ -130,12 +135,18 @@ class Push_Endpoint {
 			return new \WP_Error( 'aisa_report_wrong_site', 'This report is for ' . $snapshot['site'] . ', not ' . $here . '.', [ 'status' => 422 ] );
 		}
 
-		$result = $this->store->put( $snapshot, time() );
+		$period = (string) ( $snapshot['period'] ?? 'week' );
+		$start  = (string) $snapshot[ $period ]['start'];
+		$pages  = count( (array) ( $snapshot['pages'] ?? [] ) );
+		$result = $this->store->receive( $snapshot, time() );
 
 		return new \WP_REST_Response(
 			[
 				'result' => $result,
-				'week'   => $snapshot['week']['start'],
+				'week'   => $start, // Kept for v1 senders (retainer-scan reads this key).
+				'period' => $period,
+				'start'  => $start,
+				'pages'  => $pages,
 			],
 			'stale' === $result ? 409 : 200
 		);

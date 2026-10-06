@@ -8,9 +8,6 @@
             "AJR\\SEOAssistant\\": "src/"
         }
     },
-    "require": {
-        "league/html-to-markdown": "^5.1"
-    },
     "config": {
         "optimize-autoloader": true,
         "allow-plugins": {

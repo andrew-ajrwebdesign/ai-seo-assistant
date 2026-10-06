@@ -74,12 +74,33 @@ class Claude_Client {
 			'max_tokens' => 16000,
 			'timeout'    => 90,
 		],
+		'review'          => [
+			'effort'     => 'medium',
+			'max_tokens' => 16000,
+			'timeout'    => 90,
+		],
 		'test'            => [
 			'effort'     => 'low',
 			'max_tokens' => 1024,
 			'timeout'    => 20,
 		],
 	];
+
+	/**
+	 * What the most recent reply cost, in dollars (Spend::cost() of its usage); 0 before one arrives.
+	 *
+	 * @var float
+	 */
+	protected $last_cost = 0.0;
+
+	/**
+	 * Cost of the most recent reply in dollars.
+	 *
+	 * @return float
+	 */
+	public function get_last_cost() {
+		return $this->last_cost;
+	}
 
 	/**
 	 * Model actually used for the most recent successful request.
@@ -104,17 +125,17 @@ class Claude_Client {
 	public static function available_models() {
 		return [
 			'claude-opus-5'    => [
-				'label'     => __( 'Claude Opus 5: best quality (recommended)', 'ai-seo-assistant' ),
+				'label'     => __( 'Claude Opus 5 (recommended)', 'ai-seo-assistant' ),
 				'effort'    => true,
 				'fallbacks' => true,
 			],
 			'claude-sonnet-5'  => [
-				'label'     => __( 'Claude Sonnet 5: faster, lower cost', 'ai-seo-assistant' ),
+				'label'     => __( 'Claude Sonnet 5: faster, about half the cost', 'ai-seo-assistant' ),
 				'effort'    => true,
 				'fallbacks' => false,
 			],
 			'claude-haiku-4-5' => [
-				'label'     => __( 'Claude Haiku 4.5: fastest, lowest cost', 'ai-seo-assistant' ),
+				'label'     => __( 'Claude Haiku 4.5: fastest, shortest suggestions', 'ai-seo-assistant' ),
 				'effort'    => false,
 				'fallbacks' => false,
 			],
@@ -215,7 +236,7 @@ class Claude_Client {
 	 * @param string $task   Key of self::TASKS; sets effort and max_tokens.
 	 * @return array|\WP_Error Decoded object, or an error with a masked message.
 	 */
-	public function generate_json( $prompt, array $schema, $task = 'metadata' ) {
+	public function generate_json( $prompt, array $schema, $task = 'metadata', array $images = [] ) {
 		$response = $this->request(
 			(string) $prompt,
 			$task,
@@ -224,7 +245,8 @@ class Claude_Client {
 					'type'   => 'json_schema',
 					'schema' => $schema,
 				],
-			]
+			],
+			$images
 		);
 
 		if ( is_wp_error( $response ) ) {
@@ -269,7 +291,7 @@ class Claude_Client {
 	 * @param array  $output_config Extra output_config entries (e.g. format).
 	 * @return array|\WP_Error Decoded response body.
 	 */
-	protected function request( $prompt, $task, array $output_config = [] ) {
+	protected function request( $prompt, $task, array $output_config = [], array $images = [] ) {
 		$api_key = $this->get_api_key();
 
 		if ( '' === $api_key ) {
@@ -285,6 +307,13 @@ class Claude_Client {
 			return $limited;
 		}
 
+		// 5.0: the per-site billing-month cap, checked before every call (editor box included).
+		$capped = Spend::check( isset( self::TASKS[ $task ] ) ? $task : 'metadata' );
+
+		if ( is_wp_error( $capped ) ) {
+			return $capped;
+		}
+
 		$model  = $this->get_model();
 		$models = self::available_models();
 		$shape  = self::TASKS[ $task ] ?? self::TASKS['metadata'];
@@ -296,7 +325,7 @@ class Claude_Client {
 			'messages'   => [
 				[
 					'role'    => 'user',
-					'content' => $prompt,
+					'content' => self::content_blocks( $prompt, $images ),
 				],
 			],
 		];
@@ -359,6 +388,11 @@ class Claude_Client {
 			);
 		}
 
+		// Every billed reply is counted, a refused or cut-off one included: Anthropic bills its tokens too.
+		if ( isset( $data['usage'] ) && is_array( $data['usage'] ) ) {
+			$this->last_cost = Spend::record( isset( $data['model'] ) ? (string) $data['model'] : $model, $data['usage'] );
+		}
+
 		$stop_reason = $data['stop_reason'] ?? '';
 
 		if ( 'refusal' === $stop_reason ) {
@@ -378,6 +412,41 @@ class Claude_Client {
 		$this->last_model = isset( $data['model'] ) ? sanitize_text_field( $data['model'] ) : $model;
 
 		return $data;
+	}
+
+	/**
+	 * The user message's content: the prompt alone, or (5.0 page review) each image introduced by its ID
+	 * and attached as a base64 image block, then the prompt, so Claude describes the photo it can see.
+	 *
+	 * @param string                           $prompt Prompt.
+	 * @param array<int,array<string,mixed>>   $images [ id, media_type, data (base64) ].
+	 * @return string|array<int,array<string,mixed>>
+	 */
+	public static function content_blocks( $prompt, array $images ) {
+		if ( [] === $images ) {
+			return $prompt;
+		}
+		$blocks = [];
+		foreach ( $images as $image ) {
+			$blocks[] = [
+				'type' => 'text',
+				'text' => 'Image ' . (int) $image['id'] . ':',
+			];
+			$blocks[] = [
+				'type'   => 'image',
+				'source' => [
+					'type'       => 'base64',
+					'media_type' => (string) $image['media_type'],
+					'data'       => (string) $image['data'],
+				],
+			];
+		}
+		$blocks[] = [
+			'type' => 'text',
+			'text' => $prompt,
+		];
+
+		return $blocks;
 	}
 
 	/**
