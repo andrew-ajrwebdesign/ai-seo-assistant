@@ -88,8 +88,15 @@ class AutoTypesTest extends TestCase {
 		return new class() extends Change_Log {
 			/** @var array<int,array<string,mixed>> */
 			public $rows = [];
+			/** @var bool The "database" refuses inserts. */
+			public $refuse = false;
+			/** @var int */
+			public $next = 0;
 			public function log( string $batch, int $post_id, string $path, string $field, int $object_id, string $before, string $after, int $user_id ): int {
-				$id                = count( $this->rows ) + 1;
+				if ( $this->refuse ) {
+					return 0;
+				}
+				$id                = ++$this->next;
 				$this->rows[ $id ] = compact( 'id', 'batch', 'post_id', 'path', 'field', 'object_id', 'user_id' ) + [
 					'before_value' => $before,
 					'after_value'  => $after,
@@ -104,7 +111,29 @@ class AutoTypesTest extends TestCase {
 				$this->rows[ $id ]['undone_at'] = 'now';
 				return true;
 			}
+			public function discard( int $id ): bool {
+				unset( $this->rows[ $id ] );
+				return true;
+			}
 		};
+	}
+
+	/**
+	 * Last round A11: logged first; a type the log cannot hold is not set (it could not be undone) and waits.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_not_set_when_the_log_refuses(): void {
+		$core        = 'AJR\Core\Schema\Page_Types';
+		$log         = $this->log();
+		$log->refuse = true;
+		$this->assertSame( [], Auto_Types::apply( [ 30 => 'service' ], $log ) );
+		$this->assertSame( '', $core::get( 30 ), 'not set: it could not be undone' );
+		$this->assertSame( [ 30 => 'service' ], Auto_Types::pending(), 'tried again on a later pass' );
+		$log->refuse = false;
+		$this->assertSame( [ 30 => 'service' ], Auto_Types::apply( [ 30 => 'service' ], $log ) );
+		$this->assertCount( 1, $log->rows );
 	}
 
 	/**

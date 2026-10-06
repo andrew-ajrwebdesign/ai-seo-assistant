@@ -79,11 +79,18 @@ class Auto_Types {
 				$pending[ $id ] = (string) $type;
 				continue;
 			}
-			unset( $pending[ $id ] );
-			if ( ! Page_Role::set_auto( $id, (string) $type ) ) {
+			// Logged first, as every change the plugin makes: a type the log cannot hold could not be undone,
+			// so it is not set (and waits for the next pass). User 0: "Automatic".
+			$row = $log->log( $batch, $id, Page_Data::path_of( (string) get_permalink( $id ) ), self::FIELD, 0, '', (string) $type, 0 );
+			if ( 0 === $row ) {
+				$pending[ $id ] = (string) $type;
 				continue;
 			}
-			$log->log( $batch, $id, Page_Data::path_of( (string) get_permalink( $id ) ), self::FIELD, 0, '', (string) $type, 0 ); // User 0: "Automatic".
+			unset( $pending[ $id ] );
+			if ( ! Page_Role::set_auto( $id, (string) $type ) ) {
+				$log->discard( $row ); // Not set after all (AJR Core refused): nothing to undo.
+				continue;
+			}
 			$done[ $id ] = (string) $type;
 		}
 		self::save_pending( $pending );
