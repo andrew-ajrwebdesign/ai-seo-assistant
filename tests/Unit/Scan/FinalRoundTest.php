@@ -278,6 +278,33 @@ class FinalRoundTest extends TestCase {
 	}
 
 	/**
+	 * Item 19: Google's limits are checked server-side (title width with what the SEO plugin appends);
+	 * the prompt carries the suffix, the agency's phrases and brand rule, siblings and the new alt rules.
+	 */
+	public function test_review_prompt_and_limits(): void {
+		$this->assertSame( [], \AJR\SEOAssistant\Review\Page_Review::listing_problems( 'Water Heater Installation | Tank & Tankless', str_repeat( 'word ', 25 ) ) );
+		$wide = \AJR\SEOAssistant\Review\Page_Review::listing_problems( 'Water Heater Installation and Repair in Northfield | Tank & Tankless', 'Short.' );
+		$this->assertCount( 2, $wide, 'too wide and too short' );
+		$this->assertCount( 1, \AJR\SEOAssistant\Review\Page_Review::listing_problems( 'Water Heater Installation | Tank & Tankless', str_repeat( 'word ', 25 ), ' | Northfield Plumbing and Heating Company' ), 'the appended site name counts' );
+
+		$prompt = ( new \AJR\SEOAssistant\AI\Prompt_Builder() )->build_review_prompt(
+			[
+				'title_suffix'  => ' | Northfield Plumbing',
+				'avoid_phrases' => 'unlock, nestled',
+				'siblings'      => [ 'Boilers — /boilers/ (same title)' ],
+				'content'       => 'x',
+			]
+		);
+		$this->assertStringContainsString( 'adds " | Northfield Plumbing" to the end of every title', $prompt );
+		$this->assertStringContainsString( 'unlock, nestled', $prompt );
+		$this->assertStringContainsString( 'Boilers — /boilers/ (same title)', $prompt );
+		$this->assertStringContainsString( 'only when you are certain', $prompt );
+		$this->assertStringContainsString( 'A logo or an image of text', $prompt );
+		$this->assertStringContainsString( 'empty alt, so screen readers do not read the name twice', $prompt );
+		$this->assertStringNotContainsString( 'separated by " | "', $prompt, 'no business name when the plugin adds it' );
+	}
+
+	/**
 	 * Item 18: the noise fixes in the rules.
 	 */
 	public function test_scan_noise(): void {

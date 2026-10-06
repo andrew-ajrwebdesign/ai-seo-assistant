@@ -37,6 +37,7 @@ use AJR\SEOAssistant\Scan\Ranking;
 use AJR\SEOAssistant\Scan\Rules;
 use AJR\SEOAssistant\Scan\Scan_Store;
 use AJR\SEOAssistant\Scan\Scanner;
+use AJR\SEOAssistant\Scan\Title_Width;
 use AJR\SEOAssistant\Search\Page_Data;
 
 defined( 'ABSPATH' ) || exit;
@@ -211,6 +212,7 @@ class Page_Review {
 		if ( null !== $page ) {
 			Ranking::curve(); // The site's own expected CTR, as the scan uses.
 		}
+		$suffix = $this->title_suffix();
 		$prompt = ( new Prompt_Builder() )->build_review_prompt(
 			[
 				'post_title'          => wp_strip_all_tags( get_the_title( $post ) ),
@@ -236,12 +238,26 @@ class Page_Review {
 				'headings'            => array_map( static fn( $h ) => 'H' . $h['l'] . ' ' . $h['t'], array_slice( (array) ( $facts['headings'] ?? [] ), 0, 20 ) ),
 				'keyphrase_supported' => (bool) $this->adapter->supports_keyphrase(),
 				'seo_plugin'          => (string) $this->adapter->get_name(),
+				'title_suffix'        => $suffix,
+				'include_brand'       => (string) get_option( 'ai_seo_assistant_include_brand', 'no' ),
+				'avoid_phrases'       => sanitize_text_field( (string) get_option( 'ai_seo_assistant_avoid_phrases', '' ) ),
+				'siblings'            => $this->siblings( $post_id, (array) $row['issues'], $facts ),
 			]
 		);
 
 		$reply = $this->claude->generate_json( $prompt, ( new Prompt_Builder() )->review_schema(), 'review', $blocks );
 		if ( is_wp_error( $reply ) ) {
 			return $reply;
+		}
+		// Checked here, not trusted: a title too wide for Google or a description out of range gets ONE
+		// retry, text only (no photos), and only the title and description are taken from it.
+		$problems = self::listing_problems( (string) ( $reply['title']['value'] ?? '' ), (string) ( $reply['description']['value'] ?? '' ), $suffix );
+		if ( [] !== $problems ) {
+			$retry = $this->claude->generate_json( $prompt . "\n\nYour previous answer broke these limits: " . implode( ' ', $problems ) . ' Return the whole answer again with them fixed (alts may be empty).', ( new Prompt_Builder() )->review_schema(), 'review' );
+			if ( ! is_wp_error( $retry ) && count( self::listing_problems( (string) ( $retry['title']['value'] ?? '' ), (string) ( $retry['description']['value'] ?? '' ), $suffix ) ) < count( $problems ) ) {
+				$reply['title']       = $retry['title'];
+				$reply['description'] = $retry['description'];
+			}
 		}
 
 		$by_id = [];
@@ -722,6 +738,81 @@ class Page_Review {
 		$scanner = new Scanner( $this->store );
 		$scanner->scan_page( $post_id );
 		$scanner->finalize( false );
+	}
+
+	/**
+	 * What is wrong with a suggested title and description against Google's limits (none: []). The title is
+	 * measured with what the SEO plugin appends to it.
+	 *
+	 * @param string $title       Suggested title.
+	 * @param string $description Suggested description.
+	 * @param string $suffix      What the SEO plugin appends ('' when nothing).
+	 * @return array<int,string> One sentence per problem, for the retry prompt.
+	 */
+	public static function listing_problems( string $title, string $description, string $suffix = '' ): array {
+		$out = [];
+		$px  = Title_Width::px( $title . $suffix );
+		if ( $px > Title_Width::LIMIT_PX ) {
+			$out[] = sprintf( 'The title%s is %d px wide; it must fit %d px: shorten it.', '' !== $suffix ? ' (with "' . $suffix . '" added)' : '', $px, Title_Width::LIMIT_PX );
+		}
+		$len = mb_strlen( $description );
+		if ( $len > Rules::DESC_MAX ) {
+			$out[] = sprintf( 'The description is %d characters; it must be at most %d.', $len, Rules::DESC_MAX );
+		} elseif ( $len > 0 && $len < Rules::DESC_MIN ) {
+			$out[] = sprintf( 'The description is %d characters; it must be at least %d.', $len, Rules::DESC_MIN );
+		}
+
+		return $out;
+	}
+
+	/**
+	 * What the SEO plugin appends to every title by itself ('' when nothing): The SEO Framework adds the
+	 * site name unless its "remove site title" setting is on.
+	 */
+	protected function title_suffix(): string {
+		if ( 'The SEO Framework' !== (string) $this->adapter->get_name() ) {
+			return '';
+		}
+		$tsf = get_option( 'autodescription-site-settings', [] );
+		if ( is_array( $tsf ) && ! empty( $tsf['title_rem_additions'] ) ) {
+			return '';
+		}
+		$name = wp_strip_all_tags( (string) get_bloginfo( 'name' ) );
+
+		return '' === $name ? '' : ' | ' . $name;
+	}
+
+	/**
+	 * For a duplicate title or description: the other pages that share it ("title — /path/"), at most 5.
+	 *
+	 * @param int                            $post_id This page.
+	 * @param array<int,array<string,mixed>> $issues  Its scan issues.
+	 * @param array<string,mixed>            $facts   Its facts.
+	 * @return array<int,string>
+	 */
+	protected function siblings( int $post_id, array $issues, array $facts ): array {
+		$codes = array_column( $issues, 'code' );
+		if ( ! in_array( 'title_duplicate', $codes, true ) && ! in_array( 'desc_duplicate', $codes, true ) ) {
+			return [];
+		}
+		$title = mb_strtolower( (string) ( $facts['title'] ?? '' ) );
+		$desc  = mb_strtolower( (string) ( $facts['description'] ?? '' ) );
+		$out   = [];
+		foreach ( $this->store->all_facts() as $id => $row ) {
+			if ( (int) $id === $post_id ) {
+				continue;
+			}
+			$same_t = '' !== $title && mb_strtolower( (string) ( $row['facts']['title'] ?? '' ) ) === $title;
+			$same_d = '' !== $desc && mb_strtolower( (string) ( $row['facts']['description'] ?? '' ) ) === $desc;
+			if ( $same_t || $same_d ) {
+				$out[] = wp_strip_all_tags( (string) get_the_title( (int) $id ) ) . ' — ' . (string) $row['path'] . ( $same_t ? ' (same title)' : ' (same description)' );
+			}
+			if ( count( $out ) >= 5 ) {
+				break;
+			}
+		}
+
+		return $out;
 	}
 
 	/**

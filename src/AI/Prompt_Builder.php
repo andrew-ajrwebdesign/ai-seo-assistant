@@ -164,7 +164,8 @@ class Prompt_Builder {
 	 * @param array $args post_title, permalink, content, current (title, description, keyphrase),
 	 *                    queries (rows), totals (clicks, impressions, ctr, position, expected_ctr), ga4,
 	 *                    business (lines), tone, issues (lines), images (id, file, alt), headings (lines),
-	 *                    keyphrase_supported (bool), seo_plugin (name).
+	 *                    keyphrase_supported (bool), seo_plugin (name), title_suffix (what the SEO plugin
+	 *                    appends), include_brand ('yes'|'no'), avoid_phrases, siblings (lines).
 	 * @return string
 	 */
 	public function build_review_prompt( $args ) {
@@ -177,14 +178,30 @@ class Prompt_Builder {
 		$p[] = '- At most about 55 characters, so it fits Google\'s desktop width (about 580 px in Arial 20px). Never longer than 60 characters.';
 		$p[] = '- Lead with the page\'s main search (given below, chosen from the searches that bring this page real traffic and are about what it is for), worded naturally. If no main search is given, lead with what the page offers.';
 		$p[] = '- If the top search is not what this page is for (a competitor\'s or another business\'s name, or a topic the page does not cover), say so in the why and write for what the page is for. Never retarget a service, contact or other money page around a competitor or an off-topic search.';
-		$p[] = '- Then a short differentiator or the business name, separated by " | ". No keyword stuffing, no ALL CAPS.';
+		if ( '' !== (string) ( $args['title_suffix'] ?? '' ) ) {
+			$p[] = '- The SEO plugin adds "' . $args['title_suffix'] . '" to the end of every title by itself: do NOT include the business name, and leave room for that ending (the whole title, ending included, must fit).';
+		} else {
+			$p[] = '- Then a short differentiator or the business name, separated by " | ".';
+		}
+		$p[] = '- No keyword stuffing, no ALL CAPS.';
+		if ( 'yes' === (string) ( $args['include_brand'] ?? '' ) && '' === (string) ( $args['title_suffix'] ?? '' ) ) {
+			$p[] = '- The agency wants the business name in the title.';
+		}
+		if ( ! empty( $args['siblings'] ) ) {
+			$p[] = '- Other pages on the site already use the same title or description (below): write one that tells this page apart from them.';
+			foreach ( (array) $args['siblings'] as $line ) {
+				$p[] = '  - ' . $line;
+			}
+		}
 		$p[] = 'Rules for the meta description:';
 		$p[] = '- 120 to 155 characters, one or two complete sentences, ending on a full stop.';
 		$p[] = '- Answer what the searcher wants (cost, speed, area, trust) using only facts from the page or the business details. End with the next step when the page supports one (a phone number only if it is in the business details).';
 		$p[] = 'Rules for the focus keyphrase:';
 		$p[] = '- The main search the page should rank for, lower case, 2 to 5 words: the main search given below when there is one, never a business\'s name or an off-topic search. It must appear in your title.';
 		$p[] = 'Rules for alt text:';
-		$p[] = '- Look at each attached photo and describe what is actually in it, in plain words, under 125 characters. Name a recognisable landmark when you can see one (a capitol dome, a clock tower, a named river or mountain). No "image of" or "photo of", no keyword lists, nothing the photo does not show.';
+		$p[] = '- Look at each attached photo and describe what is actually in it, in plain words, under 125 characters. Name a landmark only when you are certain which one it is (otherwise describe it: "a domed government building"). No "image of" or "photo of", no keyword lists, nothing the photo does not show.';
+		$p[] = '- A logo or an image of text: the alt is the text it shows (a logo: the business name as written on it).';
+		$p[] = '- A card or teaser image whose link or caption beside it already names the page (a blog card, a service tile): an empty alt, so screen readers do not read the name twice; say so in the why.';
 		$p[] = '- If you cannot tell what a photo shows, return an empty alt and say so in the why; never guess from the file name or the page.';
 		$p[] = '- Return one entry per attached image, using its image_id. A purely decorative image gets an empty alt and a why that says so.';
 		$p[] = 'Rules for editor advice:';
@@ -197,6 +214,9 @@ class Prompt_Builder {
 		}
 		if ( ! empty( $args['tone'] ) ) {
 			$p[] = '- Tone and house rules from the agency: ' . $args['tone'];
+		}
+		if ( ! empty( $args['avoid_phrases'] ) ) {
+			$p[] = '- Never use these phrases (the agency\'s list): ' . $args['avoid_phrases'] . '.';
 		}
 		$p[] = '';
 		if ( ! empty( $args['business'] ) ) {
