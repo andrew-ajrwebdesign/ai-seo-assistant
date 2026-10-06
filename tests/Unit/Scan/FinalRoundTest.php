@@ -450,7 +450,7 @@ class FinalRoundTest extends TestCase {
 		$tools = (string) file_get_contents( $root . '/src/Admin/Tools_Actions.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading source.
 		$this->assertStringNotContainsString( 'Ui::NONCE', $tools );
 		$this->assertSame( 0, preg_match( '/this->guard_ajax\(\s*\)/', $tools ), 'every guard names its action' );
-		$this->assertSame( 4, preg_match_all( "/guard_ajax\\( (?:'aisa_[a-z_]+'|self::ROLE) \\)/", $tools ) );
+		$this->assertSame( 5, preg_match_all( "/guard_ajax\\( (?:'aisa_[a-z_]+'|self::ROLE) \\)/", $tools ) );
 		$this->assertSame( \AJR\SEOAssistant\Admin\Tools_Actions::ROLE, \AJR\SEOAssistant\Admin\Ui::AJAX_ACTIONS[3] );
 		$js = (string) file_get_contents( $root . '/assets/js/aisa-tools.js' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading source.
 		$this->assertStringContainsString( '( cfg.nonces || {} )[ action ]', $js );

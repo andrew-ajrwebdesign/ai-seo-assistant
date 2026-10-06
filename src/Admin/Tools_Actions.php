@@ -68,6 +68,7 @@ class Tools_Actions {
 		Changes_Page::register_export();
 		add_action( 'wp_ajax_aisa_scan_start', [ $this, 'ajax_scan_start' ] );
 		add_action( 'wp_ajax_aisa_scan_step', [ $this, 'ajax_scan_step' ] );
+		add_action( 'wp_ajax_aisa_scan_cancel', [ $this, 'ajax_scan_cancel' ] );
 		add_action( 'wp_ajax_aisa_generate', [ $this, 'ajax_generate' ] );
 	}
 
@@ -131,6 +132,14 @@ class Tools_Actions {
 	public function ajax_scan_step(): void {
 		$this->guard_ajax( 'aisa_scan_step' );
 		wp_send_json_success( Scheduler::step( 15 ) );
+	}
+
+	/**
+	 * AJAX: stop the scan after the step in progress; what was scanned is kept (and judged without network).
+	 */
+	public function ajax_scan_cancel(): void {
+		$this->guard_ajax( 'aisa_scan_cancel' );
+		wp_send_json_success( Scheduler::cancel() );
 	}
 
 	/**

@@ -36,6 +36,95 @@
 	font-size: 12px;
 }
 
+/* The scan's progress bar, in the header (Rescan now, or a scan already running). */
+.aisa-progress {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 6px 12px;
+	inline-size: 100%;
+	max-inline-size: 640px;
+}
+
+.aisa-progress[hidden] {
+	display: none;
+}
+
+.aisa-progress__track {
+	grid-column: 1 / -1;
+	block-size: 8px;
+	overflow: hidden;
+	border-radius: 999px;
+	background: var(--aisa-dark-lift);
+}
+
+.aisa-progress__fill {
+	display: block;
+	block-size: 100%;
+	inline-size: 0;
+	border-radius: inherit;
+	background: var(--aisa-accent-light);
+}
+
+.aisa-progress__text {
+	margin: 0;
+	color: var(--aisa-on-dark);
+	font-size: 13px;
+	font-variant-numeric: tabular-nums;
+}
+
+.aisa-btn--ghost-dark {
+	border-color: var(--aisa-muted-light);
+	background: transparent;
+	color: var(--aisa-on-dark);
+}
+
+.aisa-btn--ghost-dark:hover,
+.aisa-btn--ghost-dark:focus {
+	border-color: var(--aisa-on-dark);
+	color: var(--aisa-on-dark);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.aisa-progress__fill {
+		transition: inline-size 200ms ease-out;
+	}
+}
+
+/* "N pages have a suggested page type" and its review list. */
+.aisa-typebar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 12px;
+	padding: 10px 12px;
+	border-radius: var(--aisa-radius);
+	background: var(--aisa-accent-bg);
+	color: var(--aisa-primary-ink);
+}
+
+.aisa-typereview {
+	margin: 0 0 16px;
+	padding: 12px;
+	border: 1px solid var(--aisa-border);
+	border-radius: var(--aisa-radius);
+}
+
+.aisa-typereview fieldset {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.aisa-typereview ul {
+	display: grid;
+	gap: 6px;
+	margin: 10px 0;
+	padding: 0;
+	list-style: none;
+}
+
 .aisa-back {
 	display: inline-flex;
 	align-items: center;

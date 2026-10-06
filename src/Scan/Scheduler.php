@@ -57,6 +57,8 @@ class Scheduler {
 				'done'    => 0,
 				'mode'    => $mode,
 				'started' => time(),
+				// The issue count before this scan, for the finish line's "N fewer issues than before".
+				'before'  => isset( Scan_Store::meta()['issues'] ) ? (int) Scan_Store::meta()['issues'] : null,
 			],
 			false
 		);
@@ -167,6 +169,7 @@ class Scheduler {
 				'done'   => (int) $queue['done'],
 				'total'  => (int) $queue['total'],
 				'result' => $result,
+				'before' => $queue['before'] ?? null,
 			];
 		}
 		delete_transient( self::LOCK );
@@ -256,6 +259,33 @@ class Scheduler {
 			}
 		}
 		self::start( 'incremental', $ids );
+	}
+
+	/**
+	 * Stop a scan (the progress bar's Cancel). The step in progress finishes first (the screen waits for it);
+	 * the pages scanned so far are kept and judged once, without network; the rest are not scanned.
+	 *
+	 * @return array{state:string,done:int,total:int}
+	 */
+	public static function cancel(): array {
+		$queue = self::queue();
+		if ( null === $queue ) {
+			return [
+				'state' => 'idle',
+				'done'  => 0,
+				'total' => 0,
+			];
+		}
+		delete_option( self::QUEUE );
+		wp_clear_scheduled_hook( self::RUN_HOOK );
+		( new Scanner() )->finalize( false );
+		Ranking::flush();
+
+		return [
+			'state' => 'cancelled',
+			'done'  => (int) $queue['done'],
+			'total' => (int) $queue['total'],
+		];
 	}
 
 	/**

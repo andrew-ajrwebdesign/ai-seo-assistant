@@ -51,3 +51,6 @@ jobs:
 
       - name: Run PHPUnit
         run: ./vendor/bin/phpunit
+
+      - name: Run the script tests (node's built-in runner, no dependencies)
+        run: node --test tests/js/*.test.mjs

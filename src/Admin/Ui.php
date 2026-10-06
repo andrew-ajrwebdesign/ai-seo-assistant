@@ -34,7 +34,7 @@ class Ui {
 	public const BASE_STYLE = 'ai-seo-assistant-weekly-report';
 
 	/** The tool screens' AJAX actions: each has its own nonce (named after the action). */
-	public const AJAX_ACTIONS = [ 'aisa_scan_start', 'aisa_scan_step', 'aisa_generate', 'aisa_set_page_type' ];
+	public const AJAX_ACTIONS = [ 'aisa_scan_start', 'aisa_scan_step', 'aisa_generate', 'aisa_set_page_type', 'aisa_scan_cancel' ];
 
 	/**
 	 * Enqueue the tool screens' CSS and JS.
@@ -62,6 +62,19 @@ class Ui {
 					/* translators: 1: pages done, 2: pages in all. */
 					'scanning'     => __( 'Scanning: %1$d of %2$d pages', 'ai-seo-assistant' ),
 					'finishing'    => __( 'Checking links, duplicates and the sitemap…', 'ai-seo-assistant' ),
+					/* translators: %d: minutes. */
+					'leftMin'      => __( ' · about %d min left', 'ai-seo-assistant' ),
+					'leftSoon'     => __( ' · less than a minute left', 'ai-seo-assistant' ),
+					/* translators: %d: pages checked. */
+					'finished'     => __( '%d pages checked just now', 'ai-seo-assistant' ),
+					/* translators: %d: number of issues. */
+					'fewer'        => __( ' · %d fewer issues than before', 'ai-seo-assistant' ),
+					/* translators: %d: number of issues. */
+					'more'         => __( ' · %d more issues than before', 'ai-seo-assistant' ),
+					'same'         => __( ' · as many issues as before', 'ai-seo-assistant' ),
+					/* translators: 1: pages done, 2: pages in all. */
+					'stopped'      => __( 'Stopped after %1$d of %2$d pages. What was scanned is kept.', 'ai-seo-assistant' ),
+					'stopping'     => __( 'Stopping after this step…', 'ai-seo-assistant' ),
 					'done'         => __( 'Scan finished. Reloading…', 'ai-seo-assistant' ),
 					'failed'       => __( 'The scan stopped. Try again, or wait: it carries on in the background.', 'ai-seo-assistant' ),
 					/* translators: 1: page number, 2: pages in all. */

@@ -126,16 +126,24 @@ class Scan_Page {
 			$sub = sprintf( __( '%1$d published pages checked %2$s. Search and visitor data have not arrived yet, so pages are not ranked.', 'ai-seo-assistant' ), $pages, wp_date( 'D j M, g:ia', (int) ( $meta['finished_at'] ?? time() ) ) );
 		}
 
-		$actions = '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="aisa-inline" data-aisa-scan' . ( null !== $queue ? ' data-running="1"' : '' ) . '>'
+		$done    = null !== $queue ? (int) $queue['done'] : 0;
+		$total   = null !== $queue ? max( 1, (int) $queue['total'] ) : 1;
+		$actions = '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="aisa-inline" data-aisa-scan' . ( null !== $queue ? ' data-running="1" hidden' : '' ) . ' data-done="' . esc_attr( (string) $done ) . '" data-total="' . esc_attr( (string) $total ) . '">'
 			. wp_nonce_field( Tools_Actions::RESCAN, '_wpnonce', true, false )
 			. '<input type="hidden" name="action" value="' . esc_attr( Tools_Actions::RESCAN ) . '">'
 			. '<button type="submit" class="aisa-btn aisa-btn--dark">' . Ui::icon( 'update' ) . esc_html__( 'Rescan now', 'ai-seo-assistant' ) . '</button></form>'
-			. '<span class="aisa-hero__note" data-aisa-scan-status aria-live="polite">' . esc_html(
-				null !== $queue
-					/* translators: 1: pages done, 2: pages in all. */
-					? sprintf( __( 'Scanning: %1$d of %2$d pages', 'ai-seo-assistant' ), (int) $queue['done'], (int) $queue['total'] )
-					: __( 'Also runs on each page when it is saved', 'ai-seo-assistant' )
-			) . '</span>';
+			. '<span class="aisa-hero__note" data-aisa-scan-status' . ( null !== $queue ? ' hidden' : '' ) . '>' . esc_html__( 'Also runs on each page when it is saved', 'ai-seo-assistant' ) . '</span>'
+			// The progress bar (the script drives it; a scan already running, from cron or another screen, shows
+			// at its stored position). Without the script the plain form above still queues a rescan.
+			. '<div class="aisa-progress" data-aisa-progress' . ( null === $queue ? ' hidden' : '' ) . '>'
+			. '<div class="aisa-progress__track" role="progressbar" aria-label="' . esc_attr__( 'Scan progress', 'ai-seo-assistant' ) . '" aria-valuemin="0" aria-valuemax="' . esc_attr( (string) $total ) . '" aria-valuenow="' . esc_attr( (string) $done ) . '"><span class="aisa-progress__fill" style="inline-size:' . esc_attr( (string) round( 100 * $done / $total ) ) . '%"></span></div>'
+			. '<p class="aisa-progress__text" data-aisa-progress-text>' . esc_html(
+				/* translators: 1: pages done, 2: pages in all. */
+				sprintf( __( 'Scanning %1$d of %2$d pages', 'ai-seo-assistant' ), $done, $total )
+			) . '</p>'
+			. '<button type="button" class="aisa-btn aisa-btn--small aisa-btn--ghost-dark" data-aisa-cancel>' . esc_html__( 'Cancel', 'ai-seo-assistant' ) . '</button>'
+			. '<p class="screen-reader-text" aria-live="polite" data-aisa-progress-live></p>'
+			. '</div>';
 
 		$hero = Ui::hero(
 			[
@@ -147,6 +155,7 @@ class Scan_Page {
 			]
 		);
 		echo $hero; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+		echo '<div data-aisa-refresh>'; // Replaced in place when a scan finishes (no full reload).
 		$this->result_notice();
 
 		$spend = Spend::current();
@@ -156,7 +165,7 @@ class Scan_Page {
 		}
 
 		if ( [] === $rows ) {
-			echo Ui::footer(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+			echo '</div>' . Ui::footer(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 			return;
 		}
 
@@ -171,7 +180,7 @@ class Scan_Page {
 		} else {
 			$this->first_run( $rows );
 		}
-		echo Ui::footer(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+		echo '</div>' . Ui::footer(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 	}
 
 	/**
@@ -501,7 +510,7 @@ class Scan_Page {
 		} else {
 			/* translators: 1: estimated cost per page, 2: what is left of the cap. */
 			echo '<span class="aisa-bulk__note" data-aisa-estimate>' . esc_html( sprintf( __( 'About %1$s a page · %2$s left this billing month', 'ai-seo-assistant' ), Spend::money( $per ), Spend::money( $left ) ) ) . '</span>';
-			echo '<button type="button" class="aisa-btn aisa-btn--primary" data-aisa-generate disabled>' . Ui::icon( 'admin-customizer' ) . '<span>' . esc_html__( 'Generate for selected', 'ai-seo-assistant' ) . '</span></button>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+			echo '<button type="button" class="aisa-btn aisa-btn--primary" data-aisa-generate disabled>' . Ui::icon( 'admin-customizer' ) . '<span class="aisa-btn__label" data-aisa-label>' . esc_html__( 'Generate for selected', 'ai-seo-assistant' ) . '</span></button>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		}
 		echo '<span class="aisa-bulk__status" data-aisa-bulk-status aria-live="polite"></span></div>';
 
