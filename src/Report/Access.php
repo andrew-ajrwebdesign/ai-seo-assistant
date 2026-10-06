@@ -7,9 +7,10 @@
  * Redirects, Metadata report). Administrators all hold manage_options, so the tools move behind their own
  * capability, TOOLS_CAP, granted by this filter to the users named in the "Agency users" option.
  *
- * NO LOCKOUT. Until at least one existing Administrator is named, every Administrator keeps the tools —
- * installing the update changes nothing until someone chooses otherwise, and a list that names only
- * deleted or demoted users falls back the same way.
+ * NO LIST. Until at least one existing Administrator is named (a list that names only deleted or demoted
+ * users counts as none): with AJR Core active, AJR Core decides who is agency (4.4.0: one resolver for the
+ * whole stack; Administrators whose login email is on the agency's domain); without AJR Core, every
+ * Administrator keeps the tools, as before.
  *
  * @package AJR\SEOAssistant
  */
@@ -38,6 +39,7 @@ class Access {
 		add_filter( 'user_has_cap', [ $this, 'grant' ], 10, 4 );
 		add_action( 'set_user_role', [ self::class, 'flush' ] );
 		add_action( 'deleted_user', [ self::class, 'flush' ] );
+		add_action( 'set_current_user', [ self::class, 'flush' ] ); // AJR Core's answer is about the current user.
 	}
 
 	/**
@@ -61,15 +63,59 @@ class Access {
 	}
 
 	/**
-	 * Whether a user is on the agency list (true for any admin while the list names no current admin).
+	 * Whether a user is an agency user.
+	 *
+	 * In order: a list that names a current Administrator wins. With no list, AJR Core (when active) is
+	 * the stack's single agency resolver: its Support::is_agency_user() (login email on the agency's
+	 * domain, filter `ajr_core_is_agency_user`). Without AJR Core, every Administrator, as before 4.4.0.
 	 *
 	 * @param int $user_id User ID.
 	 */
 	public static function is_agency( int $user_id ): bool {
 		$named = self::named();
+		if ( [] !== $named ) {
+			return in_array( $user_id, $named, true );
+		}
 
-		return [] === $named || in_array( $user_id, $named, true );
+		$core = self::core_says_agency( $user_id );
+
+		return null === $core ? true : $core;
 	}
+
+	/**
+	 * AJR Core's answer for a user, or null when AJR Core is not active.
+	 *
+	 * AJR Core 0.20 asks about the CURRENT user only (`is_agency_user(): bool`); the stack contract allows
+	 * a later `is_agency_user( ?WP_User $user )`. Both are handled: a user other than the current one is
+	 * only answered when the method takes a user, and is otherwise refused (the safe answer for a tools
+	 * capability; capability checks are almost always about the current user).
+	 *
+	 * @param int $user_id User ID.
+	 */
+	protected static function core_says_agency( int $user_id ): ?bool {
+		$class = '\AJR\Core\Admin\Support';
+		if ( ! class_exists( $class ) || ! method_exists( $class, 'is_agency_user' ) ) {
+			return null;
+		}
+		if ( ! array_key_exists( $user_id, self::$core ) ) {
+			$takes_user = ( new \ReflectionMethod( $class, 'is_agency_user' ) )->getNumberOfParameters() > 0;
+			if ( $takes_user ) {
+				$user                   = get_userdata( $user_id );
+				self::$core[ $user_id ] = $user instanceof \WP_User && (bool) $class::is_agency_user( $user );
+			} else {
+				self::$core[ $user_id ] = get_current_user_id() === $user_id && (bool) $class::is_agency_user();
+			}
+		}
+
+		return self::$core[ $user_id ];
+	}
+
+	/**
+	 * Per-request memo for core_says_agency(), keyed by user ID.
+	 *
+	 * @var array<int,bool>
+	 */
+	protected static array $core = [];
 
 	/**
 	 * The named agency users who are still Administrators.
@@ -111,5 +157,6 @@ class Access {
 	 */
 	public static function flush(): void {
 		self::$named = [];
+		self::$core  = [];
 	}
 }

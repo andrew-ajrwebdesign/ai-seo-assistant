@@ -18,6 +18,8 @@ declare( strict_types=1 );
 
 namespace AJR\SEOAssistant\Report;
 
+use AJR\SEOAssistant\Core\Secret_Store;
+
 defined( 'ABSPATH' ) || exit;
 
 /**
@@ -163,6 +165,7 @@ class Report_Page {
 		$new_key = get_transient( 'aisa_report_new_key_' . $user );
 		if ( false !== $new_key ) {
 			delete_transient( 'aisa_report_new_key_' . $user );
+			$new_key = Secret_Store::open( $new_key ); // Held sealed for its five minutes (generate_key()).
 		}
 		$last = $this->store->last_push();
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- display-only result code from our own redirect.
@@ -247,7 +250,11 @@ class Report_Page {
 			$id = (int) $admin->ID;
 			echo '<label><input type="checkbox" name="agency_users[]" value="' . esc_attr( (string) $id ) . '"' . checked( in_array( $id, $named, true ), true, false ) . '> ' . esc_html( $admin->display_name . ' (' . $admin->user_email . ')' ) . '</label><br>';
 		}
-		echo '<p class="description">' . esc_html__( 'Ticked Administrators keep the plugin’s tool screens; every other Administrator sees the Weekly report only. While nobody is ticked, every Administrator keeps the tools.', 'ai-seo-assistant' ) . '</p></fieldset></td></tr>';
+		echo '<p class="description">' . esc_html(
+			class_exists( '\AJR\Core\Admin\Support' )
+				? __( 'Ticked Administrators keep the plugin’s tool screens; every other Administrator sees the Weekly report only. While nobody is ticked, AJR Core decides: Administrators on the agency’s email domain keep the tools.', 'ai-seo-assistant' )
+				: __( 'Ticked Administrators keep the plugin’s tool screens; every other Administrator sees the Weekly report only. While nobody is ticked, every Administrator keeps the tools.', 'ai-seo-assistant' )
+		) . '</p></fieldset></td></tr>';
 		echo '<tr><th scope="row"><label for="aisa-alert-email">' . esc_html__( 'Late-report alerts go to', 'ai-seo-assistant' ) . '</label></th><td><input type="email" class="regular-text" id="aisa-alert-email" name="alert_email" value="' . esc_attr( (string) get_option( Stale_Alert::ADDRESS, '' ) ) . '" placeholder="' . esc_attr( (string) get_option( 'admin_email' ) ) . '">';
 		echo '<p class="description">' . esc_html__( 'Empty sends alerts to the site’s admin email.', 'ai-seo-assistant' ) . '</p></td></tr></tbody></table>';
 		submit_button( __( 'Save', 'ai-seo-assistant' ), 'secondary' );
@@ -296,7 +303,12 @@ class Report_Page {
 			wp_die( esc_html__( 'You are not allowed to do that.', 'ai-seo-assistant' ), '', [ 'response' => 403 ] );
 		}
 		check_admin_referer( 'aisa_report_key' );
-		set_transient( 'aisa_report_new_key_' . get_current_user_id(), Push_Key::generate(), 5 * MINUTE_IN_SECONDS );
+		$key = Push_Key::generate();
+		if ( '' !== $key ) {
+			// The transient is a wp_options row (without an object cache) for up to five minutes: seal it
+			// like the key itself, so the plain key is never at rest anywhere.
+			set_transient( 'aisa_report_new_key_' . get_current_user_id(), Secret_Store::seal( $key ), 5 * MINUTE_IN_SECONDS );
+		}
 		wp_safe_redirect( $this->url( '' ) );
 		exit;
 	}

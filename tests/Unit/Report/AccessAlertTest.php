@@ -127,6 +127,48 @@ class AccessAlertTest extends TestCase {
 	}
 
 	/**
+	 * AJR Core 0.20's resolver (no arguments, current user only): with no list, AJR Core decides, and a
+	 * user other than the current one is refused. A list, once set, still wins over AJR Core.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_ajr_core_decides_when_no_list(): void {
+		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a stand-in for AJR Core's class, defined only in this process.
+		eval( 'namespace AJR\Core\Admin; class Support { public static $agency = [ 1 ]; public static function is_agency_user(): bool { return in_array( \get_current_user_id(), self::$agency, true ); } }' );
+		$current = 1;
+		\WP_Mock::userFunction( 'get_current_user_id' )->andReturnUsing( function () use ( &$current ) {
+			return $current;
+		} );
+
+		$this->assertTrue( $this->can( 1 ), 'agency-domain admin keeps the tools' );
+		$this->assertFalse( $this->can( 2 ), 'another admin is not asked about while user 1 is current' );
+
+		$current = 2;
+		Access::flush();
+		$this->assertFalse( $this->can( 2 ), 'client admin: AJR Core says no' );
+
+		$this->options[ Access::OPTION ] = [ 2 ];
+		Access::flush();
+		$this->assertTrue( $this->can( 2 ), 'the list wins over AJR Core' );
+	}
+
+	/**
+	 * The contract's later resolver (takes a user): any user can be answered.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_ajr_core_resolver_with_user_argument(): void {
+		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- see above.
+		eval( 'namespace AJR\Core\Admin; class Support { public static function is_agency_user( ?\WP_User $user = null ): bool { return null !== $user && 2 === $user->ID; } }' );
+		\WP_Mock::userFunction( 'get_current_user_id' )->andReturn( 1 );
+
+		$this->assertFalse( $this->can( 1 ) );
+		$this->assertTrue( $this->can( 2 ), 'answered for a user who is not the current one' );
+	}
+
+	/**
 	 * Other capabilities pass through untouched.
 	 */
 	public function test_other_caps_untouched(): void {
