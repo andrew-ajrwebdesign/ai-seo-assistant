@@ -321,6 +321,9 @@ class FinalRoundTest extends TestCase {
 		$this->assertTrue( $o::zero_click( 'weather in eagle idaho', 150, 0, 7.0 ), 'the words, AND under-clicking' );
 		$this->assertFalse( $o::zero_click( 'weather in eagle idaho', 150, 10, 7.0 ), 'the words alone never decide' );
 		$this->assertFalse( $o::zero_click( 'weatherby homes', 5000, 2, 7.0 ), 'whole words only' );
+		$this->assertTrue( $o::zero_click( 'boise area map', 5000, 10, 9.0 ), 'a map search that under-clicks (0.2% at 9)' );
+		$this->assertTrue( $o::zero_click( 'directions to eagle idaho', 300, 0, 6.0 ) );
+		$this->assertFalse( $o::zero_click( 'boise area map', 5000, 120, 9.0 ), 'a map search clicked normally (2.4% at 9) is not' );
 
 		$b   = $o::breakdown(
 			[

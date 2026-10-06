@@ -148,7 +148,7 @@ class Opportunity {
 	 * Words of searches Google often answers itself (weather, time, distances, codes). A second signal only:
 	 * a search is zero-click by these words alone never, only when it also under-clicks.
 	 */
-	public const ZERO_CLICK_WORDS = [ 'weather', 'forecast', 'temperature', 'time in', 'distance', 'how far', 'population', 'zip code', 'area code', 'sunrise', 'sunset' ];
+	public const ZERO_CLICK_WORDS = [ 'weather', 'forecast', 'temperature', 'time in', 'distance', 'how far', 'population', 'zip code', 'area code', 'sunrise', 'sunset', 'map', 'directions' ];
 
 	/**
 	 * Whether Google answers this search on the results page itself, so its clicks can never be won

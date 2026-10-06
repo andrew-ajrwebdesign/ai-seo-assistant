@@ -826,7 +826,7 @@ class Scan_Page {
 				/* translators: %d: percentage of the page's impressions. */
 				echo '<p class="aisa-small aisa-tone--warn">' . esc_html( sprintf( __( 'Most of its searches are answered by Google itself: %d%% of the impressions of its named searches are for searches Google answers on the results page (marked below), so few of those clicks can be won. The figures above count them, and the same share of the unnamed searches, at a tenth.', 'ai-seo-assistant' ), (int) round( 100 * (float) $r['zero_share'] ) ) ) . '</p>';
 			}
-			echo '<p class="aisa-small">' . esc_html__( 'Estimates, extra visits a year. Quick win = impressions × (expected CTR at today’s position − actual CTR): what a better title and description could bring; searches past position 20 add almost nothing. Top 3 = the same if each search reached position 3. Ranking also weighs each search by its intent (the tag under it).', 'ai-seo-assistant' ) . '</p>';
+			echo '<p class="aisa-small">' . esc_html__( 'Estimates, extra visits a year. Quick win = impressions × (expected CTR at today’s position − actual CTR): what a better title and description could bring; searches past position 20 add almost nothing. Top 3 = the same if each search reached position 3. These are the most a page could gain (searches Google answers itself count at a tenth). The ranking also weighs each search by its intent (the tag under it) and counts searches Google does not name at a quarter, so a page can show more visits than one ranked above it.', 'ai-seo-assistant' ) . '</p>';
 		}
 		$total = (int) ( $page['gsc']['queries_total'] ?? 0 );
 		/* translators: 1: searches shown, 2: searches in all. */
@@ -1501,12 +1501,14 @@ class Scan_Page {
 	protected static function visits_year( float $visits ): string {
 		$n = Opportunity::rounded( $visits );
 		if ( null === $n ) {
-			return __( '< 5 visits a year (est.)', 'ai-seo-assistant' );
+			return __( 'under 5 visits a year (est.)', 'ai-seo-assistant' );
 		}
 
-		// Always labelled an estimate: a model of what a better listing could bring, never a promise.
+		// Always labelled an estimate, and "up to": what a better listing could bring at most (searches Google
+		// answers itself already left out). The ranking also weighs each search by intent and counts the
+		// unnamed ones at a quarter, so a page can show more visits than one ranked above it.
 		/* translators: %s: number of visits. */
-		return sprintf( _n( '≈ %s visit a year (est.)', '≈ %s visits a year (est.)', $n, 'ai-seo-assistant' ), number_format_i18n( $n ) );
+		return sprintf( _n( 'up to ≈ %s visit a year (est.)', 'up to ≈ %s visits a year (est.)', $n, 'ai-seo-assistant' ), number_format_i18n( $n ) );
 	}
 
 	/**
