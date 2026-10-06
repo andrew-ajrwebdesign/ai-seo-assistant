@@ -282,8 +282,13 @@ class RoundTwoTest extends TestCase {
 	public function test_spend_counts_lost_calls_and_adds_atomically(): void {
 		\WP_Mock::userFunction( 'wp_timezone' )->andReturn( new \DateTimeZone( 'UTC' ) );
 		\WP_Mock::userFunction( 'wp_cache_delete' )->andReturn( true );
+		$fail_once = [];
 		\WP_Mock::userFunction( 'add_option' )->andReturnUsing(
-			function ( $n, $v ) {
+			function ( $n, $v ) use ( &$fail_once ) {
+				if ( isset( $fail_once[ $n ] ) ) {
+					unset( $fail_once[ $n ] );
+					return false; // This insert fails (a lost connection), the next succeeds.
+				}
 				if ( array_key_exists( $n, $this->options ) ) {
 					return false;
 				}
@@ -348,9 +353,11 @@ class RoundTwoTest extends TestCase {
 			$this->assertDoesNotMatchRegularExpression( '/SET option_value = %[sf]/', $q, 'only ever increased in SQL, never written whole' );
 		}
 
-		// A counter that went missing (seeding failed, removed by hand): seeded again and increased.
+		// The counter's first add_option() failed (it is missing): the increment touches no row, so it is
+		// seeded again and increased in SQL.
 		$period = $state['period'];
 		unset( $this->options[ \AJR\SEOAssistant\AI\Spend::TOTAL_PREFIX . $period ], $this->options[ \AJR\SEOAssistant\AI\Spend::CALLS_PREFIX . $period ] );
+		$fail_once[ \AJR\SEOAssistant\AI\Spend::TOTAL_PREFIX . $period ] = true;
 		$before = \AJR\SEOAssistant\AI\Spend::current();
 		\AJR\SEOAssistant\AI\Spend::record( 'claude-haiku-4-5', [ 'input_tokens' => 1000000, 'output_tokens' => 0 ] );
 		$this->assertEqualsWithDelta( $before['usd'] + 1.0, \AJR\SEOAssistant\AI\Spend::current()['usd'], 1e-6, 'never silently uncounted' );
