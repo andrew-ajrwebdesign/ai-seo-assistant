@@ -80,6 +80,7 @@ foreach ( $ai_seo_assistant_options as $ai_seo_assistant_option ) {
 	delete_option( $ai_seo_assistant_option );
 }
 \AJR\SEOAssistant\Core\Schema::drop();
+delete_metadata( 'user', 0, 'aisa_rank_mode', '', true ); // Scan/Ranking::MODE_META (each agency user's list mode).
 delete_post_meta_by_key( '_aisa_page_role' ); // Scan/Page_Role::LEGACY_META (page types belong to AJR Core and stay).
 wp_clear_scheduled_hook( 'ai_seo_assistant_report_stale_check' );
 wp_clear_scheduled_hook( 'aisa_scan_run' );

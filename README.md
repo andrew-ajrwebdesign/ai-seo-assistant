@@ -66,7 +66,9 @@ quick win (a year) = Σ per top search: impressions × max(0, expected CTR at it
                      + the unnamed rest at the page's average position
 top-3 prize        = the same at position 3
 value              = Σ quick win × intent weight × page-type value × (1 + ln(1 + enquiries))
-tier               = High from 300, Medium from 60, Low from 1   (filter: ai_seo_assistant_opportunity_tiers)
+tier               = High: the top pages holding half the site's total value; Medium: the next quarter; Low: the rest
+                     (floors: High ≥ 24, Medium ≥ 8 weighted visits a year; filter: ai_seo_assistant_opportunity_floors)
+mode               = "Quick wins" (rank by the quick win; default) or "Biggest prizes" (rank by the top-3 prize), per user
 ```
 
 - **Intent weights:** lead 3, commercial 2, informational 1, navigational 0.5.

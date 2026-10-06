@@ -31,7 +31,9 @@ The product cut (decision 2026-10-06, `work/coding-projects/ai-seo-assistant/dec
   - yearly quick win and top-3 prize per search;
   - search-intent weighting: keyword rules, then one Haiku pass per push, cached and counted in the cap;
   - an enquiry estimate, shown only with 10 or more tracked enquiries;
-  - High / Medium / Low tiers in place of the 0–100 score.
+  - High / Medium / Low tiers in place of the 0–100 score. Round 3: the tiers scale with the site (High = the top pages holding half the total, Medium = the next quarter), with floors of 24 and 8 weighted visits a year.
+  - A "Quick wins | Biggest prizes" toggle on the list, remembered per user.
+  - Estate-agent intent: researching a move is commercial, not a lead. The intent pass runs again when the rules change.
 - **Page types from AJR Core** (`_ajr_page_type`) replace the plugin's own page role, set from the list, in bulk or from the review. Old roles are migrated: location → area, info → article, money left for the agency to choose. Post listings count as information.
 - **"What Google reads on this page"** in the review. Schema findings come from rules only, and Claude never writes schema advice.
 - **Google listing issue group:** pinned differences are kept on purpose and not counted. The stored check goes to AJR Core through `ajr_core_business_profile_check`.

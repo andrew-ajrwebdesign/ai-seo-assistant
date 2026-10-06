@@ -45,7 +45,7 @@ The SEO scan lists pages by **opportunity**: the extra visits a year a better Go
   - The page's other impressions (searches Google does not name) count at the page's average position.
   - A search past position 20 adds almost nothing to the quick win.
   - Pages pushed with v1 data use the page-level formula.
-- **Search intent.** Each search is sorted by keyword rules first. These are generic, plus extra phrases for AJR Core's business type, and filterable with `ai_seo_assistant_intent_rules`. The searches the rules leave go to Claude (Haiku 4.5) once per push, in one call. That call counts toward the spend cap and is skipped when the cap is reached; its answers are cached. The weights are:
+- **Search intent.** Each search is sorted by keyword rules first. These are generic, plus extra phrases for AJR Core's business type, and filterable with `ai_seo_assistant_intent_rules`. For an estate agent (Andrew, round 3), researching a move is **commercial**, not a lead: "moving to", "relocation", "relocating", "real estate", "living in", "cost of living". Lead stays for agent, realtor, broker, selling, homes for sale, home value and listing a home. The searches the rules leave go to Claude (Haiku 4.5) once per push, in one call; a change to the rules runs it again, and the rules always win over a cached answer. That call counts toward the spend cap and is skipped when the cap is reached; its answers are cached. The weights are:
 
   | Intent | Weight |
   |---|---|
@@ -68,12 +68,12 @@ The SEO scan lists pages by **opportunity**: the extra visits a year a better Go
   - **Not set:** a post counts as information, and so does a page that is mainly a list of posts. Otherwise a page counts as money when it is AJR Core's booking page, holds a form AJR Core's Leads module counts (or a known form or booking embed), or is in the main menu's top level.
   - **Enquiry rate:** a page whose enquiry rate is twice the site's counts one step higher, but only when the site has 10 or more enquiries in 90 days.
 - **Enquiry estimate.** "≈ N enquiries a year" is the extra visits × the page's enquiry rate (the site's when the page had fewer than 30 visits). It is shown only when the site tracked 10 or more enquiries in 90 days, and is never shown as 0.
-- **Tiers, not a 0–100 score.** The tier comes from the weighted quick win a year: quick win × intent × page value × (1 + ln(1 + enquiries)).
-  - **High:** from 300.
-  - **Medium:** from 60.
-  - **Low:** anything from 1.
-
-  The thresholds are filterable (`ai_seo_assistant_opportunity_tiers`). The list is sorted by the same weighted value.
+- **Tiers that scale with the site, not a 0–100 score** (Andrew, 2026-10-06, round 3). Pages are sorted by their weighted value a year: the figure × intent × page value × (1 + ln(1 + enquiries)).
+  - **High:** the smallest set of top pages that together hold half the site's total.
+  - **Medium:** the pages holding the next quarter.
+  - **Low:** the rest with a value. **None:** no measurable value.
+  - **Floors**, so a trivial gain never reads High or Medium: High needs 24 weighted visits a year, Medium 8 (filter: `ai_seo_assistant_opportunity_floors`).
+- **"Quick wins | Biggest prizes".** A toggle on the SEO scan list. Quick wins (the default) ranks and tiers by the weighted quick win. Biggest prizes ranks and tiers by the weighted top-3 prize: the pages worth content and link work. Each agency user's choice is remembered (user meta `aisa_rank_mode`). The review header shows both figures either way.
 - **The site's own click curve.** Expected CTR comes from the site's own searches when there are enough.
   - Searches are bucketed by position: 1 to 10 each, then 11–15, 16–20, 21–30 and 31–50.
   - A bucket with 1,000 impressions uses the site's CTR.
