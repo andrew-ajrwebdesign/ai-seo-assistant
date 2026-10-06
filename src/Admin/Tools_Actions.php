@@ -290,17 +290,14 @@ class Tools_Actions {
 		if ( ! Page_Role::core() || ( '' !== $type && ! isset( Page_Role::types()[ $type ] ) ) ) {
 			return 0;
 		}
-		$store = new Scan_Store();
-		$done  = 0;
+		// The stored "Page type not set" finding is dropped by the ajr_core_page_type_changed listener (and
+		// never shown once a type exists: Scan_Store::get()), not here a second time.
+		$done = 0;
 		foreach ( $ids as $id ) {
 			if ( $id <= 0 || ! current_user_can( 'edit_post', $id ) || ! Page_Role::set_type( $id, $type ) ) {
 				continue;
 			}
 			++$done;
-			$row = $store->get( $id );
-			if ( null !== $row && '' !== $type ) {
-				$store->save_issues( $id, array_values( array_filter( (array) $row['issues'], static fn( $i ) => 'page_type_unset' !== ( $i['code'] ?? '' ) ) ) );
-			}
 		}
 
 		return $done;
