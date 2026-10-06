@@ -131,9 +131,13 @@ class Editor_Box {
 		echo '<div class="aisa-todo" data-aisa-todo-box data-post="' . esc_attr( (string) $post_id ) . '">';
 		echo '<p class="aisa-todo__status"><span data-aisa-todo-line>' . esc_html( self::line( $post_id, $row, $items ) ) . '</span> <a href="' . esc_url( $review ) . '">' . esc_html__( 'Open full review →', 'ai-seo-assistant' ) . '</a></p>';
 
-		if ( ! is_array( $row['suggestions'] ) && [] === $items ) {
-			echo '<p class="aisa-todo__none">' . esc_html__( 'No review yet.', 'ai-seo-assistant' ) . ' <a href="' . esc_url( $review ) . '">' . esc_html__( 'Open the page review', 'ai-seo-assistant' ) . '</a></p></div>';
-			return;
+		if ( ! is_array( $row['suggestions'] ) ) {
+			// Never reviewed: say so (nothing is generated from the editor); the scan's own to-dos still follow.
+			echo '<p class="aisa-todo__none">' . esc_html__( 'No review yet —', 'ai-seo-assistant' ) . ' <a href="' . esc_url( $review ) . '">' . esc_html__( 'Open the page review', 'ai-seo-assistant' ) . '</a></p>';
+			if ( [] === $items ) {
+				echo '</div>';
+				return;
+			}
 		}
 		if ( [] === $items ) {
 			echo '<p class="aisa-todo__none">' . esc_html__( 'Nothing to do in the editor.', 'ai-seo-assistant' ) . '</p></div>';
