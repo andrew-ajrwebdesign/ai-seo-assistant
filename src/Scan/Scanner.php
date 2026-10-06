@@ -293,6 +293,7 @@ class Scanner {
 		$discourage = '0' === (string) get_option( 'blog_public', '1' );
 		$popular    = self::popular_paths( $data );
 		$topics     = self::topics( $rows );
+		$common     = self::common_words( $rows );
 		$has_types  = Page_Role::core();
 		$type_names = $has_types ? array_map( static fn( $t ) => $t['label'], Page_Role::types() ) : [];
 
@@ -329,7 +330,7 @@ class Scanner {
 				'in_sitemap'       => null === $sitemap ? null : isset( $sitemap[ Rules::bare_url( (string) ( $f['url'] ?? '' ) ) ] ),
 				'self_url'         => (string) ( $f['url'] ?? '' ),
 				'impressions'      => (int) ( $page['gsc']['impressions'] ?? 0 ),
-				'top_query'        => self::main_query( $page, (string) ( $f['title'] ?? '' ) . ' ' . str_replace( [ '/', '-' ], ' ', $path ) ),
+				'top_query'        => self::main_query( $page, (string) ( $f['title'] ?? '' ) . ' ' . str_replace( [ '/', '-' ], ' ', $path ), $common ),
 				'is_front'         => $id === $front || '/' === $path,
 				'is_utility'       => (bool) preg_match( '#/(contact|privacy|terms|cookie|thank|accessibility|sitemap|login|account|cart|checkout)#i', $path ),
 				'is_tool'          => false !== strpos( (string) ( $row['flags'] ?? '' ), 'form' ) || (bool) preg_match( '/\b(calculator|estimator|quiz|form)\b/i', $path . ' ' . (string) ( $f['title'] ?? '' ) ),
@@ -376,21 +377,22 @@ class Scanner {
 		}
 
 		$summary = [
-			'finished_at' => time(),
-			'pages'       => count( $rows ),
-			'issues'      => $total,
-			'rendered'    => $rendered,
-			'fallback'    => count( $rows ) - $rendered,
-			'sitemap'     => null !== $sitemap,
-			'discouraged' => $discourage,
-			'type_review' => array_map(
+			'finished_at'  => time(),
+			'pages'        => count( $rows ),
+			'issues'       => $total,
+			'rendered'     => $rendered,
+			'fallback'     => count( $rows ) - $rendered,
+			'sitemap'      => null !== $sitemap,
+			'discouraged'  => $discourage,
+			'type_review'  => array_map(
 				static fn( $r ) => [
 					'type'   => (string) $r[0],
 					'reason' => (string) $r[1],
 				],
 				array_filter( $review, static fn( $r ) => '' !== $r[0] )
 			),
-			'site_issues' => array_values(
+			'common_words' => array_slice( $common, 0, 40 ), // For main_query() outside the scan.
+			'site_issues'  => array_values(
 				array_map(
 					static fn( $s ) => [
 						'title'  => (string) $s['issue']['title'],
@@ -424,17 +426,26 @@ class Scanner {
 
 	/**
 	 * The page's main search, the one the title should lead with: by clicks then impressions, the first that
-	 * has 3+ clicks or a fifth of the page's impressions, is not a business's name (this one's or a
-	 * competitor's), and, when it is a learning search, shares a word with the page's topic. '' when none
-	 * qualifies: then no "title misses the main search" finding, and Claude writes for what the page is for.
+	 * - has 3+ clicks or a fifth of the page's impressions;
+	 * - is a short phrase (5 words or fewer: a title can lead with it);
+	 * - is not one Google answers itself (Opportunity::zero_click(): "time in boise idaho");
+	 * - is not a business's name (this one's or a competitor's);
+	 * - is about the page, once the words most pages share (the town, the state: common_words()) are set
+	 *   aside: a learning search needs most of its other words in the title or path, any other search one.
+	 * '' when none qualifies: then no "title misses the main search" finding, and Claude writes for what the
+	 * page is for.
 	 *
-	 * @param array<string,mixed>|null $page  Page data.
-	 * @param string                   $topic The page's title and path (for informational searches).
+	 * @param array<string,mixed>|null $page   Page data.
+	 * @param string                   $topic  The page's title and path ('' skips the topic check).
+	 * @param array<int,string>|null   $common Words most pages share (null: the last scan's).
 	 */
-	public static function main_query( ?array $page, string $topic = '' ): string {
+	public static function main_query( ?array $page, string $topic = '', ?array $common = null ): string {
 		$queries = (array) ( $page['gsc']['queries'] ?? [] );
 		if ( [] === $queries ) {
 			return '';
+		}
+		if ( null === $common ) {
+			$common = function_exists( 'get_option' ) ? array_map( 'strval', (array) ( Scan_Store::meta()['common_words'] ?? [] ) ) : [];
 		}
 		usort( $queries, static fn( $a, $b ) => [ $b['clicks'], $b['impressions'] ] <=> [ $a['clicks'], $a['impressions'] ] );
 		$shown = (int) ( $page['gsc']['impressions'] ?? 0 );
@@ -444,11 +455,18 @@ class Scanner {
 			if ( (int) ( $q['clicks'] ?? 0 ) < 3 && ( $shown <= 0 || (int) ( $q['impressions'] ?? 0 ) < 0.2 * $shown ) ) {
 				continue;
 			}
+			if ( count( preg_split( '/\s+/u', trim( $query ) ) ) > 5 ) {
+				continue; // A sentence is not something a title leads with.
+			}
+			if ( Opportunity::zero_click( $query, (int) ( $q['impressions'] ?? 0 ), (int) ( $q['clicks'] ?? 0 ), (float) ( $q['position'] ?? 0 ) ) ) {
+				continue; // Google answers it itself: no title wins its clicks.
+			}
 			$intent = Intent::of( $query );
-			// Never a business's name (this one's or a competitor's), and a learning search only when it is
-			// about what the page is about.
-			if ( 'navigational' === $intent || ( 'informational' === $intent && '' !== $topic && ! Rules::shares_topic( $query, $topic ) ) ) {
-				continue;
+			if ( 'navigational' === $intent ) {
+				continue; // Never a business's name (this one's or a competitor's).
+			}
+			if ( '' !== $topic && ! Rules::shares_topic( $query, $topic, $common, 'informational' === $intent ) ) {
+				continue; // Not about what the page is about (the town alone does not count).
 			}
 
 			return $query;
@@ -479,20 +497,36 @@ class Scanner {
 	 */
 	protected static function topics( array $rows ): array {
 		$stems = [];
-		$df    = [];
 		foreach ( $rows as $row ) {
 			$path           = self::norm_path( (string) $row['path'] );
 			$stems[ $path ] = Rules::stems( (string) ( $row['facts']['title'] ?? '' ) . ' ' . str_replace( [ '/', '-' ], ' ', $path ) );
-			foreach ( $stems[ $path ] as $stem ) {
+		}
+		$common = array_flip( self::common_words( $rows ) );
+		foreach ( $stems as $path => $list ) {
+			$stems[ $path ] = array_values( array_filter( $list, static fn( $s ) => ! isset( $common[ $s ] ) && mb_strlen( $s ) > 2 ) );
+		}
+
+		return $stems;
+	}
+
+	/**
+	 * Words (stemmed) in the titles and paths of 30% or more of the pages (at least 3): the town, the state,
+	 * the business. They say nothing about what one page is about.
+	 *
+	 * @param array<int,array<string,mixed>> $rows all_facts() rows.
+	 * @return array<int,string>
+	 */
+	public static function common_words( array $rows ): array {
+		$df = [];
+		foreach ( $rows as $row ) {
+			$path = self::norm_path( (string) $row['path'] );
+			foreach ( Rules::stems( (string) ( $row['facts']['title'] ?? '' ) . ' ' . str_replace( [ '/', '-' ], ' ', $path ) ) as $stem ) {
 				$df[ $stem ] = ( $df[ $stem ] ?? 0 ) + 1;
 			}
 		}
 		$limit = max( 3, (int) ceil( count( $rows ) * 0.3 ) );
-		foreach ( $stems as $path => $list ) {
-			$stems[ $path ] = array_values( array_filter( $list, static fn( $s ) => $df[ $s ] < $limit && mb_strlen( $s ) > 2 ) );
-		}
 
-		return $stems;
+		return array_keys( array_filter( $df, static fn( $n ) => $n >= $limit ) );
 	}
 
 	/**

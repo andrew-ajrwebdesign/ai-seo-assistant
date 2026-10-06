@@ -623,13 +623,16 @@ class Rules {
 	 * page's title or path. A shared town name alone ("boise weather" on a Boise plumber's page) is not
 	 * enough: an informational search is only the page's main search when it is about what the page is about.
 	 *
-	 * @param string $query Search.
-	 * @param string $topic The page's title and path.
+	 * @param string            $query  Search.
+	 * @param string            $topic  The page's title and path.
+	 * @param array<int,string> $common Stems most pages share (the town, the state), set aside on both sides.
+	 * @param bool              $most   More than half the search's words (a learning search), else any one.
 	 */
-	public static function shares_topic( string $query, string $topic ): bool {
-		$words = self::stems( $query );
+	public static function shares_topic( string $query, string $topic, array $common = [], bool $most = true ): bool {
+		$words = array_values( array_diff( self::stems( $query ), $common ) );
+		$have  = count( array_intersect( $words, array_diff( self::stems( $topic ), $common ) ) );
 
-		return [] !== $words && count( array_intersect( $words, self::stems( $topic ) ) ) * 2 > count( $words );
+		return [] !== $words && ( $most ? $have * 2 > count( $words ) : $have > 0 );
 	}
 
 	/**

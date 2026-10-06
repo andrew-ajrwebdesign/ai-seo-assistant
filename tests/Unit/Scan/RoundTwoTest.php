@@ -251,6 +251,25 @@ class RoundTwoTest extends TestCase {
 		$this->assertSame( 'boise weather', \AJR\SEOAssistant\Scan\Scanner::main_query( $page, 'Boise Area Weather' ), 'on topic: kept' );
 		$this->assertSame( '', \AJR\SEOAssistant\Scan\Scanner::main_query( [ 'gsc' => [ 'impressions' => 1000, 'queries' => [ [ 'query' => 'tiny search', 'clicks' => 1, 'impressions' => 10 ] ] ] ] ), 'no search with real traffic' );
 
+		// Last round A3: zero-click searches, long ones, and the town alone never make the main search.
+		\WP_Mock::userFunction( 'apply_filters' )->andReturnUsing( fn( $h, $v ) => $v );
+		$common = [ 'boise', 'idaho' ];
+		$main   = static fn( array $queries, string $topic ) => \AJR\SEOAssistant\Scan\Scanner::main_query(
+			[
+				'gsc' => [
+					'impressions' => 5000,
+					'queries'     => $queries,
+				],
+			],
+			$topic,
+			$common
+		);
+		$this->assertSame( '', $main( [ [ 'query' => 'time in boise idaho', 'clicks' => 3, 'impressions' => 2000, 'position' => 2.0 ] ], 'Is Boise Idaho Affordable? is boise idaho affordable' ), 'zero-click, and only the town in common' );
+		$this->assertSame( '', $main( [ [ 'query' => 'boise cost of living for families', 'clicks' => 30, 'impressions' => 2000, 'position' => 8.0 ] ], 'Boise Cost of Living for Families' ), 'six words: not a title lead' );
+		$this->assertSame( 'cost of living for families', $main( [ [ 'query' => 'cost of living for families', 'clicks' => 30, 'impressions' => 2000, 'position' => 8.0 ] ], 'Boise Cost of Living for Families' ), 'five words: fine' );
+		$this->assertSame( '', $main( [ [ 'query' => 'boise idaho hiking', 'clicks' => 30, 'impressions' => 2000, 'position' => 8.0 ] ], 'Is Boise Idaho Affordable?' ), 'shares only the town' );
+		$this->assertSame( 'boise cost of living', $main( [ [ 'query' => 'boise cost of living', 'clicks' => 30, 'impressions' => 2000, 'position' => 8.0 ] ], 'The Real Cost of Living in Boise' ) );
+
 		$this->assertTrue( \AJR\SEOAssistant\Scan\Rules::contains_query( 'Water Heater Installation in Northfield', 'water heaters installed near me' ) === false, '"installed" is not "installation"' );
 		$this->assertTrue( \AJR\SEOAssistant\Scan\Rules::contains_query( 'Water Heaters | Northfield', 'water heater in northfield' ), 'plural and stopword' );
 		$this->assertTrue( \AJR\SEOAssistant\Scan\Rules::contains_query( 'Home Selling Guide for Boise', 'boise home sellings' ) );
