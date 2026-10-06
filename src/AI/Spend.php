@@ -330,14 +330,63 @@ class Spend {
 			add_option( $calls, (string) (int) $now['calls'], '', false );
 			self::prune( $now['period'] );
 		}
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- an atomic increment; the option cache is cleared below.
-		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = option_value + %d WHERE option_name = %s", (int) round( $usd * 1000000 ), $total ) );
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- as above.
-		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = option_value + 1 WHERE option_name = %s", $calls ) );
+		$micros = (int) round( $usd * 1000000 );
+		$ok     = 0 === $micros || self::increment( $total, $micros, (int) round( $now['usd'] * 1000000 ) );
+		$ok     = self::increment( $calls, 1, (int) $now['calls'] ) && $ok;
 		if ( function_exists( 'wp_cache_delete' ) ) {
 			wp_cache_delete( $total, 'options' );
 			wp_cache_delete( $calls, 'options' );
 		}
+		if ( ! $ok ) {
+			// The counter could not be increased in SQL (seeding failed, a database error): the call is still
+			// counted, through the plain option write, and the agency's log says so.
+			$fresh = self::current();
+			if ( false === get_option( $total, false ) ) {
+				self::save(
+					$fresh,
+					[
+						'usd'   => round( $fresh['usd'] + $usd, 6 ),
+						'calls' => $fresh['calls'] + 1,
+					]
+				);
+			} else {
+				update_option( $total, (string) ( (int) get_option( $total, 0 ) + $micros ), false );
+				update_option( $calls, (string) ( (int) get_option( $calls, 0 ) + 1 ), false );
+			}
+			if ( function_exists( 'error_log' ) ) {
+				error_log( 'AI SEO Assistant: the spend counter could not be increased in SQL; counted through the option instead.' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- a counting failure the agency must be able to find.
+			}
+		}
+	}
+
+	/**
+	 * Increase a counter option in one SQL statement. When it touched no row (the counter is not there:
+	 * its first add_option() failed or it was removed), seed it and try once more.
+	 *
+	 * @param string $name Option name.
+	 * @param int    $by   Amount.
+	 * @param int    $seed Value to create it with when it is missing.
+	 * @return bool Whether the counter was increased.
+	 */
+	protected static function increment( string $name, int $by, int $seed ): bool {
+		global $wpdb;
+		$sql = "UPDATE {$wpdb->options} SET option_value = option_value + %d WHERE option_name = %s";
+		for ( $try = 0; $try < 2; $try++ ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- an atomic increment on fixed SQL; the option cache is cleared by the caller.
+			$rows = $wpdb->query( $wpdb->prepare( $sql, $by, $name ) );
+			if ( is_int( $rows ) && $rows > 0 ) {
+				return true;
+			}
+			if ( 0 === $try ) {
+				if ( function_exists( 'wp_cache_delete' ) ) {
+					wp_cache_delete( $name, 'options' );
+					wp_cache_delete( 'notoptions', 'options' );
+				}
+				add_option( $name, (string) $seed, '', false );
+			}
+		}
+
+		return false;
 	}
 
 	/**

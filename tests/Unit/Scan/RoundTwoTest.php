@@ -306,6 +306,8 @@ class RoundTwoTest extends TestCase {
 			public $store;
 			/** @var array<int,string> */
 			public $sql = [];
+			/** @var bool Every increment touches no row (a database that refuses them). */
+			public $broken = false;
 			public function __construct( array &$store ) {
 				$this->store = &$store;
 			}
@@ -321,9 +323,11 @@ class RoundTwoTest extends TestCase {
 				if ( preg_match( '/option_value = option_value \+ (%d|1) WHERE option_name = %s/', $q, $m ) ) {
 					$name = '%d' === $m[1] ? $args[1] : $args[0];
 					$by   = '%d' === $m[1] ? (int) $args[0] : 1;
-					if ( isset( $this->store[ $name ] ) ) {
+					if ( isset( $this->store[ $name ] ) && ! $this->broken ) {
 						$this->store[ $name ] = (string) ( (int) $this->store[ $name ] + $by );
+						return 1;
 					}
+					return 0; // No row touched.
 				}
 				return 1;
 			}
@@ -343,6 +347,21 @@ class RoundTwoTest extends TestCase {
 		foreach ( $GLOBALS['wpdb']->sql as $q ) {
 			$this->assertDoesNotMatchRegularExpression( '/SET option_value = %[sf]/', $q, 'only ever increased in SQL, never written whole' );
 		}
+
+		// A counter that went missing (seeding failed, removed by hand): seeded again and increased.
+		$period = $state['period'];
+		unset( $this->options[ \AJR\SEOAssistant\AI\Spend::TOTAL_PREFIX . $period ], $this->options[ \AJR\SEOAssistant\AI\Spend::CALLS_PREFIX . $period ] );
+		$before = \AJR\SEOAssistant\AI\Spend::current();
+		\AJR\SEOAssistant\AI\Spend::record( 'claude-haiku-4-5', [ 'input_tokens' => 1000000, 'output_tokens' => 0 ] );
+		$this->assertEqualsWithDelta( $before['usd'] + 1.0, \AJR\SEOAssistant\AI\Spend::current()['usd'], 1e-6, 'never silently uncounted' );
+
+		// Increments refused altogether: still counted, through the plain option write.
+		$GLOBALS['wpdb']->broken = true;
+		$before                  = \AJR\SEOAssistant\AI\Spend::current();
+		\AJR\SEOAssistant\AI\Spend::record( 'claude-haiku-4-5', [ 'input_tokens' => 1000000, 'output_tokens' => 0 ] );
+		$this->assertEqualsWithDelta( $before['usd'] + 1.0, \AJR\SEOAssistant\AI\Spend::current()['usd'], 1e-6, 'counted even when SQL refuses' );
+		$this->assertSame( $before['calls'] + 1, \AJR\SEOAssistant\AI\Spend::current()['calls'] );
+		$GLOBALS['wpdb']->broken = false;
 
 		// Through the client: a call that timed out after it was sent, and a 2xx that could not be read, are
 		// both counted at their worst case; a refused connection (never sent) is not.
