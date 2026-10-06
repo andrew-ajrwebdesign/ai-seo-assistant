@@ -290,8 +290,8 @@ class Upgrade {
 	 * @return array<int,string> Sources not found in AJR Core ([] = retired).
 	 */
 	public static function confirm_redirects_moved(): array {
-		$map     = get_option( 'ajr_core_redirect_map', [] );
-		$known   = [];
+		$map   = get_option( 'ajr_core_redirect_map', [] );
+		$known = [];
 		foreach ( is_array( $map ) ? array_keys( $map ) : [] as $source ) {
 			$known[ strtolower( untrailingslashit( (string) $source ) ) ] = true;
 		}
