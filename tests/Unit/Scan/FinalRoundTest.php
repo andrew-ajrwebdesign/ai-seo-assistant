@@ -129,23 +129,15 @@ class FinalRoundTest extends TestCase {
 		\WP_Mock::userFunction( 'delete_transient' )->andReturn( true );
 		$queue                             = [ 'ids' => [ 5, 6 ], 'total' => 2, 'done' => 0, 'mode' => 'full', 'started' => 1, 'run' => 'scan-abc' ];
 		$this->options[ Scheduler::QUEUE ] = $queue;
-		$GLOBALS['wpdb'] = new class() { // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test double.
-			/** @var string */
-			public $options = 'wp_options';
-			/** @var string */
-			public $flag = 'scan-abc';
-			public function prepare( $q, ...$a ) {
-				return $q;
-			}
-			public function get_var( $q ) {
-				return $this->flag; // Cancel wrote this run's id after this request read the queue.
-			}
-		};
+		\WP_Mock::userFunction( 'wp_generate_password' )->andReturn( 'tokentokentokentoken' );
+		$GLOBALS['wpdb'] = new \AJR\SEOAssistant\Tests\Unit\Fake_Options_Db(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test double.
+		$GLOBALS['wpdb']->rows[ Scheduler::CANCELLED ] = 'scan-abc'; // Cancel wrote this run's id after this request read the queue.
 		$r = Scheduler::step( 30 );
+		$this->assertArrayNotHasKey( Scheduler::LOCK, $GLOBALS['wpdb']->rows, 'the step released its lock' );
 		$this->assertSame( 'cancelled', $r['state'] );
 		$this->assertSame( $queue, $this->options[ Scheduler::QUEUE ], 'the queue is not written back (no page taken, nothing in flight)' );
 
-		$GLOBALS['wpdb']->flag = 'scan-other'; // An earlier run's cancel does not stop this one.
+		$GLOBALS['wpdb']->rows[ Scheduler::CANCELLED ] = 'scan-other'; // An earlier run's cancel does not stop this one.
 		$write                 = new \ReflectionMethod( Scheduler::class, 'write' );
 		$write->setAccessible( true );
 		$this->assertTrue( $write->invoke( null, [ 'done' => 1 ] + $queue ) );
@@ -187,17 +179,15 @@ class FinalRoundTest extends TestCase {
 	 */
 	public function test_inline_refresh_respects_the_lock_and_the_cap(): void {
 		$this->post_class();
-		$this->transients[ Scheduler::LOCK ] = time();
-		$GLOBALS['wpdb'] = new class() { // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test double.
-			/** @var string */
-			public $prefix = 'wp_';
-			public function prepare( $q, ...$a ) {
-				return $q;
-			}
+		\WP_Mock::userFunction( 'wp_generate_password' )->andReturn( 'refreshrefreshrefres' );
+		$GLOBALS['wpdb'] = new class() extends \AJR\SEOAssistant\Tests\Unit\Fake_Options_Db { // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test double.
 			public function get_row( $q, $o ) {
 				return [ 'post_id' => 5, 'path' => '/x/', 'facts' => '{}', 'issues' => '[]', 'suggestions' => null, 'issue_count' => 0, 'scanned_at' => '2026-01-01 00:00:00' ];
 			}
 		};
+		// A scheduler step in another request holds the lock (its token, expiring in a minute).
+		$step                                    = 'steptoken|' . ( time() + 60 );
+		$GLOBALS['wpdb']->rows[ Scheduler::LOCK ] = $step;
 		$post                    = new \WP_Post();
 		$post->ID                = 5;
 		$post->post_modified_gmt = '2026-10-06 00:00:00'; // Edited after the scan of 1 Jan: stale.
@@ -211,10 +201,43 @@ class FinalRoundTest extends TestCase {
 		);
 		$this->assertFalse( Scanner::refresh_if_stale( 5 ), 'a scan step holds the lock: no second pass' );
 		$this->assertFalse( $scanned, 'and the page is not scanned' );
+		$this->assertSame( $step, $GLOBALS['wpdb']->rows[ Scheduler::LOCK ], 'the step\'s lock survives the editor refresh' );
 
 		$src = (string) file_get_contents( dirname( __DIR__, 3 ) . '/src/Scan/Scanner.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading source.
 		$this->assertStringContainsString( 'Auto_Types::apply( $auto, null, Auto_Types::PENDING_BATCH, 5.0 )', $src, 'the inline pass sets a capped batch only' );
-		$this->assertMatchesRegularExpression( '/set_transient\( Scheduler::LOCK.*finally \{\s*\$scanner|finally \{\s*delete_transient\( Scheduler::LOCK \)/s', $src, 'and holds the lock while it runs' );
+		$this->assertMatchesRegularExpression( '/Scheduler::acquire\( 120 \).*finally \{\s*Scheduler::release\(\)/s', $src, 'and holds the lock while it runs' );
+	}
+
+	/**
+	 * Security re-review: the scan lock is one atomic insert. Two racing refreshes: one gets it; the
+	 * other's release() cannot remove it; an expired lock (a request that died) is taken over.
+	 */
+	public function test_scan_lock_is_atomic_and_owned(): void {
+		$tokens = [ 'requestAAAAAAAAAAAAA', 'requestBBBBBBBBBBBBB', 'requestCCCCCCCCCCCCC' ];
+		\WP_Mock::userFunction( 'wp_generate_password' )->andReturnUsing(
+			function () use ( &$tokens ) {
+				return array_shift( $tokens );
+			}
+		);
+		$GLOBALS['wpdb'] = new \AJR\SEOAssistant\Tests\Unit\Fake_Options_Db(); // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test double.
+		$token           = new \ReflectionProperty( Scheduler::class, 'token' );
+		$token->setAccessible( true );
+
+		$this->assertTrue( Scheduler::acquire( 120 ), 'request A takes the lock' );
+		$a = $GLOBALS['wpdb']->rows[ Scheduler::LOCK ];
+		$token->setValue( null, '' ); // Request B: a different PHP request, holding nothing.
+		$this->assertFalse( Scheduler::acquire( 120 ), 'request B, racing: refused' );
+		Scheduler::release(); // B releases what it does not hold.
+		$this->assertSame( $a, $GLOBALS['wpdb']->rows[ Scheduler::LOCK ], 'A\'s lock is still there' );
+
+		$token->setValue( null, $a );
+		Scheduler::release();
+		$this->assertArrayNotHasKey( Scheduler::LOCK, $GLOBALS['wpdb']->rows, 'A releases its own' );
+
+		$GLOBALS['wpdb']->rows[ Scheduler::LOCK ] = 'deadrequest|' . ( time() - 5 ); // Expired: its request died.
+		$this->assertTrue( Scheduler::acquire( 120 ), 'an expired lock is taken over' );
+		$this->assertStringStartsWith( 'requestCCCCCCCCCCCCC|', $GLOBALS['wpdb']->rows[ Scheduler::LOCK ] );
+		$token->setValue( null, '' );
 	}
 
 	/**

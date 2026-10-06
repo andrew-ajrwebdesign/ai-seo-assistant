@@ -110,7 +110,8 @@ delete_post_meta_by_key( '_aisa_page_role' ); // Scan/Page_Role::LEGACY_META (pa
 wp_clear_scheduled_hook( 'ai_seo_assistant_report_stale_check' );
 wp_clear_scheduled_hook( 'aisa_scan_run' );
 wp_unschedule_hook( 'aisa_scan_post' );
-delete_transient( 'aisa_scan_lock' );
+delete_transient( 'aisa_scan_lock' ); // The 5.0-beta transient lock.
+delete_option( 'aisa_scan_lock' ); // Scan/Scheduler::LOCK, the lock row.
 delete_transient( 'aisa_scan_link_status' );
 delete_transient( 'aisa_scan_sitemap' );
 foreach ( get_users(

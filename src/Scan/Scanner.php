@@ -437,16 +437,15 @@ class Scanner {
 		if ( null === $row || ! $post instanceof \WP_Post || $post->post_modified_gmt <= (string) $row['scanned_at'] ) {
 			return false;
 		}
-		if ( false !== get_transient( Scheduler::LOCK ) ) {
-			return false; // A scan step is running: it will get to the page; never two site-wide passes at once.
+		if ( ! Scheduler::acquire( 120 ) ) {
+			return false; // A scan step (or another refresh) holds the lock: never two site-wide passes at once.
 		}
-		set_transient( Scheduler::LOCK, time(), 120 );
 		try {
 			$scanner = new self( $store );
 			$scanner->scan_page( $post_id );
 			$scanner->finalize( false );
 		} finally {
-			delete_transient( Scheduler::LOCK );
+			Scheduler::release(); // Ours only: a lock someone else holds is never removed.
 		}
 
 		return true;

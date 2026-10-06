@@ -36,10 +36,17 @@ class Scheduler {
 	/** Option: the queue { ids[], total, done, mode, started }. Not autoloaded. */
 	public const QUEUE = 'ai_seo_assistant_scan_queue';
 
+	/**
+	 * The token of the scan lock this request holds ('' when none): release() deletes only that row.
+	 *
+	 * @var string
+	 */
+	protected static string $token = '';
+
 	/** Option: the run Cancel stopped (its queue's 'run'), checked by step() before every queue write. */
 	public const CANCELLED = 'ai_seo_assistant_scan_cancelled';
 
-	/** Transient lock while a batch runs. */
+	/** Option row: the scan lock (acquire() / release(); token and expiry, never read through the cache). */
 	public const LOCK = 'aisa_scan_lock';
 
 	/** Seconds one batch may run. */
@@ -106,14 +113,13 @@ class Scheduler {
 				'total' => 0,
 			];
 		}
-		if ( false !== get_transient( self::LOCK ) ) {
+		if ( ! self::acquire( 2 * $budget + 30 ) ) {
 			return [
 				'state' => 'busy',
 				'done'  => (int) $queue['done'],
 				'total' => (int) $queue['total'],
 			];
 		}
-		set_transient( self::LOCK, time(), 2 * $budget + 30 );
 
 		if ( isset( $queue['current'] ) ) {
 			// The last step died inside this page (a fatal, a timeout): it is not tried again in this run,
@@ -150,7 +156,7 @@ class Scheduler {
 				if ( ! self::write( $queue ) ) {
 					return self::stopped( $queue );
 				}
-				delete_transient( self::LOCK );
+				self::release();
 
 				return [
 					'state' => 'working',
@@ -163,7 +169,7 @@ class Scheduler {
 			}
 			$intent = Intent::run_pass();
 			if ( 'working' === $intent['state'] ) {
-				delete_transient( self::LOCK );
+				self::release();
 
 				return [
 					'state' => 'working',
@@ -175,7 +181,7 @@ class Scheduler {
 			$result['intent'] = $intent;
 			delete_option( self::QUEUE );
 			Ranking::flush();
-			delete_transient( self::LOCK );
+			self::release();
 
 			return [
 				'state'  => 'done',
@@ -185,7 +191,7 @@ class Scheduler {
 				'before' => $queue['before'] ?? null,
 			];
 		}
-		delete_transient( self::LOCK );
+		self::release();
 
 		return [
 			'state' => 'working',
@@ -351,13 +357,59 @@ class Scheduler {
 	 * @return array{state:string,done:int,total:int}
 	 */
 	protected static function stopped( array $queue ): array {
-		delete_transient( self::LOCK );
+		self::release();
 
 		return [
 			'state' => 'cancelled',
 			'done'  => (int) $queue['done'],
 			'total' => (int) $queue['total'],
 		];
+	}
+
+	/**
+	 * Take the scan lock, atomically: one INSERT IGNORE of the lock row, which only one request can win
+	 * (add_option() is not enough: it reads first, then inserts with ON DUPLICATE KEY UPDATE, so two
+	 * requests can both "win"). The row holds this request's token and when the lock expires; an expired
+	 * lock (a request that died holding it) is removed, only if it is still that same row, and taken.
+	 *
+	 * @param int $ttl Seconds the lock lasts.
+	 * @return bool Whether this request now holds it.
+	 */
+	public static function acquire( int $ttl ): bool {
+		global $wpdb;
+		$token = wp_generate_password( 20, false ) . '|' . ( time() + $ttl );
+		for ( $try = 0; $try < 2; $try++ ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- an atomic insert-if-absent; the lock row is never read through the option cache.
+			$won = $wpdb->query( $wpdb->prepare( "INSERT IGNORE INTO {$wpdb->options} (option_name, option_value, autoload) VALUES (%s, %s, 'no')", self::LOCK, $token ) );
+			if ( 1 === $won ) {
+				self::$token = $token;
+				return true;
+			}
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- as above.
+			$held    = (string) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::LOCK ) );
+			$expires = (int) substr( (string) strrchr( $held, '|' ), 1 );
+			if ( '' === $held || $expires >= time() ) {
+				return false; // Held, and not expired.
+			}
+			// Expired: remove exactly that row (another request may have just replaced it), then try again.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- as above.
+			$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value = %s", self::LOCK, $held ) );
+		}
+
+		return false;
+	}
+
+	/**
+	 * Release the scan lock, only if this request holds it (a lock another request took is left alone).
+	 */
+	public static function release(): void {
+		global $wpdb;
+		if ( '' === self::$token ) {
+			return;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the lock row, by its owner's token only.
+		$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name = %s AND option_value = %s", self::LOCK, self::$token ) );
+		self::$token = '';
 	}
 
 	/**
