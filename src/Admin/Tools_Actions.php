@@ -45,8 +45,8 @@ class Tools_Actions {
 	/** Confirm the 4.x redirects are in AJR Core, so the old table can go. */
 	public const REDIRECTS = 'aisa_redirects_moved';
 
-	/** Set a page's role (money, location, info, unclassified, or back to the default). */
-	public const ROLE = 'aisa_set_role';
+	/** Set a page's AJR Core page type (or clear it), which also sets its role in the opportunity score. */
+	public const ROLE = 'aisa_set_page_type';
 
 	/**
 	 * Register hooks.
@@ -87,6 +87,8 @@ class Tools_Actions {
 		}
 		check_ajax_referer( Ui::NONCE, 'nonce' );
 	}
+
+	// phpcs:disable WordPress.Security.NonceVerification.Missing -- every handler below calls guard() (check_admin_referer) or guard_ajax() (check_ajax_referer) before it reads $_POST.
 
 	/**
 	 * Rescan now (no-JS path): queue every page; cron works through it.
@@ -227,44 +229,53 @@ class Tools_Actions {
 	public function set_role(): void {
 		$this->guard( self::ROLE );
 		$post_id = isset( $_POST['post'] ) ? absint( $_POST['post'] ) : 0;
-		$role    = isset( $_POST['role'] ) ? sanitize_key( wp_unslash( $_POST['role'] ) ) : '';
-		$done    = self::apply_role( [ $post_id ], $role );
+		$type    = isset( $_POST['type'] ) ? sanitize_key( wp_unslash( $_POST['type'] ) ) : '';
+		$done    = self::apply_type( [ $post_id ], $type );
 		$this->back(
 			[
 				'post' => $post_id,
-				'aisa' => $done > 0 ? 'role' : 'role_failed',
+				'aisa' => $done > 0 ? 'type' : 'type_failed',
 			]
 		);
 	}
 
 	/**
-	 * AJAX: set the role of one page (the list's tag) or of the selected pages (the bulk bar).
+	 * AJAX: set the page type of one page (the list's tag) or of the selected pages (the bulk bar).
 	 */
 	public function ajax_set_role(): void {
 		$this->guard_ajax();
-		// phpcs:disable WordPress.Security.NonceVerification.Missing -- verified in guard_ajax().
 		$ids  = isset( $_POST['posts'] ) ? array_filter( array_map( 'absint', explode( ',', sanitize_text_field( wp_unslash( $_POST['posts'] ) ) ) ) ) : [];
-		$role = isset( $_POST['role'] ) ? sanitize_key( wp_unslash( $_POST['role'] ) ) : '';
-		// phpcs:enable
-		$done = self::apply_role( array_slice( $ids, 0, 500 ), $role );
+		$type = isset( $_POST['type'] ) ? sanitize_key( wp_unslash( $_POST['type'] ) ) : '';
+		$done = self::apply_type( array_slice( $ids, 0, 500 ), $type );
 		if ( 0 === $done ) {
-			wp_send_json_error( [ 'message' => __( 'The role was not changed.', 'ai-seo-assistant' ) ], 400 );
+			wp_send_json_error( [ 'message' => __( 'The page type was not changed.', 'ai-seo-assistant' ) ], 400 );
 		}
 		wp_send_json_success( [ 'done' => $done ] );
 	}
 
 	/**
-	 * Set a role on pages the user may edit.
+	 * Set a page type through AJR Core on pages the user may edit ('clear' or '' clears it); the page's
+	 * "Page type not set" finding goes at once, without waiting for the next scan.
 	 *
 	 * @param array<int,int> $ids  Post IDs.
-	 * @param string         $role Role key or 'auto'.
+	 * @param string         $type Page type slug, or 'clear' / ''.
 	 * @return int Pages changed.
 	 */
-	protected static function apply_role( array $ids, string $role ): int {
-		$done = 0;
+	protected static function apply_type( array $ids, string $type ): int {
+		$type = 'clear' === $type ? '' : $type;
+		if ( ! Page_Role::core() || ( '' !== $type && ! isset( Page_Role::types()[ $type ] ) ) ) {
+			return 0;
+		}
+		$store = new Scan_Store();
+		$done  = 0;
 		foreach ( $ids as $id ) {
-			if ( $id > 0 && current_user_can( 'edit_post', $id ) && Page_Role::set( $id, $role ) ) {
-				++$done;
+			if ( $id <= 0 || ! current_user_can( 'edit_post', $id ) || ! Page_Role::set_type( $id, $type ) ) {
+				continue;
+			}
+			++$done;
+			$row = $store->get( $id );
+			if ( null !== $row && '' !== $type ) {
+				$store->save_issues( $id, array_values( array_filter( (array) $row['issues'], static fn( $i ) => 'page_type_unset' !== ( $i['code'] ?? '' ) ) ) );
 			}
 		}
 
@@ -311,4 +322,6 @@ class Tools_Actions {
 		wp_safe_redirect( add_query_arg( array_merge( [ 'page' => Scan_Page::SLUG ], $args ), admin_url( 'admin.php' ) ) );
 		exit;
 	}
+
+	// phpcs:enable WordPress.Security.NonceVerification.Missing
 }

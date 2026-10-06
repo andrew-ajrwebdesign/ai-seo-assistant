@@ -144,8 +144,7 @@ class ScanRulesTest extends TestCase {
 		$this->assertContains( 'thin', $this->codes( [ 'words' => 120 ] ) );
 		$this->assertNotContains( 'thin', $this->codes( [ 'words' => 120 ], [ 'is_utility' => true ] ) );
 		$this->assertContains( 'og_image', $this->codes( [ 'og_image' => '' ] ) );
-		$this->assertContains( 'schema_none', $this->codes( [ 'schema' => [] ] ) );
-		$this->assertContains( 'schema_article', $this->codes( [], [ 'post_type' => 'post' ] ) );
+		$this->assertNotContains( 'schema_none', $this->codes( [ 'schema' => [] ] ), 'schema is never an editor job (decision 2026-10-06)' );
 		$this->assertContains( 'heavy', $this->codes( [], [ 'heavy' => [ [ 'big.jpg', 900 ] ] ] ) );
 	}
 
@@ -212,14 +211,23 @@ class ScanRulesTest extends TestCase {
 	}
 
 	/**
-	 * Service schema advice names AJR Core's Custom schema module as on only when it is (correction 4).
+	 * The only schema finding is a missing page type (one click), and only where AJR Core has page types.
 	 */
-	public function test_service_schema_advice_depends_on_custom_schema(): void {
-		$on  = Rules::evaluate( self::clean_page(), [ 'inbound' => 3, 'is_service' => true, 'custom_schema_on' => true ] );
-		$off = Rules::evaluate( self::clean_page(), [ 'inbound' => 3, 'is_service' => true, 'custom_schema_on' => false ] );
-		$this->assertSame( 'Fix: add a Service entry in AJR Core › Schema.', $on[0]['fix'] );
-		$this->assertSame( 'Fix: turn on Custom schema in AJR Core, then add a Service entry.', $off[0]['fix'] );
-		$this->assertSame( [], Rules::evaluate( array_merge( self::clean_page(), [ 'schema' => [ 'Service' ] ] ), [ 'inbound' => 3, 'is_service' => true ] ) );
+	public function test_page_type_is_the_only_schema_finding(): void {
+		$ctx    = [
+			'inbound'        => 3,
+			'page_types'     => true,
+			'page_type'      => '',
+			'suggested_type' => 'service',
+			'type_labels'    => [ 'service' => 'Service page' ],
+		];
+		$issues = Rules::evaluate( self::clean_page(), $ctx );
+		$this->assertCount( 1, $issues );
+		$this->assertSame( 'page_type_unset', $issues[0]['code'] );
+		$this->assertSame( 'click', $issues[0]['who'] );
+		$this->assertStringContainsString( 'Service page', $issues[0]['fix'] );
+		$this->assertSame( [], Rules::evaluate( self::clean_page(), [ 'page_type' => 'service' ] + $ctx ), 'set: nothing' );
+		$this->assertSame( [], Rules::evaluate( self::clean_page(), [ 'inbound' => 3, 'is_service' => true ] ), 'no AJR Core page types: no schema advice at all' );
 	}
 
 	/**

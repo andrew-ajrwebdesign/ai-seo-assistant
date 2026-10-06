@@ -13,7 +13,12 @@
     <file>src/Core/Secret_Store.php</file>
     <file>src/Core/Secret_Guard.php</file>
     <file>src/Core/Upgrade.php</file>
-    <file>src/Admin/Secret_Notices.php</file>
+    <!-- 5.0: the scan, review, change log, page data and every admin screen. -->
+    <file>src/Scan</file>
+    <file>src/Review</file>
+    <file>src/Changes</file>
+    <file>src/Search</file>
+    <file>src/Admin</file>
 
     <exclude-pattern>/vendor/*</exclude-pattern>
     <exclude-pattern>/tests/*</exclude-pattern>

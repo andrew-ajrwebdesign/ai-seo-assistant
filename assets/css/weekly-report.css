@@ -49,8 +49,7 @@
 
 	display: grid;
 	gap: var(--aisa-gap);
-	max-inline-size: 1200px;
-	margin-block-start: 16px;
+	margin-block-start: 16px; /* Full admin width (5.0): no cap; the layout below adds the card column. */
 	color: var(--aisa-ink);
 	font-family: var(--aisa-sans);
 	font-size: 14px;
@@ -700,6 +699,34 @@
 	font-size: 15px;
 }
 
+/* ---- Full-width layout with AJR Core's "Need a hand?" card ------------------------------------------ */
+
+/* Content, then the card in a 300px column on the right (AJR Core's essentials screen does the same);
+ * on a narrow screen the card drops below the content. */
+.aisa-layout {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: var(--aisa-gap);
+	align-items: start;
+}
+
+.aisa-layout__main {
+	display: grid;
+	gap: var(--aisa-gap);
+	min-inline-size: 0;
+}
+
+@media (min-width: 1200px) {
+	.aisa-layout--card {
+		grid-template-columns: minmax(0, 1fr) 300px;
+	}
+
+	.aisa-layout__side {
+		position: sticky;
+		inset-block-start: 52px;
+	}
+}
+
 /* ---- Agency-only delivery panel (standard admin styling, kept below the report) ----------------- */
 
 .aisa-delivery {
@@ -897,6 +924,14 @@
 	@page {
 		size: A4;
 		margin: 14mm 12mm;
+	}
+
+	.aisa-no-print {
+		display: none !important;
+	}
+
+	.aisa-layout--card {
+		grid-template-columns: minmax(0, 1fr);
 	}
 
 	#wpadminbar,

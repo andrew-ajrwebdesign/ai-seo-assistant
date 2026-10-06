@@ -39,11 +39,11 @@ class Report_View {
 	 *                                       latest (bool: this is the newest week), alerted (bool).
 	 */
 	public static function report( array $snap, array $context ): string {
-		$html  = self::late_notice( $snap, $context );
-		$html .= self::header( $snap, $context );
+		$head  = self::late_notice( $snap, $context );
+		$head .= self::header( $snap, $context );
 		// Search Console is the first card under the header (Andrew, 2026-09-29): it is the figure that
 		// moves every week, on every site, even while enquiries are few.
-		$html  .= self::search( $snap['gsc'] ?? null, $snap );
+		$html   = self::search( $snap['gsc'] ?? null, $snap );
 		$html  .= '<div class="aisa-row">' . self::enquiries( $snap ) . self::note( $snap['note'] ?? null, $context ) . '</div>';
 		$visits = self::visits( $snap['ga4'] ?? null );
 		$ads    = self::ads( $snap['ads'] ?? null );
@@ -54,7 +54,25 @@ class Report_View {
 
 		// An <article> scopes the report's own header and footer, so they are not read as a second
 		// banner / contentinfo beside wp-admin's.
-		return '<article class="aisa-report" aria-labelledby="aisa-headline">' . $html . '</article>';
+		return '<article class="aisa-report" aria-labelledby="aisa-headline">' . self::with_aside( $head, $html, $context ) . '</article>';
+	}
+
+	/**
+	 * The header full width, then the body with AJR Core's "Need a hand?" card on the right (below on a
+	 * phone; never printed), as on AJR Core's own screens. Without the card the body is full width.
+	 *
+	 * @param string              $head    Header HTML.
+	 * @param string              $body    Body HTML.
+	 * @param array<string,mixed> $context aside: the card's HTML (AJR Core's own markup, escaped there).
+	 */
+	protected static function with_aside( string $head, string $body, array $context ): string {
+		$card = (string) ( $context['aside'] ?? '' );
+		if ( '' === $card ) {
+			return $head . $body;
+		}
+
+		return $head . '<div class="aisa-layout aisa-layout--card"><div class="aisa-layout__main">' . $body . '</div>'
+			. '<aside class="aisa-layout__side aisa-no-print" aria-label="' . esc_attr__( 'Help', 'ai-seo-assistant' ) . '">' . $card . '</aside></div>';
 	}
 
 	/**

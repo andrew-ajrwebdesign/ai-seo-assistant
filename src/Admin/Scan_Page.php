@@ -23,7 +23,10 @@ use AJR\SEOAssistant\AI\Spend;
 use AJR\SEOAssistant\Changes\Change_Log;
 use AJR\SEOAssistant\Report\Access;
 use AJR\SEOAssistant\Report\Chart;
+use AJR\SEOAssistant\Content\Business as Business_Facts;
 use AJR\SEOAssistant\Review\Page_Review;
+use AJR\SEOAssistant\Scan\Google_Reads;
+use AJR\SEOAssistant\Scan\Listing;
 use AJR\SEOAssistant\Scan\Opportunity;
 use AJR\SEOAssistant\Scan\Page_Role;
 use AJR\SEOAssistant\Scan\Ranking;
@@ -62,7 +65,7 @@ class Scan_Page {
 		} else {
 			$this->overview();
 		}
-		echo '</div></div>';
+		echo Ui::layout_close() . '</div></div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui (the card is AJR Core's own).
 	}
 
 	/* ==== The list (B1–B3) ======================================================================== */
@@ -98,7 +101,7 @@ class Scan_Page {
 					: __( 'Also runs on each page when it is saved', 'ai-seo-assistant' )
 			) . '</span>';
 
-		echo Ui::hero( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+		$hero = Ui::hero(
 			[
 				/* translators: %s: agency name. */
 				'label'   => sprintf( __( 'SEO scan by %s', 'ai-seo-assistant' ), Ui::agency() ),
@@ -107,6 +110,7 @@ class Scan_Page {
 				'actions' => $actions,
 			]
 		);
+		echo $hero; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		$this->result_notice();
 
 		$spend = Spend::current();
@@ -116,7 +120,7 @@ class Scan_Page {
 		}
 
 		if ( [] === $rows ) {
-			echo '</div>' . Ui::footer(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+			echo Ui::footer(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 			return;
 		}
 
@@ -125,75 +129,143 @@ class Scan_Page {
 		$this->spend_card( $spend, $cap );
 		echo '</div>';
 
+		$this->listing_card();
 		if ( $ranked ) {
 			$this->ranked_list( $rows );
 		} else {
 			$this->first_run( $rows );
 		}
-		$this->listing_card();
 		echo Ui::footer(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 	}
 
 	/**
-	 * "Google listing": the pushed Business Profile check, Google's listing against the site's details.
+	 * "Google listing" (J1): the pushed Business Profile check against the site's own business details.
+	 * Each difference shows both values and one way to fix it (AJR Core → Business details); a difference
+	 * the agency pinned in AJR Core is "Kept on purpose", with its reason, and never counted.
 	 */
 	protected function listing_card(): void {
-		$listing = get_option( \AJR\SEOAssistant\Report\Snapshot_Store::LISTING, null );
-		if ( ! is_array( $listing ) ) {
+		$group = Listing::current();
+		if ( 'none' === $group['state'] ) {
 			return;
 		}
+		$listing = (array) $group['listing'];
+		$when    = (int) ( $listing['checked_at'] ?? 0 );
+		$core    = Listing::core_url();
 		echo '<section class="aisa-card" id="aisa-listing" aria-labelledby="aisa-listing-h">';
-		$when = (int) ( $listing['checked_at'] ?? 0 );
-		/* translators: %s: date. */
-		echo Ui::card_head( 'aisa-listing-h', 'location', __( 'Google listing', 'ai-seo-assistant' ), $when > 0 ? sprintf( __( 'Business Profile against this site · checked %s', 'ai-seo-assistant' ), wp_date( 'D j M', $when ) ) : '' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
-		if ( empty( $listing['checked'] ) ) {
-			echo '<p class="aisa-pending">' . esc_html__( 'Google listing not checked: the push could not read the Business Profile this time. Nothing is known about whether it matches.', 'ai-seo-assistant' ) . ( '' !== (string) ( $listing['reason'] ?? '' ) ? ' ' . esc_html( (string) $listing['reason'] ) : '' ) . '</p></section>';
+		$head = Ui::card_head(
+			'aisa-listing-h',
+			'location',
+			__( 'Google listing', 'ai-seo-assistant' ),
+			/* translators: %s: date. */
+			$when > 0 ? sprintf( __( 'Site-wide · compared with your Google listing %s', 'ai-seo-assistant' ), wp_date( 'D j M', $when ) ) : __( 'Site-wide', 'ai-seo-assistant' )
+		);
+		echo $head; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+		if ( 'not_checked' === $group['state'] ) {
+			echo '<p class="aisa-pending"><strong>' . esc_html__( 'Google listing not checked.', 'ai-seo-assistant' ) . '</strong> '
+				. esc_html__( 'The weekly push could not read the Business Profile this time, so nothing is known about whether it matches.', 'ai-seo-assistant' )
+				. ( '' !== (string) ( $listing['reason'] ?? '' ) ? ' ' . esc_html( (string) $listing['reason'] ) : '' ) . '</p></section>';
 			return;
 		}
-		$rows = array_filter( (array) $listing['fields'], static fn( $f ) => 'match' !== $f['status'] && 'not_compared' !== $f['status'] );
-		if ( [] === $rows ) {
-			echo '<p>' . esc_html__( 'Every compared detail matches between Google and this site.', 'ai-seo-assistant' ) . '</p></section>';
+		if ( [] === $group['issues'] && [] === $group['kept'] ) {
+			echo '<p class="aisa-tone--good">' . Ui::icon( 'yes-alt' ) . esc_html__( 'Your website matches your Google listing on every detail compared.', 'ai-seo-assistant' ) . '</p></section>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 			return;
 		}
-		$where_label = [
-			'site'           => __( 'Fix on the site', 'ai-seo-assistant' ),
-			'google'         => __( 'Fix on Google', 'ai-seo-assistant' ),
-			'site_or_google' => __( 'Fix on the site or on Google', 'ai-seo-assistant' ),
-		];
-		$tone        = [
-			'high'   => 'bad',
-			'medium' => 'warn',
-			'low'    => 'muted',
-			'info'   => 'muted',
-		];
-		echo '<ul class="aisa-issues">';
-		foreach ( $rows as $f ) {
-			$where = (string) ( $f['fix']['where'] ?? '' );
-			$fix   = '';
-			if ( '' !== $where ) {
-				$fix = '<p class="aisa-issue__fix">' . esc_html( $where_label[ $where ] ?? '' );
-				if ( '' !== (string) ( $f['fix']['site'] ?? '' ) ) {
-					$fix .= ': ' . esc_html( (string) $f['fix']['site'] );
-				}
-				if ( '' !== (string) ( $f['fix']['google'] ?? '' ) ) {
-					$fix .= ' ' . esc_html( (string) $f['fix']['google'] );
-				}
-				if ( false !== strpos( $where, 'site' ) ) {
-					$fix .= ' <a href="' . esc_url( admin_url( 'admin.php?page=ajr-core' ) ) . '">' . esc_html__( 'AJR Core › Business details', 'ai-seo-assistant' ) . '</a>';
-				}
-				$fix .= '</p>';
-			}
-			echo '<li class="aisa-issue"><p class="aisa-issue__head"><span class="aisa-tag">' . esc_html( ucfirst( str_replace( '_', ' ', (string) $f['field'] ) ) ) . '</span><strong>' . esc_html( (string) $f['message'] ) . '</strong>' . Ui::pill( ucfirst( (string) $f['severity'] ), $tone[ $f['severity'] ] ?? 'muted' ) . '</p>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pill escaped in Ui.
-				/* translators: 1: value on the site, 2: value on Google. */
-				. '<p class="aisa-issue__detail">' . esc_html( sprintf( __( 'Site: %1$s · Google: %2$s', 'ai-seo-assistant' ), '' !== $f['site'] ? $f['site'] : '–', '' !== $f['google'] ? $f['google'] : '–' ) ) . '</p>'
-				. ( '' !== (string) $f['detail'] ? '<p class="aisa-issue__detail">' . esc_html( (string) $f['detail'] ) . '</p>' : '' )
-				. $fix . '</li>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above.
+		foreach ( $group['issues'] as $f ) {
+			$html = '<div class="aisa-listing">'
+				. '<p class="aisa-issue__head"><span class="aisa-tag">' . esc_html__( 'Google listing', 'ai-seo-assistant' ) . '</span><strong>' . esc_html( self::listing_title( $f ) ) . '</strong>' . Ui::pill( __( '1 issue', 'ai-seo-assistant' ), 'warn' ) . '</p>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pill escaped in Ui.
+				. '<p>' . esc_html( (string) $f['message'] ) . '</p>'
+				. '<div class="aisa-listing__pair">'
+				. '<p class="aisa-listing__value"><span>' . esc_html__( 'Your Google listing', 'ai-seo-assistant' ) . '</span><strong>' . esc_html( '' !== (string) $f['google'] ? (string) $f['google'] : '–' ) . '</strong></p>'
+				. '<p class="aisa-listing__value"><span>' . esc_html__( 'Your website', 'ai-seo-assistant' ) . '</span><strong>' . esc_html( '' !== (string) $f['site'] ? (string) $f['site'] : '–' ) . '</strong></p>'
+				. '</div>'
+				. ( '' !== (string) $f['detail'] ? '<p class="aisa-small">' . esc_html( (string) $f['detail'] ) . '</p>' : '' )
+				. '<p class="aisa-listing__fix">'
+				. ( '' !== $core
+					? '<a class="aisa-btn aisa-btn--small" href="' . esc_url( $core ) . '">' . Ui::icon( 'external' ) . esc_html__( 'Fix in Business details', 'ai-seo-assistant' ) . '</a> <span class="aisa-small">' . esc_html__( 'Opens AJR Core. Google’s listing is the source of truth; the fix is one click there.', 'ai-seo-assistant' ) . '</span>'
+					: '<span class="aisa-small">' . esc_html( self::listing_fix( $f ) ) . '</span>' )
+				. '</p></div>';
+			echo $html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped piecewise above.
 		}
-		echo '</ul>';
-		if ( '' !== (string) $listing['maps_url'] ) {
+		foreach ( $group['kept'] as $f ) {
+			$reason = trim( (string) ( $f['pin']['reason'] ?? '' ) );
+			echo '<div class="aisa-listing aisa-listing--kept">'
+				. '<p class="aisa-issue__head">' . Ui::icon( 'admin-post' ) . '<strong>' . esc_html( self::field_label( (string) $f['field'] ) ) . '</strong>' . Ui::pill( __( 'Kept on purpose', 'ai-seo-assistant' ), 'info' ) . '<span class="aisa-small">' . esc_html__( 'Not counted as an issue', 'ai-seo-assistant' ) . '</span></p>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+				/* translators: 1: the agency's reason, 2: Google's value, 3: the website's value. */
+				. '<p class="aisa-small">' . esc_html( trim( ( '' !== $reason ? '“' . $reason . '” ' : '' ) . sprintf( __( 'Google: %1$s · Website: %2$s.', 'ai-seo-assistant' ), '' !== (string) $f['google'] ? (string) $f['google'] : '–', '' !== (string) $f['site'] ? (string) $f['site'] : '–' ) . ' ' . self::listing_fix( $f ) ) ) . '</p>'
+				. '</div>';
+		}
+		if ( '' !== (string) ( $listing['maps_url'] ?? '' ) ) {
 			echo '<p class="aisa-small"><a href="' . esc_url( (string) $listing['maps_url'] ) . '" rel="noopener noreferrer" target="_blank">' . esc_html__( 'See the listing on Google Maps', 'ai-seo-assistant' ) . '<span class="screen-reader-text"> ' . esc_html__( '(opens in a new tab)', 'ai-seo-assistant' ) . '</span></a></p>';
 		}
 		echo '</section>';
+	}
+
+	/**
+	 * A listing field's name in words.
+	 *
+	 * @param string $field Field key from the check.
+	 */
+	protected static function field_label( string $field ): string {
+		$labels = [
+			'name'           => __( 'Name', 'ai-seo-assistant' ),
+			'phone'          => __( 'Phone', 'ai-seo-assistant' ),
+			'address'        => __( 'Address', 'ai-seo-assistant' ),
+			'service_area'   => __( 'Service area', 'ai-seo-assistant' ),
+			'hours'          => __( 'Hours', 'ai-seo-assistant' ),
+			'website'        => __( 'Website', 'ai-seo-assistant' ),
+			'url'            => __( 'Website', 'ai-seo-assistant' ),
+			'type'           => __( 'Business type', 'ai-seo-assistant' ),
+			'same_as'        => __( 'Link to your Google listing', 'ai-seo-assistant' ),
+			'status'         => __( 'Open or closed', 'ai-seo-assistant' ),
+			'listing'        => __( 'Google listing', 'ai-seo-assistant' ),
+			'rating'         => __( 'Rating', 'ai-seo-assistant' ),
+			'business_node'  => __( 'Business details on the site', 'ai-seo-assistant' ),
+			'business_nodes' => __( 'Business details on the site', 'ai-seo-assistant' ),
+			'json_ld'        => __( 'Structured data', 'ai-seo-assistant' ),
+			'publisher_name' => __( 'Publisher name', 'ai-seo-assistant' ),
+		];
+
+		return $labels[ $field ] ?? ucfirst( str_replace( '_', ' ', $field ) );
+	}
+
+	/**
+	 * A difference's headline ("Hours differ from your Google listing").
+	 *
+	 * @param array<string,mixed> $f Field row.
+	 */
+	protected static function listing_title( array $f ): string {
+		$label = self::field_label( (string) $f['field'] );
+		switch ( (string) $f['status'] ) {
+			case 'missing_on_site':
+				/* translators: %s: detail, e.g. "Hours". */
+				return sprintf( __( '%s missing on your website', 'ai-seo-assistant' ), $label );
+			case 'missing_on_google':
+				/* translators: %s: detail. */
+				return sprintf( __( '%s not on your Google listing', 'ai-seo-assistant' ), $label );
+		}
+
+		/* translators: %s: detail. */
+		return sprintf( __( '%s differs from your Google listing', 'ai-seo-assistant' ), $label );
+	}
+
+	/**
+	 * Where to fix a difference, in words (from the check's own `fix`).
+	 *
+	 * @param array<string,mixed> $f Field row.
+	 */
+	protected static function listing_fix( array $f ): string {
+		$fix = is_array( $f['fix'] ?? null ) ? $f['fix'] : [];
+		$out = [];
+		if ( '' !== (string) ( $fix['google'] ?? '' ) ) {
+			/* translators: %s: where on Google. */
+			$out[] = sprintf( __( 'Fix on Google: %s.', 'ai-seo-assistant' ), (string) $fix['google'] );
+		}
+		if ( '' !== (string) ( $fix['site'] ?? '' ) ) {
+			/* translators: %s: where on the site. */
+			$out[] = sprintf( __( 'On the site: %s.', 'ai-seo-assistant' ), (string) $fix['site'] );
+		}
+
+		return implode( ' ', $out );
 	}
 
 	/**
@@ -209,8 +281,8 @@ class Scan_Page {
 			'nothing'     => [ 'info', __( 'Nothing was applied: every field was skipped or already had that value.', 'ai-seo-assistant' ) ],
 			'genfail'     => [ 'error', __( 'Claude could not write suggestions for this page. Try again in a minute.', 'ai-seo-assistant' ) ],
 			'capped'      => [ 'warning', __( 'The monthly AI cap is reached, so no new suggestions were written.', 'ai-seo-assistant' ) ],
-			'role'        => [ 'success', __( 'Role saved. The opportunity score now counts it.', 'ai-seo-assistant' ) ],
-			'role_failed' => [ 'error', __( 'The role was not changed.', 'ai-seo-assistant' ) ],
+			'type'        => [ 'success', __( 'Page type saved in AJR Core. Google reads it from the next visit; the opportunity score counts it now.', 'ai-seo-assistant' ) ],
+			'type_failed' => [ 'error', __( 'The page type was not changed.', 'ai-seo-assistant' ) ],
 		];
 		if ( isset( $messages[ $code ] ) ) {
 			echo Ui::notice( $messages[ $code ][0], '<p>' . esc_html( $messages[ $code ][1] ) . '</p>' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped piecewise.
@@ -242,11 +314,13 @@ class Scan_Page {
 			$chips .= '<li><a class="aisa-chip' . ( $kind === $current ? ' is-current' : '' ) . '" href="' . esc_url( $this->url( [ 'issue' => $kind ] ) ) . '"' . ( $kind === $current ? ' aria-current="true"' : '' ) . '>' . esc_html( $label ) . ' <span>' . esc_html( number_format_i18n( $counts[ $kind ] ) ) . '</span></a></li>';
 		}
 		$fallback = (int) ( $meta['fallback'] ?? 0 );
-		$listing  = get_option( \AJR\SEOAssistant\Report\Snapshot_Store::LISTING, null );
-		if ( is_array( $listing ) && ! empty( $listing['checked'] ) && (int) $listing['problems'] > 0 ) {
-			$total += (int) $listing['problems'];
-			$chips .= '<li><a class="aisa-chip" href="#aisa-listing">' . esc_html__( 'Google listing', 'ai-seo-assistant' ) . ' <span>' . esc_html( number_format_i18n( (int) $listing['problems'] ) ) . '</span></a></li>';
+		$group    = Listing::current();
+		if ( 'checked' === $group['state'] && [] !== $group['issues'] ) {
+			$total += count( $group['issues'] ); // Pinned (kept on purpose) differences are not counted.
+			$chips .= '<li><a class="aisa-chip aisa-chip--listing" href="#aisa-listing">' . esc_html__( 'Google listing', 'ai-seo-assistant' ) . ' <span>' . esc_html( number_format_i18n( count( $group['issues'] ) ) ) . '</span></a></li>';
 			$chips  = (string) preg_replace( '#(All issues <span>)[^<]*#', '${1}' . esc_html( number_format_i18n( $total ) ), $chips, 1 );
+		} elseif ( 'not_checked' === $group['state'] ) {
+			$chips .= '<li><a class="aisa-chip aisa-chip--listing" href="#aisa-listing">' . esc_html__( 'Google listing not checked', 'ai-seo-assistant' ) . '</a></li>';
 		}
 
 		echo '<section class="aisa-card aisa-card--grow" aria-labelledby="aisa-issues">';
@@ -351,10 +425,15 @@ class Scan_Page {
 
 		// Bulk bar: the JS enables it; without JS each page's Review screen generates one at a time.
 		echo '<div class="aisa-bulk" data-aisa-bulk data-per-page="' . esc_attr( (string) round( $per, 4 ) ) . '" data-left="' . esc_attr( (string) round( $left, 2 ) ) . '">';
-		echo '<label class="aisa-check"><input type="checkbox" data-aisa-select-all> <span data-aisa-selected>' . esc_html__( 'Select pages to generate suggestions or set their role', 'ai-seo-assistant' ) . '</span></label>';
-		echo '<span class="aisa-bulk__role"><label class="screen-reader-text" for="aisa-bulk-role">' . esc_html__( 'Role for the selected pages', 'ai-seo-assistant' ) . '</label>'
-			. '<select id="aisa-bulk-role" data-aisa-bulk-role>' . self::role_options( '', true ) . '</select>'
-			. '<button type="button" class="aisa-btn" data-aisa-set-role disabled>' . esc_html__( 'Set role', 'ai-seo-assistant' ) . '</button></span>';
+		$types = Page_Role::core();
+		echo '<label class="aisa-check"><input type="checkbox" data-aisa-select-all> <span data-aisa-selected>' . esc_html( $types ? __( 'Select pages to generate suggestions or set their page type', 'ai-seo-assistant' ) : __( 'Select pages to generate suggestions', 'ai-seo-assistant' ) ) . '</span></label>';
+		if ( $types ) {
+			// Page types live in AJR Core (they also decide the page's schema); setting one here writes there.
+			$html = '<span class="aisa-bulk__role"><label class="screen-reader-text" for="aisa-bulk-type">' . esc_html__( 'Page type for the selected pages', 'ai-seo-assistant' ) . '</label>'
+				. '<select id="aisa-bulk-type" data-aisa-bulk-role>' . self::type_options( '', true ) . '</select>'
+				. '<button type="button" class="aisa-btn" data-aisa-set-role disabled>' . esc_html__( 'Set page type', 'ai-seo-assistant' ) . '</button></span>';
+			echo $html; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- options escaped in type_options().
+		}
 		if ( $capped ) {
 			echo '<span class="aisa-bulk__note aisa-tone--warn">' . esc_html__( 'Paused: monthly cap reached', 'ai-seo-assistant' ) . '</span><button type="button" class="aisa-btn" disabled>' . Ui::icon( 'admin-customizer' ) . esc_html__( 'Generate for selected', 'ai-seo-assistant' ) . '</button>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		} else {
@@ -389,8 +468,7 @@ class Scan_Page {
 			echo '<tr data-aisa-row="' . esc_attr( (string) $id ) . '">'
 				. '<td class="aisa-col-check"><input type="checkbox" value="' . esc_attr( (string) $id ) . '" data-aisa-select aria-label="' . esc_attr( $label ) . '"></td>'
 				. '<th scope="row" class="aisa-pagecell"><a class="aisa-pagecell__title" href="' . esc_url( $this->url( [ 'post' => $id ] ) ) . '">' . esc_html( $r['title'] ) . '</a><span class="aisa-pagecell__meta"><span class="aisa-path">' . esc_html( $r['path'] ) . '</span> ' . $this->role_tag( (int) $id, $r ) . ' ' . $badge . '<span class="aisa-row-status" data-aisa-row-status></span></span></th>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pills escaped in Ui; role_tag escapes.
-				. '<td><span class="aisa-score"><strong>' . esc_html( (string) $r['score'] ) . '</strong><span class="aisa-meter aisa-meter--score' . ( $r['score'] >= 60 ? ' is-high' : '' ) . '" aria-hidden="true"><span class="aisa-meter__value" style="inline-size:' . esc_attr( (string) max( 2, $r['score'] ) ) . '%"></span></span></span>'
-				. ( $r['seen'] ? '<span class="aisa-small aisa-score__clicks">' . esc_html( self::extra_clicks( (float) $r['missed'] ) ) . '</span>' : '' ) . '</td>'
+				. '<td>' . $this->opportunity_cell( $r ) . '</td>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in opportunity_cell().
 				. '<td class="aisa-num">' . esc_html( number_format_i18n( $r['impressions'] ) ) . '</td>'
 				. '<td class="aisa-num">' . esc_html( $r['position'] > 0 ? number_format_i18n( $r['position'], 1 ) : '–' ) . '</td>'
 				. '<td class="aisa-num">' . esc_html( Ui::pct( $r['ctr'] ) . ' / ' . Ui::pct( $r['expected'] ) ) . ( null !== $below ? '<br><span class="aisa-small ' . ( $below >= 1 ? 'aisa-tone--bad' : 'aisa-tone--flat' ) . '">' . esc_html( $below > 0 ? sprintf( /* translators: %s: percentage points. */ __( '%s below', 'ai-seo-assistant' ), number_format_i18n( $below, 1 ) ) : __( 'at or above', 'ai-seo-assistant' ) ) . '</span>' : '' ) . '</td>'
@@ -409,8 +487,9 @@ class Scan_Page {
 			/* translators: %s: number of searches (impressions). */
 			? sprintf( __( 'click curve: this site’s own (from %s searches)', 'ai-seo-assistant' ), number_format_i18n( $curve['searches'] ) )
 			: __( 'click curve: standard', 'ai-seo-assistant' );
-		/* translators: 1: which click curve, 2: pages shown, 3: pages in all. */
-		echo '<p class="aisa-small">' . esc_html( sprintf( __( 'Opportunity = the clicks each search could add at its position (impressions × expected CTR − actual CTR; searches past position 20 add almost nothing), × the page’s role (money 1.5, location 1.2, info 0.6) × its enquiries from Google Analytics. Extra clicks are over the 90-day window. %1$s. Showing %2$d of %3$d pages.', 'ai-seo-assistant' ), ucfirst( $used ), count( $shown ), $all ) ) . '</p>';
+		$t = Opportunity::tier_thresholds();
+		/* translators: 1: which click curve, 2: High threshold, 3: Medium threshold, 4: pages shown, 5: pages in all. */
+		echo '<p class="aisa-small">' . esc_html( sprintf( __( 'Estimates, a year. Quick win = the extra visits a better title and description could bring at today’s position: for each search, impressions × (expected CTR at that position − actual CTR); searches past position 20 add almost nothing. Top-3 prize = the extra visits if each search reached position 3. Each search is weighted by intent (ready to enquire ×3, comparing ×2, learning ×1, looking for you by name ×0.5) and the page by its type (service and contact ×1.5, area ×1.2, articles ×0.6). High from %2$s weighted visits a year, Medium from %3$s. %1$s. Showing %4$d of %5$d pages.', 'ai-seo-assistant' ), ucfirst( $used ), number_format_i18n( $t['high'] ), number_format_i18n( $t['medium'] ), count( $shown ), $all ) ) . '</p>';
 		echo '</section>';
 	}
 
@@ -538,10 +617,14 @@ class Scan_Page {
 		$facts  = $row['facts'];
 		$sub    = [ $row['path'] ];
 		if ( null !== $r && Page_Data::has_data() ) {
-			/* translators: 1: score, 2: rank (ordinal number), 3: page count. */
-			$sub[] = sprintf( __( 'Opportunity %1$d, %2$s of %3$d pages', 'ai-seo-assistant' ), $r['score'], self::ordinal( (int) $r['rank'] ), count( $ranked ) );
+			$tiers = self::tiers();
+			/* translators: 1: tier (High, Medium, Low), 2: rank (ordinal number), 3: page count. */
+			$sub[] = sprintf( __( '%1$s opportunity, %2$s of %3$d pages', 'ai-seo-assistant' ), $tiers[ $r['tier'] ] ?? '', self::ordinal( (int) $r['rank'] ), count( $ranked ) );
 			if ( $r['seen'] ) {
-				$sub[] = self::extra_clicks( (float) $r['missed'] );
+				/* translators: %s: "≈ 390 visits a year". */
+				$sub[] = sprintf( __( 'quick win %s', 'ai-seo-assistant' ), self::visits_year( (float) $r['quick_win'] ) );
+				/* translators: %s: "≈ 1,200 visits a year". */
+				$sub[] = sprintf( __( 'top-3 prize %s', 'ai-seo-assistant' ), self::visits_year( (float) $r['prize'] ) );
 			}
 		}
 		$fixable = count( array_filter( (array) $row['issues'], static fn( $i ) => 'claude' === ( $i['who'] ?? '' ) ) );
@@ -565,17 +648,7 @@ class Scan_Page {
 		if ( $edit ) {
 			$actions .= '<a class="aisa-btn aisa-btn--dark" href="' . esc_url( $edit ) . '">' . Ui::icon( 'edit' ) . esc_html__( 'Open in editor', 'ai-seo-assistant' ) . '</a>';
 		}
-		if ( null !== $r ) {
-			$labels   = Page_Role::labels();
-			$actions .= '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="aisa-inline aisa-roleform">'
-				. wp_nonce_field( Tools_Actions::ROLE, '_wpnonce', true, false )
-				. '<input type="hidden" name="action" value="' . esc_attr( Tools_Actions::ROLE ) . '">'
-				. '<input type="hidden" name="post" value="' . esc_attr( (string) $post_id ) . '">'
-				. '<label for="aisa-role">' . esc_html__( 'Role', 'ai-seo-assistant' ) . '</label>'
-				. '<select id="aisa-role" name="role" data-aisa-role-submit>' . self::role_options( $r['role_set'] ? $r['role'] : 'auto', false, $labels[ $r['role'] ] ?? '' ) . '</select>'
-				. '<button type="submit" class="aisa-btn aisa-btn--dark" data-aisa-role-button>' . esc_html__( 'Set', 'ai-seo-assistant' ) . '</button></form>';
-		}
-		echo Ui::hero( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+		$hero = Ui::hero(
 			[
 				/* translators: %s: agency name. */
 				'label'      => sprintf( __( 'Page review by %s', 'ai-seo-assistant' ), Ui::agency() ),
@@ -586,6 +659,7 @@ class Scan_Page {
 				'actions'    => $actions,
 			]
 		);
+		echo $hero; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		$this->result_notice();
 		$s       = $row['suggestions'];
 		$applied = is_array( $s ) && ! empty( $s['applied']['batch'] ) ? ( new Change_Log() )->find( [ 'batch' => (string) $s['applied']['batch'] ] ) : [];
@@ -606,17 +680,17 @@ class Scan_Page {
 		if ( [] !== $applied ) {
 			$this->applied_panel( $post_id, $s, $applied );
 		} else {
-			$this->suggestions_panel( $post_id, $row, $page );
+			$this->suggestions_panel( $post_id, $row );
 		}
+		$this->google_reads( $post_id, $row, $post );
 		echo '</div></div>';
 		echo Ui::footer(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 	}
 
 	/**
-	 * "What people search for".
-	 *
-	 * With the ranking row, a "Clicks missed" column says where the page's opportunity is (per search, and the
-	 * rest of its impressions at its average position).
+	 * "What people search for", with where the opportunity is: each search's intent, its quick win (a better
+	 * listing at today's position) and its top-3 prize, a year; the rest of the page's impressions on the
+	 * last row at its average position.
 	 *
 	 * @param array<string,mixed>|null $page Page data.
 	 * @param array<string,mixed>|null $r    Ranking row.
@@ -631,33 +705,69 @@ class Scan_Page {
 			echo '<p class="aisa-pending">' . esc_html( null === $page ? __( 'No search data for this page yet. It arrives with the weekly push; until then Claude writes from the page content alone.', 'ai-seo-assistant' ) : __( 'Google showed this page for no searches in the last 90 days.', 'ai-seo-assistant' ) ) . '</p></section>';
 			return;
 		}
-		echo '<div class="aisa-tablewrap"><table class="aisa-table"><caption class="screen-reader-text">' . esc_html__( 'Searches that showed this page', 'ai-seo-assistant' ) . '</caption><thead><tr><th scope="col">' . esc_html__( 'Search', 'ai-seo-assistant' ) . '</th><th scope="col" class="aisa-num">' . esc_html__( 'Clicks', 'ai-seo-assistant' ) . '</th><th scope="col" class="aisa-num">' . esc_html__( 'Impressions', 'ai-seo-assistant' ) . '</th><th scope="col" class="aisa-num">' . esc_html__( 'Position', 'ai-seo-assistant' ) . '</th><th scope="col" class="aisa-num">' . esc_html__( 'CTR', 'ai-seo-assistant' ) . '</th>'
-			. ( null !== $r ? '<th scope="col" class="aisa-num">' . esc_html__( 'Clicks missed', 'ai-seo-assistant' ) . '</th>' : '' ) . '</tr></thead><tbody>';
-		$main   = Scanner::main_query( $page );
-		$missed = [];
-		$rest   = null;
+		$by   = [];
+		$rest = null;
 		foreach ( (array) ( $r['breakdown'] ?? [] ) as $b ) {
 			if ( $b['remain'] ) {
 				$rest = $b;
 			} else {
-				$missed[ $b['query'] ] = (float) $b['missed'];
+				$by[ $b['query'] ] = $b;
 			}
 		}
+		$extra = null !== $r;
+		echo '<div class="aisa-tablewrap"><table class="aisa-table aisa-table--searches"><caption class="screen-reader-text">' . esc_html__( 'Searches that showed this page', 'ai-seo-assistant' ) . '</caption><thead><tr>'
+			. '<th scope="col">' . esc_html__( 'Search', 'ai-seo-assistant' ) . '</th>'
+			. ( $extra ? '<th scope="col">' . esc_html__( 'Intent', 'ai-seo-assistant' ) . '</th>' : '' )
+			. '<th scope="col" class="aisa-num">' . esc_html__( 'Clicks', 'ai-seo-assistant' ) . '</th>'
+			. '<th scope="col" class="aisa-num">' . esc_html__( 'Impressions', 'ai-seo-assistant' ) . '</th>'
+			. '<th scope="col" class="aisa-num">' . esc_html__( 'Position', 'ai-seo-assistant' ) . '</th>'
+			. '<th scope="col" class="aisa-num">' . esc_html__( 'CTR', 'ai-seo-assistant' ) . '</th>'
+			. ( $extra ? '<th scope="col" class="aisa-num">' . esc_html__( 'Quick win / yr', 'ai-seo-assistant' ) . '</th><th scope="col" class="aisa-num">' . esc_html__( 'Top-3 prize / yr', 'ai-seo-assistant' ) . '</th>' : '' )
+			. '</tr></thead><tbody>';
+		$main = Scanner::main_query( $page );
 		foreach ( $queries as $q ) {
-			echo '<tr><th scope="row"' . ( $q['query'] === $main ? ' class="aisa-strong"' : '' ) . '>' . esc_html( $q['query'] ) . '</th><td class="aisa-num">' . esc_html( number_format_i18n( $q['clicks'] ) ) . '</td><td class="aisa-num">' . esc_html( number_format_i18n( $q['impressions'] ) ) . '</td><td class="aisa-num">' . esc_html( null === $q['position'] ? '–' : number_format_i18n( $q['position'], 1 ) ) . '</td><td class="aisa-num">' . esc_html( Ui::pct( $q['ctr'] ) ) . '</td>'
-				. ( null !== $r ? '<td class="aisa-num">' . esc_html( self::missed_cell( $missed[ $q['query'] ] ?? 0.0 ) ) . '</td>' : '' ) . '</tr>';
+			$b = $by[ $q['query'] ] ?? null;
+			echo '<tr><th scope="row"' . ( $q['query'] === $main ? ' class="aisa-strong"' : '' ) . '>' . esc_html( $q['query'] ) . '</th>'
+				. ( $extra ? '<td>' . self::intent_tag( (string) ( $b['intent'] ?? 'unknown' ) ) . '</td>' : '' ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in intent_tag().
+				. '<td class="aisa-num">' . esc_html( number_format_i18n( $q['clicks'] ) ) . '</td><td class="aisa-num">' . esc_html( number_format_i18n( $q['impressions'] ) ) . '</td><td class="aisa-num">' . esc_html( null === $q['position'] ? '–' : number_format_i18n( $q['position'], 1 ) ) . '</td><td class="aisa-num">' . esc_html( Ui::pct( $q['ctr'] ) ) . '</td>'
+				. ( $extra ? '<td class="aisa-num">' . esc_html( self::missed_cell( Opportunity::yearly( (float) ( $b['missed'] ?? 0 ) ) ) ) . '</td><td class="aisa-num">' . esc_html( self::missed_cell( Opportunity::yearly( (float) ( $b['prize'] ?? 0 ) ) ) ) . '</td>' : '' )
+				. '</tr>';
 		}
 		if ( null !== $rest ) {
-			echo '<tr class="aisa-table__rest"><th scope="row">' . esc_html__( 'Other searches (not named by Google)', 'ai-seo-assistant' ) . '</th><td class="aisa-num">' . esc_html( number_format_i18n( $rest['clicks'] ) ) . '</td><td class="aisa-num">' . esc_html( number_format_i18n( $rest['impressions'] ) ) . '</td><td class="aisa-num">' . esc_html( number_format_i18n( $rest['position'], 1 ) ) . '</td><td class="aisa-num">' . esc_html( Ui::pct( $rest['ctr'] ) ) . '</td><td class="aisa-num">' . esc_html( self::missed_cell( (float) $rest['missed'] ) ) . '</td></tr>';
+			echo '<tr class="aisa-table__rest"><th scope="row">' . esc_html__( 'Other searches (not named by Google)', 'ai-seo-assistant' ) . '</th><td>' . self::intent_tag( 'unnamed' ) . '</td><td class="aisa-num">' . esc_html( number_format_i18n( $rest['clicks'] ) ) . '</td><td class="aisa-num">' . esc_html( number_format_i18n( $rest['impressions'] ) ) . '</td><td class="aisa-num">' . esc_html( number_format_i18n( $rest['position'], 1 ) ) . '</td><td class="aisa-num">' . esc_html( Ui::pct( $rest['ctr'] ) ) . '</td><td class="aisa-num">' . esc_html( self::missed_cell( Opportunity::yearly( (float) $rest['missed'] ) ) ) . '</td><td class="aisa-num">' . esc_html( self::missed_cell( Opportunity::yearly( (float) $rest['prize'] ) ) ) . '</td></tr>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in intent_tag().
 		}
 		echo '</tbody></table></div>';
-		if ( null !== $r && 'query' === $r['method'] ) {
-			echo '<p class="aisa-small">' . esc_html__( 'Clicks missed = impressions × (expected CTR at that position − actual CTR). Searches past position 20 add almost nothing: a better title does not win clicks on page 3.', 'ai-seo-assistant' ) . '</p>';
+		if ( $extra && 'none' !== $r['method'] ) {
+			$enq   = self::enquiries_year( $r['quick_enq'] );
+			$prize = self::enquiries_year( $r['prize_enq'] );
+			/* translators: 1: quick win, 2: top-3 prize (both "≈ N visits a year"). */
+			echo '<p class="aisa-opp-sum"><strong>' . esc_html( sprintf( __( 'Quick win %1$s · Top-3 prize %2$s', 'ai-seo-assistant' ), self::visits_year( (float) $r['quick_win'] ), self::visits_year( (float) $r['prize'] ) ) ) . '</strong>'
+				/* translators: 1: enquiries from the quick win, 2: from the prize. */
+				. ( '' !== $enq ? '<br><span class="aisa-small">' . esc_html( sprintf( __( 'At this page’s enquiry rate: quick win %1$s, top-3 prize %2$s.', 'ai-seo-assistant' ), $enq, $prize ) ) . '</span>' : '' ) . '</p>';
+			echo '<p class="aisa-small">' . esc_html__( 'Estimates. Quick win = impressions × (expected CTR at today’s position − actual CTR): what a better title and description could bring; searches past position 20 add almost nothing. Top-3 prize = the same if each search reached position 3. Ranking also weighs each search by its intent.', 'ai-seo-assistant' ) . '</p>';
 		}
 		$total = (int) ( $page['gsc']['queries_total'] ?? 0 );
 		/* translators: 1: searches shown, 2: searches in all. */
 		echo '<p class="aisa-small">' . esc_html( $total > count( $queries ) ? sprintf( __( 'Top %1$d of %2$d searches. Claude writes for the first one: most clicks.', 'ai-seo-assistant' ), count( $queries ), $total ) : __( 'Claude writes for the search with the most clicks (in bold).', 'ai-seo-assistant' ) ) . '</p>';
 		echo '</section>';
+	}
+
+	/**
+	 * A search intent as a small tag.
+	 *
+	 * @param string $intent Intent.
+	 */
+	protected static function intent_tag( string $intent ): string {
+		$labels = [
+			'lead'          => __( 'Ready to enquire', 'ai-seo-assistant' ),
+			'commercial'    => __( 'Comparing', 'ai-seo-assistant' ),
+			'informational' => __( 'Learning', 'ai-seo-assistant' ),
+			'navigational'  => __( 'Looking for you', 'ai-seo-assistant' ),
+			'unnamed'       => __( 'Like the ones above', 'ai-seo-assistant' ),
+			'unknown'       => __( 'Not sorted', 'ai-seo-assistant' ),
+		];
+
+		return '<span class="aisa-intent aisa-intent--' . esc_attr( $intent ) . '">' . esc_html( $labels[ $intent ] ?? $labels['unknown'] ) . '</span>';
 	}
 
 	/**
@@ -738,7 +848,10 @@ class Scan_Page {
 		}
 		echo '<ul class="aisa-issues">';
 		foreach ( $row['issues'] as $issue ) {
-			$who = 'claude' === $issue['who'] ? Ui::pill( __( 'Claude can fix', 'ai-seo-assistant' ), 'accent' ) : Ui::pill( __( 'Do in the editor', 'ai-seo-assistant' ), 'warn' );
+			$who = [
+				'claude' => Ui::pill( __( 'Claude can fix', 'ai-seo-assistant' ), 'accent' ),
+				'click'  => Ui::pill( __( 'One click', 'ai-seo-assistant' ), 'accent' ),
+			][ $issue['who'] ] ?? Ui::pill( __( 'Do in the editor', 'ai-seo-assistant' ), 'warn' );
 			echo '<li class="aisa-issue"><p class="aisa-issue__head"><span class="aisa-tag">' . esc_html( Rules::label( (string) $issue['kind'] ) ) . '</span><strong>' . esc_html( (string) $issue['title'] ) . '</strong>' . $who . '</p>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pill escaped in Ui.
 				. '<p class="aisa-issue__detail">' . esc_html( (string) $issue['detail'] ) . '</p><p class="aisa-issue__fix">' . esc_html( (string) $issue['fix'] ) . '</p></li>';
 		}
@@ -748,11 +861,10 @@ class Scan_Page {
 	/**
 	 * Claude's suggestions (C1), the generate button, or the cap message.
 	 *
-	 * @param int                      $post_id Post ID.
-	 * @param array<string,mixed>      $row     Scan row.
-	 * @param array<string,mixed>|null $page    Page data.
+	 * @param int                 $post_id Post ID.
+	 * @param array<string,mixed> $row     Scan row.
 	 */
-	protected function suggestions_panel( int $post_id, array $row, ?array $page ): void {
+	protected function suggestions_panel( int $post_id, array $row ): void {
 		$s       = $row['suggestions'];
 		$adapter = Scanner::adapter();
 		$claude  = new Claude_Client();
@@ -912,10 +1024,10 @@ class Scan_Page {
 			$check   = 'write' !== $mode;
 			$printed = (string) ( $alt['printed'] ?? $alt['now'] );
 			$stored  = (string) ( $alt['stored'] ?? '' );
-			/* translators: 1: alt the page prints, 2: alt in the Media Library. */
-			$now = sprintf( __( 'On the page: %1$s · Media Library: %2$s', 'ai-seo-assistant' ), '' === $printed ? __( 'none', 'ai-seo-assistant' ) : '“' . $printed . '”', '' === $stored ? __( 'none', 'ai-seo-assistant' ) : '“' . $stored . '”' );
 			echo '<li class="aisa-alt' . ( $check ? ' aisa-alt--check' : '' ) . '">' . ( $thumb ? $thumb : '<span class="aisa-alt__img" aria-hidden="true"></span>' ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- core-built image tag.
-				. '<div class="aisa-alt__body"><label for="aisa-alt-' . esc_attr( (string) $id ) . '"><strong>' . esc_html( (string) $alt['file'] ) . '</strong> <span class="' . ( $check ? 'aisa-alt__now' : 'aisa-tone--bad' ) . '">' . esc_html( $now ) . '</span></label>'
+				. '<div class="aisa-alt__body"><p><strong>' . esc_html( (string) $alt['file'] ) . '</strong></p>'
+				. self::alt_rows( $printed, $stored ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in alt_rows().
+				. '<label class="aisa-alt__label" for="aisa-alt-' . esc_attr( (string) $id ) . '">' . esc_html__( 'Suggested:', 'ai-seo-assistant' ) . '</label>'
 				. ( 'check' === $mode ? '<p class="aisa-small aisa-tone--warn">' . esc_html__( 'Claude looked at the photo and thinks the current alt is wrong. Not ticked: keep the current one unless you agree.', 'ai-seo-assistant' ) . '</p>' : '' )
 				. ( 'sync' === $mode ? '<p class="aisa-small aisa-tone--warn">' . esc_html__( 'The page prints a different alt than the Media Library. Claude looked at the photo; applying writes this alt to both.', 'ai-seo-assistant' ) . '</p>' : '' )
 				. '<textarea id="aisa-alt-' . esc_attr( (string) $id ) . '" name="alt[' . esc_attr( (string) $id ) . '][value]" rows="2">' . esc_textarea( (string) $alt['value'] ) . '</textarea>'
@@ -932,6 +1044,7 @@ class Scan_Page {
 	 * @param array<int,array<string,mixed>> $items   Advice.
 	 */
 	protected function editor_box( int $post_id, array $items ): void {
+		$items = array_filter( $items, static fn( $i ) => 'schema' !== ( $i['area'] ?? '' ) );
 		if ( [] === $items ) {
 			return;
 		}
@@ -939,15 +1052,13 @@ class Scan_Page {
 			'headings' => __( 'Headings', 'ai-seo-assistant' ),
 			'links'    => __( 'Links', 'ai-seo-assistant' ),
 			'content'  => __( 'Content', 'ai-seo-assistant' ),
-			'schema'   => __( 'Schema', 'ai-seo-assistant' ),
 		];
 		$edit   = (string) get_edit_post_link( $post_id, 'url' );
 		echo '<div class="aisa-editorbox"><p class="aisa-editorbox__head"><strong>' . Ui::icon( 'edit' ) . esc_html__( 'Do in the editor', 'ai-seo-assistant' ) . '</strong><span class="aisa-small">' . esc_html__( 'Not applied by the plugin', 'ai-seo-assistant' ) . '</span></p>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		echo '<p class="aisa-small">' . esc_html__( 'Headings, links and content are left to you: changing them automatically is too risky on builder pages.', 'ai-seo-assistant' ) . '</p><dl>';
 		foreach ( $items as $item ) {
-			$link = 'schema' === $item['area'] ? admin_url( 'admin.php?page=ajr-core' ) : $edit;
 			echo '<dt>' . esc_html( $labels[ $item['area'] ] ?? $item['area'] ) . '</dt><dd><span>' . esc_html( (string) $item['advice'] ) . '</span>'
-				. ( '' !== $link ? '<a href="' . esc_url( $link ) . '">' . esc_html( 'schema' === $item['area'] ? __( 'Open AJR Core', 'ai-seo-assistant' ) : __( 'Open in editor', 'ai-seo-assistant' ) ) . '</a>' : '' ) . '</dd>';
+				. ( '' !== $edit ? '<a href="' . esc_url( $edit ) . '">' . esc_html__( 'Open in editor', 'ai-seo-assistant' ) . '</a>' : '' ) . '</dd>';
 		}
 		echo '</dl></div>';
 	}
@@ -988,7 +1099,11 @@ class Scan_Page {
 		echo '<section class="aisa-card aisa-card--claude" aria-labelledby="aisa-applied">';
 		/* translators: %s: date and time. */
 		echo Ui::card_head( 'aisa-applied', 'admin-customizer', __( 'Applied changes', 'ai-seo-assistant' ), sprintf( __( 'Applied %s', 'ai-seo-assistant' ), wp_date( 'D j M, g:ia', (int) $s['applied']['at'] ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
-		$alts = array_filter( $changes, static fn( $c ) => 'alt' === $c['field'] );
+		$alts    = array_filter( $changes, static fn( $c ) => 'alt' === $c['field'] );
+		$printed = [];
+		foreach ( (array) ( $s['alts'] ?? [] ) as $a ) {
+			$printed[ (int) ( $a['id'] ?? 0 ) ] = (string) ( $a['printed'] ?? $a['now'] ?? '' );
+		}
 		foreach ( array_reverse( $changes ) as $c ) {
 			if ( in_array( $c['field'], [ 'alt', 'content' ], true ) ) {
 				continue; // Alt rows are listed below; the content row is the page-side copy of them.
@@ -1000,7 +1115,7 @@ class Scan_Page {
 		}
 		if ( [] !== $alts ) {
 			/* translators: %d: count. */
-			echo '<div class="aisa-sfield"><p class="aisa-sfield__head"><strong>' . esc_html__( 'Image alt text', 'ai-seo-assistant' ) . '</strong>' . Ui::pill( sprintf( _n( '%d applied', '%d applied', count( $alts ), 'ai-seo-assistant' ), count( $alts ) ), 'good' ) . '<span class="aisa-small aisa-push">' . esc_html__( 'Saved in the Media Library', 'ai-seo-assistant' ) . '</span></p><ul class="aisa-alts">'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+			echo '<div class="aisa-sfield"><p class="aisa-sfield__head"><strong>' . esc_html__( 'Image alt text', 'ai-seo-assistant' ) . '</strong>' . Ui::pill( sprintf( _n( '%d applied', '%d applied', count( $alts ), 'ai-seo-assistant' ), count( $alts ) ), 'good' ) . '<span class="aisa-small aisa-push">' . esc_html__( 'Written where the page shows it and in the Media Library', 'ai-seo-assistant' ) . '</span></p><ul class="aisa-alts">'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 			foreach ( $alts as $c ) {
 				$thumb = wp_get_attachment_image(
 					(int) $c['object_id'],
@@ -1012,9 +1127,9 @@ class Scan_Page {
 					]
 				);
 				$file  = (string) basename( (string) get_attached_file( (int) $c['object_id'] ) );
-				/* translators: %s: alt before. */
-				$before = '' === $c['before_value'] ? __( 'Before: no alt text', 'ai-seo-assistant' ) : sprintf( __( 'Before: “%s”', 'ai-seo-assistant' ), (string) $c['before_value'] );
-				echo '<li class="aisa-alt">' . ( $thumb ? $thumb : '<span class="aisa-alt__img" aria-hidden="true"></span>' ) . '<div class="aisa-alt__body"><p><strong>' . esc_html( $file ) . '</strong> <span class="aisa-small">' . esc_html( $before ) . '</span></p><p class="aisa-after">' . esc_html( (string) $c['after_value'] ) . '</p></div>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- core-built image tag.
+				echo '<li class="aisa-alt">' . ( $thumb ? $thumb : '<span class="aisa-alt__img" aria-hidden="true"></span>' ) . '<div class="aisa-alt__body"><p><strong>' . esc_html( $file ) . '</strong></p>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- core-built image tag.
+					. self::alt_rows( $printed[ (int) $c['object_id'] ] ?? (string) $c['before_value'], (string) $c['before_value'], __( 'before', 'ai-seo-assistant' ) ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in alt_rows().
+					. '<p class="aisa-alt__label aisa-tone--good">' . esc_html( null === $c['undone_at'] ? __( 'Now, on the page and in the Media Library:', 'ai-seo-assistant' ) : __( 'Was applied:', 'ai-seo-assistant' ) ) . '</p><p class="aisa-after">' . esc_html( (string) $c['after_value'] ) . '</p></div>'
 					. $this->alt_state( $c, (array) ( $s['applied']['alts'][ (int) $c['object_id'] ] ?? [] ) ) . '</li>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in alt_state().
 			}
 			echo '</ul></div>';
@@ -1028,6 +1143,129 @@ class Scan_Page {
 			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">';
 			wp_nonce_field( Tools_Actions::CLEAR );
 			echo '<input type="hidden" name="action" value="' . esc_attr( Tools_Actions::CLEAR ) . '"><input type="hidden" name="post" value="' . esc_attr( (string) $post_id ) . '"><button type="submit" class="aisa-btn">' . esc_html__( 'Start a new review', 'ai-seo-assistant' ) . '</button></form>';
+		}
+		echo '</section>';
+	}
+
+	/**
+	 * An image's alt where the page shows it and in the Media Library, one per line.
+	 *
+	 * @param string $printed The alt the page prints.
+	 * @param string $stored  The Media Library's alt.
+	 * @param string $when    '' now, or e.g. "before".
+	 */
+	protected static function alt_rows( string $printed, string $stored, string $when = '' ): string {
+		$none = '<span class="aisa-tone--bad">' . esc_html__( 'No alt text', 'ai-seo-assistant' ) . '</span>';
+		$page = '' !== $when
+			/* translators: %s: "before". */
+			? sprintf( __( 'Shown on the page (%s)', 'ai-seo-assistant' ), $when )
+			: __( 'Shown on the page', 'ai-seo-assistant' );
+		$lib = '' !== $when
+			/* translators: %s: "before". */
+			? sprintf( __( 'Media Library (%s)', 'ai-seo-assistant' ), $when )
+			: __( 'Media Library', 'ai-seo-assistant' );
+
+		return '<dl class="aisa-alt__rows">'
+			. '<dt>' . esc_html( $page ) . '</dt><dd>' . ( '' === $printed ? $none : esc_html( '“' . $printed . '”' ) ) . '</dd>'
+			. '<dt>' . esc_html( $lib ) . '</dt><dd>' . ( '' === $stored ? $none : esc_html( '“' . $stored . '”' ) ) . '</dd>'
+			. '</dl>';
+	}
+
+	/**
+	 * "What Google reads on this page" (I1/I1b): the page type (AJR Core) with a one-click suggestion, whether
+	 * the page is linked to the business and the business matches Google, and the structured data found on
+	 * the rendered page in plain words. Never Claude-written: schema is never an editor job.
+	 *
+	 * @param int                 $post_id Post ID.
+	 * @param array<string,mixed> $row     Scan row.
+	 * @param \WP_Post            $post    Post.
+	 */
+	protected function google_reads( int $post_id, array $row, \WP_Post $post ): void {
+		$nodes   = (array) ( $row['facts']['schema_nodes'] ?? [] );
+		$core    = Page_Role::core();
+		$type    = Page_Role::type_of( $post_id );
+		$types   = Page_Role::types();
+		$suggest = '' === $type ? Page_Role::suggest( $post_id ) : '';
+		$group   = Listing::current();
+		$fix_url = Listing::core_url();
+		$chips   = Google_Reads::chips( $nodes );
+		$missing = Google_Reads::missing( $type, $nodes );
+
+		echo '<section class="aisa-card aisa-greads" id="aisa-greads" aria-labelledby="aisa-greads-h">';
+		echo Ui::card_head( 'aisa-greads-h', 'search', __( 'What Google reads on this page', 'ai-seo-assistant' ), $core ? __( 'Set in AJR Core · read by the scan', 'ai-seo-assistant' ) : __( 'Read by the scan', 'ai-seo-assistant' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+
+		if ( $core ) {
+			echo '<div class="aisa-greads__type"><p class="aisa-greads__label"><strong>' . esc_html__( 'Page type', 'ai-seo-assistant' ) . '</strong> '
+				. ( '' !== $type ? Ui::pill( $types[ $type ]['label'] ?? $type, 'good' ) : Ui::pill( __( 'Not set', 'ai-seo-assistant' ), 'warn' ) ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="aisa-greads__form">';
+			wp_nonce_field( Tools_Actions::ROLE );
+			echo '<input type="hidden" name="action" value="' . esc_attr( Tools_Actions::ROLE ) . '"><input type="hidden" name="post" value="' . esc_attr( (string) $post_id ) . '">'
+				. '<label class="screen-reader-text" for="aisa-page-type">' . esc_html__( 'Page type', 'ai-seo-assistant' ) . '</label>'
+				. '<select id="aisa-page-type" name="type">' . self::type_options( $type ) . '</select>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in type_options().
+				. '<button type="submit" class="aisa-btn">' . esc_html__( 'Change page type', 'ai-seo-assistant' ) . '</button></form>';
+			if ( '' !== $suggest && isset( $types[ $suggest ] ) ) {
+				echo '<div class="aisa-greads__suggest"><p>' . Ui::icon( 'admin-customizer' ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+					/* translators: %s: page type. */
+					. esc_html( sprintf( __( 'Suggested: %s.', 'ai-seo-assistant' ), $types[ $suggest ]['label'] ) ) . ( '' !== $types[ $suggest ]['description'] ? ' ' . esc_html( $types[ $suggest ]['description'] ) : '' ) . '</p>'
+					. '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">' . wp_nonce_field( Tools_Actions::ROLE, '_wpnonce', true, false ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- core-built nonce field.
+					. '<input type="hidden" name="action" value="' . esc_attr( Tools_Actions::ROLE ) . '"><input type="hidden" name="post" value="' . esc_attr( (string) $post_id ) . '"><input type="hidden" name="type" value="' . esc_attr( $suggest ) . '">'
+					/* translators: %s: page type. */
+					. '<button type="submit" class="aisa-btn aisa-btn--primary">' . Ui::icon( 'yes' ) . esc_html( sprintf( __( 'Set as %s', 'ai-seo-assistant' ), $types[ $suggest ]['label'] ) ) . '</button>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+					. '<span class="aisa-small">' . esc_html( '' !== $types[ $suggest ]['reads'] ? sprintf( /* translators: %s: what Google then reads. */ __( 'One click. Google then reads %s.', 'ai-seo-assistant' ), $types[ $suggest ]['reads'] ) : __( 'One click.', 'ai-seo-assistant' ) ) . '</span></form></div>';
+			}
+			if ( '' === $type ) {
+				echo '<details class="aisa-greads__types"><summary>' . esc_html__( 'What each page type adds', 'ai-seo-assistant' ) . '</summary><dl>';
+				foreach ( $types as $t ) {
+					echo '<dt>' . esc_html( $t['label'] ) . '</dt><dd>' . esc_html( $t['reads'] ) . '</dd>';
+				}
+				echo '</dl></details>';
+			}
+			echo '</div>';
+		} else {
+			echo '<p class="aisa-small">' . esc_html__( 'Page types arrive with AJR Core 0.22: they decide what Google reads about each page.', 'ai-seo-assistant' ) . '</p>';
+		}
+
+		// Linked to the business, and whether the business matches Google.
+		$name = (string) ( Business_Facts::facts()['name'] ?? '' );
+		echo '<div class="aisa-greads__biz">';
+		if ( Google_Reads::has_business( $nodes ) ) {
+			/* translators: %s: business name. */
+			echo '<p>' . Ui::icon( 'admin-home' ) . '<strong>' . esc_html( sprintf( __( 'Linked to your business: %s', 'ai-seo-assistant' ), $name ) ) . '</strong></p>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+		} else {
+			echo '<p class="aisa-tone--warn">' . Ui::icon( 'warning' ) . esc_html__( 'This page does not tell Google which business it belongs to.', 'ai-seo-assistant' ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+		}
+		if ( 'checked' === $group['state'] && [] === $group['issues'] ) {
+			echo '<p class="aisa-tone--good">' . Ui::icon( 'yes-alt' ) . esc_html__( 'Matches your Google listing', 'ai-seo-assistant' ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+		} elseif ( 'checked' === $group['state'] ) {
+			/* translators: %s: e.g. "Hours differs from your Google listing". */
+			echo '<p class="aisa-tone--warn">' . Ui::icon( 'warning' ) . esc_html( self::listing_title( $group['issues'][0] ) ) . ( count( $group['issues'] ) > 1 ? esc_html( sprintf( _n( ' (and %d more)', ' (and %d more)', count( $group['issues'] ) - 1, 'ai-seo-assistant' ), count( $group['issues'] ) - 1 ) ) : '' ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+		} elseif ( 'not_checked' === $group['state'] ) {
+			echo '<p class="aisa-small">' . esc_html__( 'Google listing not checked this week.', 'ai-seo-assistant' ) . '</p>';
+		}
+		echo '</div>';
+
+		// What Google can read now.
+		echo '<div class="aisa-greads__found"><p><strong>' . esc_html( [] !== $chips && '' === $missing ? __( 'Google can read this page', 'ai-seo-assistant' ) : __( 'What Google can read now', 'ai-seo-assistant' ) ) . '</strong></p>';
+		if ( [] === $chips ) {
+			echo '<p class="aisa-small">' . esc_html__( 'No structured data was found on this page.', 'ai-seo-assistant' ) . '</p>';
+		} else {
+			echo '<ul class="aisa-chips aisa-chips--plain">';
+			foreach ( $chips as $chip ) {
+				echo '<li><span class="aisa-chip">' . esc_html( $chip ) . '</span></li>';
+			}
+			echo '</ul>';
+		}
+		if ( '' !== $missing ) {
+			/* translators: %s: e.g. "Service". */
+			echo '<p class="aisa-small">' . esc_html( sprintf( __( 'Missing: %s. AJR Core adds it for this page type.', 'ai-seo-assistant' ), $missing ) ) . '</p>';
+		} elseif ( $core && '' === $type ) {
+			echo '<p class="aisa-small">' . esc_html__( 'More is added when the page type is set.', 'ai-seo-assistant' ) . '</p>';
+		}
+		echo '<p><a href="' . esc_url( Google_Reads::rich_results_url( (string) get_permalink( $post ) ) ) . '" target="_blank" rel="noopener noreferrer">' . esc_html__( 'Check in Google’s Rich Results Test', 'ai-seo-assistant' ) . '<span class="screen-reader-text"> ' . esc_html__( '(opens in a new tab)', 'ai-seo-assistant' ) . '</span></a></p></div>';
+
+		if ( '' !== $fix_url ) {
+			echo '<p class="aisa-greads__actions">' . ( $core ? '<a class="aisa-btn aisa-btn--small" href="#aisa-page-type">' . esc_html__( 'Change page type', 'ai-seo-assistant' ) . '</a> ' : '' )
+				. '<a class="aisa-btn aisa-btn--small" href="' . esc_url( $fix_url ) . '">' . Ui::icon( 'external' ) . esc_html__( 'Fix in Business details', 'ai-seo-assistant' ) . '</a><span class="aisa-small aisa-push">' . esc_html__( 'Opens AJR Core', 'ai-seo-assistant' ) . '</span></p>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		}
 		echo '</section>';
 	}
@@ -1151,55 +1389,119 @@ class Scan_Page {
 	}
 
 	/**
-	 * "≈ 40 extra clicks / 90 days" ("< 5" for a handful).
+	 * "≈ 390 visits a year" ("< 5 visits a year" for a handful).
 	 *
-	 * @param float $missed Missed clicks over the window.
+	 * @param float $visits Visits a year.
 	 */
-	protected static function extra_clicks( float $missed ): string {
-		$n = Opportunity::rounded( $missed );
+	protected static function visits_year( float $visits ): string {
+		$n = Opportunity::rounded( $visits );
 		if ( null === $n ) {
-			return __( '< 5 extra clicks / 90 days', 'ai-seo-assistant' );
+			return __( '< 5 visits a year', 'ai-seo-assistant' );
 		}
 
-		/* translators: %s: number of clicks. */
-		return sprintf( _n( '≈ %s extra click / 90 days', '≈ %s extra clicks / 90 days', $n, 'ai-seo-assistant' ), number_format_i18n( $n ) );
+		/* translators: %s: number of visits. */
+		return sprintf( _n( '≈ %s visit a year', '≈ %s visits a year', $n, 'ai-seo-assistant' ), number_format_i18n( $n ) );
 	}
 
 	/**
-	 * The role options for a select.
+	 * "≈ 6 enquiries a year", or '' when not estimated (fewer than 10 tracked enquiries: never 0).
 	 *
-	 * @param string $current Selected role ('' none).
-	 * @param bool   $bulk    For the bulk bar (a "Role…" prompt first).
-	 * @param string $default The default role's label, for the "Default" option.
+	 * @param float|null $enquiries Opportunity::enquiries().
 	 */
-	protected static function role_options( string $current, bool $bulk = false, string $default = '' ): string {
-		$out = $bulk ? '<option value="">' . esc_html__( 'Role…', 'ai-seo-assistant' ) . '</option>' : '';
-		foreach ( Page_Role::labels() as $key => $label ) {
-			$out .= '<option value="' . esc_attr( $key ) . '"' . selected( $current, $key, false ) . '>' . esc_html( $label ) . '</option>';
+	protected static function enquiries_year( ?float $enquiries ): string {
+		if ( null === $enquiries ) {
+			return '';
 		}
-		/* translators: %s: the default role. */
-		$out .= '<option value="auto"' . selected( $current, 'auto', false ) . '>' . esc_html( '' !== $default ? sprintf( __( 'Default (%s)', 'ai-seo-assistant' ), $default ) : __( 'Default', 'ai-seo-assistant' ) ) . '</option>';
+		if ( $enquiries < 1 ) {
+			return __( '< 1 enquiry a year', 'ai-seo-assistant' );
+		}
+		$n = (int) round( $enquiries );
+
+		/* translators: %s: number of enquiries. */
+		return sprintf( _n( '≈ %s enquiry a year', '≈ %s enquiries a year', $n, 'ai-seo-assistant' ), number_format_i18n( $n ) );
+	}
+
+	/**
+	 * Tier labels.
+	 *
+	 * @return array<string,string>
+	 */
+	protected static function tiers(): array {
+		return [
+			'high'   => __( 'High', 'ai-seo-assistant' ),
+			'medium' => __( 'Medium', 'ai-seo-assistant' ),
+			'low'    => __( 'Low', 'ai-seo-assistant' ),
+			'none'   => __( 'None', 'ai-seo-assistant' ),
+		];
+	}
+
+	/**
+	 * The list's Opportunity cell: tier chip, quick win, top-3 prize (all estimates, a year).
+	 *
+	 * @param array<string,mixed> $r Ranking row.
+	 */
+	protected function opportunity_cell( array $r ): string {
+		if ( ! $r['seen'] ) {
+			return '<span class="aisa-small aisa-tone--flat">' . esc_html__( 'Not seen on Google', 'ai-seo-assistant' ) . '</span>';
+		}
+		$tiers = self::tiers();
+		$enq   = self::enquiries_year( $r['quick_enq'] );
+
+		return '<span class="aisa-opp">'
+			. '<span class="aisa-tier aisa-tier--' . esc_attr( (string) $r['tier'] ) . '">' . esc_html( $tiers[ $r['tier'] ] ?? '' ) . '</span>'
+			/* translators: %s: "≈ 390 visits a year". */
+			. '<span class="aisa-opp__line">' . esc_html( sprintf( __( 'Quick win %s', 'ai-seo-assistant' ), self::visits_year( (float) $r['quick_win'] ) ) ) . ( '' !== $enq ? ' · ' . esc_html( $enq ) : '' ) . '</span>'
+			/* translators: %s: "≈ 1,200 visits a year". */
+			. ( (float) $r['prize'] >= 5 ? '<span class="aisa-opp__line aisa-small">' . esc_html( sprintf( __( 'Top-3 prize %s', 'ai-seo-assistant' ), self::visits_year( (float) $r['prize'] ) ) ) . '</span>' : '' )
+			. '</span>';
+	}
+
+	/**
+	 * The page type options for a select (AJR Core's types).
+	 *
+	 * @param string $current Selected type ('' none).
+	 * @param bool   $bulk    For the bulk bar (a "Page type…" prompt first).
+	 */
+	protected static function type_options( string $current, bool $bulk = false ): string {
+		$out = $bulk
+			? '<option value="">' . esc_html__( 'Page type…', 'ai-seo-assistant' ) . '</option>'
+			: '<option value=""' . selected( $current, '', false ) . '>' . esc_html__( 'Not set', 'ai-seo-assistant' ) . '</option>';
+		foreach ( Page_Role::types() as $key => $t ) {
+			$out .= '<option value="' . esc_attr( $key ) . '"' . selected( $current, $key, false ) . '>' . esc_html( $t['label'] ) . '</option>';
+		}
+		if ( $bulk ) {
+			$out .= '<option value="clear">' . esc_html__( 'Clear (not set)', 'ai-seo-assistant' ) . '</option>';
+		}
 
 		return $out;
 	}
 
 	/**
-	 * The role tag on a list row: a small select (one click to change, via the script).
+	 * The page type tag on a list row: a small select writing to AJR Core (one click, via the script);
+	 * without AJR Core's page types, the derived role as a plain tag.
 	 *
 	 * @param int                 $id Post ID.
 	 * @param array<string,mixed> $r  Ranking row.
 	 */
 	protected function role_tag( int $id, array $r ): string {
-		$labels = Page_Role::labels();
-		$title  = $r['role_set'] ? __( 'Role set by you', 'ai-seo-assistant' ) : __( 'Role by default', 'ai-seo-assistant' );
+		$roles = [
+			'money'        => __( 'counts as a money page', 'ai-seo-assistant' ),
+			'location'     => __( 'counts as an area page', 'ai-seo-assistant' ),
+			'info'         => __( 'counts as information', 'ai-seo-assistant' ),
+			'unclassified' => __( 'counts as unclassified', 'ai-seo-assistant' ),
+		];
+		$title = $roles[ $r['role'] ] ?? '';
 		if ( $r['bumped'] ) {
-			$title .= ' · ' . __( 'counted one step higher: enquiry rate twice the site’s', 'ai-seo-assistant' );
+			$title .= ' · ' . __( 'one step higher: enquiry rate twice the site’s', 'ai-seo-assistant' );
+		}
+		if ( ! Page_Role::core() ) {
+			return '<span class="aisa-roletag aisa-roletag--' . esc_attr( (string) $r['role'] ) . '" title="' . esc_attr( $title ) . '">' . esc_html( ucfirst( (string) $r['role'] ) ) . '</span>';
 		}
 		/* translators: %s: page title. */
-		$aria = sprintf( __( 'Role of %s', 'ai-seo-assistant' ), $r['title'] );
+		$aria = sprintf( __( 'Page type of %s', 'ai-seo-assistant' ), $r['title'] );
 
-		return '<select class="aisa-roletag aisa-roletag--' . esc_attr( $r['role'] ) . ( $r['role_set'] ? ' is-set' : '' ) . '" data-aisa-role="' . esc_attr( (string) $id ) . '" aria-label="' . esc_attr( $aria ) . '" title="' . esc_attr( $title ) . '">'
-			. self::role_options( $r['role_set'] ? $r['role'] : 'auto', false, $labels[ $r['role'] ] ?? '' ) . '</select>'
+		return '<select class="aisa-roletag aisa-roletag--' . esc_attr( (string) $r['role'] ) . ( $r['role_set'] ? ' is-set' : '' ) . '" data-aisa-role="' . esc_attr( (string) $id ) . '" aria-label="' . esc_attr( $aria ) . '" title="' . esc_attr( ( $r['role_set'] ? '' : __( 'Not set: ', 'ai-seo-assistant' ) ) . $title ) . '">'
+			. self::type_options( (string) $r['page_type'] ) . '</select>'
 			. ( $r['bumped'] ? '<span class="aisa-small aisa-tone--good" title="' . esc_attr( $title ) . '">↑</span>' : '' );
 	}
 

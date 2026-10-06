@@ -39,6 +39,7 @@ class Scan_Store {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own table.
 		$wpdb->query(
 			$wpdb->prepare(
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own table name (Schema::table()).
 				"INSERT INTO `{$table}` (post_id, path, post_type, scanned_at, source, facts, issues) VALUES (%d, %s, %s, %s, %s, %s, '[]')
 				ON DUPLICATE KEY UPDATE path = VALUES(path), post_type = VALUES(post_type), scanned_at = VALUES(scanned_at), source = VALUES(source), facts = VALUES(facts)", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$post_id,
@@ -179,7 +180,7 @@ class Scan_Store {
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own table.
 		$rows = (array) $wpdb->get_results( "SELECT post_id, scanned_at FROM `{$table}`", ARRAY_A );
 
-		return array_combine( array_map( 'intval', array_column( $rows, 'post_id' ) ), array_column( $rows, 'scanned_at' ) ) ?: [];
+		return array_combine( array_map( 'intval', array_column( $rows, 'post_id' ) ), array_column( $rows, 'scanned_at' ) ); // PHP 8: always an array.
 	}
 
 	/**

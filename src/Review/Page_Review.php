@@ -29,7 +29,9 @@ use AJR\SEOAssistant\Changes\Change_Log;
 use AJR\SEOAssistant\Content\Business;
 use AJR\SEOAssistant\Content\Content_Extractor;
 use AJR\SEOAssistant\Core\Utils;
+use AJR\SEOAssistant\Scan\Google_Reads;
 use AJR\SEOAssistant\Scan\Opportunity;
+use AJR\SEOAssistant\Scan\Page_Role;
 use AJR\SEOAssistant\Scan\Ranking;
 use AJR\SEOAssistant\Scan\Rules;
 use AJR\SEOAssistant\Scan\Scan_Store;
@@ -221,7 +223,9 @@ class Page_Review {
 				'ga4'                 => $page['ga4'] ?? [],
 				'business'            => Business::prompt_lines(),
 				'tone'                => Business::tone(),
-				'issues'              => array_map( static fn( $i ) => $i['title'] . ' — ' . $i['fix'], (array) $row['issues'] ),
+				'issues'              => array_map( static fn( $i ) => $i['title'] . ' — ' . $i['fix'], array_filter( (array) $row['issues'], static fn( $i ) => 'schema' !== ( $i['kind'] ?? '' ) ) ),
+				'page_type'           => self::page_type_label( $post_id ),
+				'business_node'       => self::business_node( $facts ),
 				'images'              => $images,
 				'headings'            => array_map( static fn( $h ) => 'H' . $h['l'] . ' ' . $h['t'], array_slice( (array) ( $facts['headings'] ?? [] ), 0, 20 ) ),
 				'keyphrase_supported' => (bool) $this->adapter->supports_keyphrase(),
@@ -263,7 +267,8 @@ class Page_Review {
 		}
 		$editor = [];
 		foreach ( (array) ( $reply['editor'] ?? [] ) as $item ) {
-			if ( in_array( $item['area'] ?? '', [ 'headings', 'links', 'content', 'schema' ], true ) && '' !== trim( (string) $item['advice'] ) ) {
+			// Never schema: AJR Core prints it from the page type (an older reply may still carry it).
+			if ( in_array( $item['area'] ?? '', [ 'headings', 'links', 'content' ], true ) && '' !== trim( (string) $item['advice'] ) ) {
 				$editor[] = [
 					'area'   => $item['area'],
 					'advice' => sanitize_text_field( (string) $item['advice'] ),
@@ -496,29 +501,29 @@ class Page_Review {
 	 * is put back.
 	 *
 	 * @param int    $post_id Post ID.
-	 * @param string $old     Content before.
-	 * @param string $new     Content after.
+	 * @param string $before  Content before.
+	 * @param string $after   Content after.
 	 * @return bool|string true when saved; 'not-allowed' | 'changed' when not.
 	 */
-	protected function write_content( int $post_id, string $old, string $new ) {
+	protected function write_content( int $post_id, string $before, string $after ) {
 		if ( ! current_user_can( 'unfiltered_html' ) ) {
 			return 'not-allowed';
 		}
-		if ( (string) get_post_field( 'post_content', $post_id, 'raw' ) !== $old ) {
+		if ( (string) get_post_field( 'post_content', $post_id, 'raw' ) !== $before ) {
 			return 'changed';
 		}
 		wp_update_post(
 			[
 				'ID'           => $post_id,
-				'post_content' => wp_slash( $new ),
+				'post_content' => wp_slash( $after ),
 			]
 		);
 		clean_post_cache( $post_id );
-		if ( (string) get_post_field( 'post_content', $post_id, 'raw' ) !== $new ) {
+		if ( (string) get_post_field( 'post_content', $post_id, 'raw' ) !== $after ) {
 			wp_update_post(
 				[
 					'ID'           => $post_id,
-					'post_content' => wp_slash( $old ),
+					'post_content' => wp_slash( $before ),
 				]
 			);
 			clean_post_cache( $post_id );
@@ -700,6 +705,36 @@ class Page_Review {
 		$scanner = new Scanner( $this->store );
 		$scanner->scan_page( $post_id );
 		$scanner->finalize();
+	}
+
+	/**
+	 * The page's AJR Core page type in words for the prompt ('' when not set).
+	 *
+	 * @param int $post_id Post ID.
+	 */
+	protected static function page_type_label( int $post_id ): string {
+		$type = Page_Role::type_of( $post_id );
+		if ( '' === $type ) {
+			return '';
+		}
+		$types = Page_Role::types();
+
+		return (string) ( $types[ $type ]['label'] ?? $type );
+	}
+
+	/**
+	 * The business node the page prints, in one line (type and name), for the prompt; '' when none.
+	 *
+	 * @param array<string,mixed> $facts Scan facts.
+	 */
+	protected static function business_node( array $facts ): string {
+		foreach ( (array) ( $facts['schema_nodes'] ?? [] ) as $node ) {
+			if ( in_array( $node['type'], Google_Reads::BUSINESS_TYPES, true ) || str_ends_with( (string) $node['id'], '#organization' ) ) {
+				return trim( $node['type'] . ' ' . $node['name'] );
+			}
+		}
+
+		return '';
 	}
 
 	/**

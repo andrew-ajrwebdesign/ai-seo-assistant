@@ -133,6 +133,10 @@ class SnapshotV2Test extends TestCase {
 		$this->assertTrue( Snapshot_V2::counts( $by['form'] ) );
 		$this->assertTrue( $snap['listing']['checked'], 'the fixture’s business_profile_check comes through' );
 		$this->assertGreaterThan( 0, $snap['listing']['problems'] );
+		$this->assertSame( 'ChIJExampleNorthfieldPlumbing00', $snap['listing']['place_id'], 'kept for AJR Core (contract 3)' );
+		$this->assertSame( 4.8, $snap['listing']['google']['rating'] );
+		$this->assertSame( 112, $snap['listing']['google']['review_count'] );
+		$this->assertTrue( $snap['listing']['google']['service_area_only'] );
 
 		$month                      = self::fixture( 'snapshot-v2.month.example.json' );
 		$month['month']['complete'] = false;

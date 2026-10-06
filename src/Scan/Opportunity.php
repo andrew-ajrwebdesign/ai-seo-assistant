@@ -100,6 +100,17 @@ class Opportunity {
 		[ 31, 50, 40 ],
 	];
 
+	/**
+	 * Default tiers: weighted extra visits a year (value_of()) for High and Medium; anything from 1 is Low.
+	 * A page at High wins about a visit a day once intent and role are counted; Medium about one a week.
+	 *
+	 * @var array{high:float,medium:float}
+	 */
+	public const TIERS = [
+		'high'   => 300.0,
+		'medium' => 60.0,
+	];
+
 	/** Impressions a bucket needs before the site's own CTR replaces the built-in value. */
 	public const MIN_BUCKET_IMPRESSIONS = 1000;
 
@@ -380,78 +391,104 @@ class Opportunity {
 	}
 
 	/**
-	 * Where a page's missed clicks are: per search, plus the remainder at the page's average position.
+	 * Where a page's opportunity is: per search, plus the remainder at the page's average position.
 	 *
-	 * Without searches (v1 data) it is the page-level formula, method 'page'.
+	 * Each row carries its 90-day missed clicks at today's position (the quick win), what it would add at
+	 * position 3 (the top-3 prize), its intent and that intent's weight. Totals: `missed` and `prize` are
+	 * plain visits; `weighted` and `weighted_prize` are the same × each search's intent weight. Without
+	 * searches (v1 data) it is the page-level formula, method 'page', intent unknown.
 	 *
-	 * @param array<string,mixed>|null $gsc Page Search Console block (Page_Data): impressions, clicks, ctr,
-	 *                                      position, queries[] { query, impressions, clicks, ctr, position }.
-	 * @return array{missed:float,method:string,rows:array<int,array<string,mixed>>}
+	 * @param array<string,mixed>|null $gsc    Page Search Console block (Page_Data): impressions, clicks, ctr,
+	 *                                         position, queries[] { query, impressions, clicks, ctr, position }.
+	 * @param callable|null            $intent fn( string $query ): string, the search's intent (Intent::of).
+	 * @return array{missed:float,prize:float,weighted:float,weighted_prize:float,method:string,mix:array<string,float>,rows:array<int,array<string,mixed>>}
 	 */
-	public static function breakdown( ?array $gsc ): array {
-		$none = [
-			'missed' => 0.0,
-			'method' => 'none',
-			'rows'   => [],
+	public static function breakdown( ?array $gsc, ?callable $intent = null ): array {
+		$out = [
+			'missed'         => 0.0,
+			'prize'          => 0.0,
+			'weighted'       => 0.0,
+			'weighted_prize' => 0.0,
+			'method'         => 'none',
+			'mix'            => [],
+			'rows'           => [],
 		];
 		if ( null === $gsc ) {
-			return $none;
+			return $out;
 		}
 		$shown   = (int) ( $gsc['impressions'] ?? 0 );
 		$clicks  = (int) ( $gsc['clicks'] ?? 0 );
 		$pos     = (float) ( $gsc['position'] ?? 0 );
 		$queries = array_values( array_filter( (array) ( $gsc['queries'] ?? [] ), static fn( $q ) => is_array( $q ) && (int) ( $q['impressions'] ?? 0 ) > 0 && is_numeric( $q['position'] ?? null ) ) );
+		$rows    = [];
 		if ( [] === $queries ) {
-			$ctr = isset( $gsc['ctr'] ) && is_numeric( $gsc['ctr'] ) ? (float) $gsc['ctr'] : null;
-
-			return [
-				'missed' => self::missed_clicks( $shown, $ctr, $pos, $clicks ),
-				'method' => 'page',
-				'rows'   => [],
-			];
+			if ( $shown <= 0 || $pos <= 0 ) {
+				return $out;
+			}
+			$out['method'] = 'page';
+			$rows[]        = self::row( '', $shown, $clicks, $pos, 'unknown', false ) + [ 'remain' => true ];
+		} else {
+			$out['method'] = 'query';
+			$q_shown       = 0;
+			$q_clicks      = 0;
+			foreach ( $queries as $q ) {
+				$imp       = (int) $q['impressions'];
+				$clk       = (int) ( $q['clicks'] ?? 0 );
+				$q_shown  += $imp;
+				$q_clicks += $clk;
+				$text      = (string) ( $q['query'] ?? '' );
+				$rows[]    = self::row( $text, $imp, $clk, (float) $q['position'], null !== $intent ? (string) $intent( $text ) : 'unknown', true );
+			}
+			$rest_shown = max( 0, $shown - $q_shown );
+			if ( $rest_shown > 0 && $pos > 0 ) {
+				// Searches Google does not name are most likely like the ones it does: the remainder takes their
+				// impressions-weighted intent weight (1 when none is sorted).
+				$named          = array_filter( $rows, static fn( $r ) => 'unknown' !== $r['intent'] );
+				$shown_named    = array_sum( array_column( $named, 'impressions' ) );
+				$weight         = $shown_named > 0 ? array_sum( array_map( static fn( $r ) => $r['weight'] * $r['impressions'], $named ) ) / $shown_named : Intent::UNKNOWN_WEIGHT;
+				$rest           = self::row( '', $rest_shown, max( 0, min( $rest_shown, $clicks - $q_clicks ) ), $pos, 'unnamed', true );
+				$rest['weight'] = $weight;
+				$rows[]         = $rest + [ 'remain' => true ];
+			}
 		}
 
-		$rows     = [];
-		$total    = 0.0;
-		$q_shown  = 0;
-		$q_clicks = 0;
-		foreach ( $queries as $q ) {
-			$imp       = (int) $q['impressions'];
-			$clk       = (int) ( $q['clicks'] ?? 0 );
-			$q_shown  += $imp;
-			$q_clicks += $clk;
-			$row       = self::row( (string) ( $q['query'] ?? '' ), $imp, $clk, (float) $q['position'] );
-			$total    += $row['missed'];
-			$rows[]    = $row;
+		$mix = [];
+		foreach ( $rows as $i => $row ) {
+			$rows[ $i ]            += [ 'remain' => false ];
+			$out['missed']         += $row['missed'];
+			$out['prize']          += $row['prize'];
+			$out['weighted']       += $row['missed'] * $row['weight'];
+			$out['weighted_prize'] += $row['prize'] * $row['weight'];
+			if ( empty( $row['remain'] ) ) {
+				$mix[ $row['intent'] ] = ( $mix[ $row['intent'] ] ?? 0 ) + $row['impressions']; // The mix of the searches Google names.
+			}
 		}
-		$rest_shown = max( 0, $shown - $q_shown );
-		if ( $rest_shown > 0 && $pos > 0 ) {
-			$row           = self::row( '', $rest_shown, max( 0, min( $rest_shown, $clicks - $q_clicks ) ), $pos );
-			$row['remain'] = true;
-			$total        += $row['missed'];
-			$rows[]        = $row;
+		$all = array_sum( $mix );
+		foreach ( $mix as $k => $v ) {
+			$out['mix'][ $k ] = $all > 0 ? round( $v / $all, 3 ) : 0.0;
 		}
-		usort( $rows, static fn( $a, $b ) => $b['missed'] <=> $a['missed'] );
+		arsort( $out['mix'] );
+		usort( $rows, static fn( $a, $b ) => [ $b['missed'] * $b['weight'], $b['prize'] ] <=> [ $a['missed'] * $a['weight'], $a['prize'] ] );
+		$out['rows'] = $rows;
 
-		return [
-			'missed' => $total,
-			'method' => 'query',
-			'rows'   => $rows,
-		];
+		return $out;
 	}
 
 	/**
-	 * One search's (or the remainder's) missed clicks.
+	 * One search's (or the remainder's) quick win and top-3 prize, 90 days.
 	 *
 	 * @param string $query    Search ('' for the remainder).
 	 * @param int    $shown    Impressions.
 	 * @param int    $clicks   Clicks.
 	 * @param float  $position Position.
+	 * @param string $intent   Intent (Intent::WEIGHTS key or 'unknown').
+	 * @param bool   $reach    Fade the quick win past position 20 (per search); off for the v1 page-level row.
 	 * @return array<string,mixed>
 	 */
-	protected static function row( string $query, int $shown, int $clicks, float $position ): array {
+	protected static function row( string $query, int $shown, int $clicks, float $position, string $intent, bool $reach ): array {
 		$ctr      = $shown > 0 ? 100 * $clicks / $shown : 0.0;
 		$expected = self::expected_ctr( $position );
+		$at_three = self::expected_ctr( 3.0 );
 
 		return [
 			'query'       => $query,
@@ -460,9 +497,92 @@ class Opportunity {
 			'position'    => $position,
 			'ctr'         => round( $ctr, 2 ),
 			'expected'    => $expected,
-			'missed'      => max( 0.0, $shown * ( $expected - $ctr ) / 100 ) * self::reach( $position ),
-			'remain'      => false,
+			'missed'      => max( 0.0, $shown * ( $expected - $ctr ) / 100 ) * ( $reach ? self::reach( $position ) : 1.0 ),
+			'prize'       => $position > 3 ? max( 0.0, $shown * ( $at_three - $ctr ) / 100 ) : 0.0,
+			'intent'      => $intent,
+			'weight'      => Intent::weight( $intent ),
 		];
+	}
+
+	/**
+	 * A 90-day figure as a year.
+	 *
+	 * @param float $ninety Over the 90-day window.
+	 */
+	public static function yearly( float $ninety ): float {
+		return $ninety * 365 / 90;
+	}
+
+	/**
+	 * Estimated enquiries from extra visits: × the page's enquiry rate (the site's when the page had fewer
+	 * than 30 visits). Null (omit, never 0) when the site had fewer than 10 tracked enquiries in 90 days.
+	 *
+	 * @param float $visits         Extra visits (a year).
+	 * @param int   $enquiries      Page enquiries (90 days).
+	 * @param int   $page_visits    Page visits (90 days).
+	 * @param int   $site_enquiries Site enquiries (90 days).
+	 * @param int   $site_visits    Site visits (90 days).
+	 */
+	public static function enquiries( float $visits, int $enquiries, int $page_visits, int $site_enquiries, int $site_visits ): ?float {
+		if ( $site_enquiries < 10 || $site_visits <= 0 ) {
+			return null;
+		}
+		$rate = $page_visits >= 30 ? $enquiries / $page_visits : $site_enquiries / $site_visits;
+
+		return $visits * $rate;
+	}
+
+	/**
+	 * Tier thresholds on weighted yearly visits (filterable).
+	 *
+	 * @return array{high:float,medium:float}
+	 */
+	public static function tier_thresholds(): array {
+		$t = self::TIERS;
+		if ( function_exists( 'apply_filters' ) ) {
+			/**
+			 * Filters the opportunity tiers: weighted extra visits a year for High and Medium.
+			 *
+			 * @param array{high:float,medium:float} $t Thresholds.
+			 */
+			$f = apply_filters( 'ai_seo_assistant_opportunity_tiers', $t );
+			if ( is_array( $f ) && isset( $f['high'], $f['medium'] ) && is_numeric( $f['high'] ) && is_numeric( $f['medium'] ) ) {
+				$t = [
+					'high'   => (float) $f['high'],
+					'medium' => (float) $f['medium'],
+				];
+			}
+		}
+
+		return $t;
+	}
+
+	/**
+	 * The tier: high, medium, low, or none (nothing to win).
+	 *
+	 * @param float $value Weighted yearly visits (value_of()).
+	 */
+	public static function tier( float $value ): string {
+		$t = self::tier_thresholds();
+		if ( $value >= $t['high'] ) {
+			return 'high';
+		}
+		if ( $value >= $t['medium'] ) {
+			return 'medium';
+		}
+
+		return $value >= 1 ? 'low' : 'none';
+	}
+
+	/**
+	 * The sort and tier value: weighted quick win a year × the page role's value × the enquiry lift.
+	 *
+	 * @param float $weighted  breakdown()['weighted'] (90 days).
+	 * @param float $role      value() of the page's role.
+	 * @param int   $enquiries Page enquiries (90 days).
+	 */
+	public static function value_of( float $weighted, float $role, int $enquiries ): float {
+		return self::weighted( self::yearly( $weighted ), $enquiries, $role );
 	}
 
 	/**

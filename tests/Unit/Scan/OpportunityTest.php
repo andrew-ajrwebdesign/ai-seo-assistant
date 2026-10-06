@@ -105,7 +105,7 @@ class OpportunityTest extends TestCase {
 	public function test_falls_back_to_page_level(): void {
 		$split = Opportunity::breakdown( $this->gsc( [], 7310, 44, 8.9 ) );
 		$this->assertSame( 'page', $split['method'] );
-		$this->assertEqualsWithDelta( Opportunity::missed_clicks( 7310, 0.6, 8.9 ), $split['missed'], 0.001 );
+		$this->assertEqualsWithDelta( Opportunity::missed_clicks( 7310, null, 8.9, 44 ), $split['missed'], 0.001, 'actual CTR from clicks, not the rounded figure' );
 		$this->assertSame( 'none', Opportunity::breakdown( null )['method'] );
 		$this->assertSame( 0.0, Opportunity::breakdown( null )['missed'] );
 	}

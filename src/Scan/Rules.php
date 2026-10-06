@@ -513,22 +513,25 @@ class Rules {
 	 * @return array<int,array<string,mixed>>
 	 */
 	protected static function schema( array $facts, array $ctx ): array {
-		$types = array_map( 'strtolower', (array) ( $facts['schema'] ?? [] ) );
-		$out   = [];
-		if ( [] === $types ) {
-			$out[] = self::issue( 'schema', 'schema_none', __( 'No structured data', 'ai-seo-assistant' ), __( 'Google reads nothing machine-readable about this page.', 'ai-seo-assistant' ), __( 'Fix: check the SEO plugin’s schema settings for this post type.', 'ai-seo-assistant' ), 'editor' );
-		} elseif ( 'post' === ( $ctx['post_type'] ?? '' ) && [] === array_intersect( $types, [ 'article', 'blogposting', 'newsarticle' ] ) ) {
-			$out[] = self::issue( 'schema', 'schema_article', __( 'No Article schema', 'ai-seo-assistant' ), __( 'Google cannot read the author and dates of this post.', 'ai-seo-assistant' ), __( 'Fix: set the post type’s schema to Article in the SEO plugin.', 'ai-seo-assistant' ), 'editor' );
-		} elseif ( ! empty( $ctx['is_service'] ) && ! in_array( 'service', $types, true ) ) {
-			$out[] = self::issue(
+		$out = [];
+		// Schema is never an editor job (decision 2026-10-06): AJR Core prints it from the page type and the
+		// business details. The one page-level finding is a missing page type, fixed in one click.
+		if ( ! empty( $ctx['page_types'] ) && '' === (string) ( $ctx['page_type'] ?? '' ) ) {
+			$labels  = (array) ( $ctx['type_labels'] ?? [] );
+			$suggest = (string) ( $ctx['suggested_type'] ?? '' );
+			$out[]   = self::issue(
 				'schema',
-				'schema_service',
-				__( 'No Service schema', 'ai-seo-assistant' ),
-				__( 'Google cannot read the service, the area served or the price range.', 'ai-seo-assistant' ),
-				! empty( $ctx['custom_schema_on'] )
-					? __( 'Fix: add a Service entry in AJR Core › Schema.', 'ai-seo-assistant' )
-					: __( 'Fix: turn on Custom schema in AJR Core, then add a Service entry.', 'ai-seo-assistant' ),
-				'editor'
+				'page_type_unset',
+				__( 'Page type not set', 'ai-seo-assistant' ),
+				'' !== $suggest && isset( $labels[ $suggest ] )
+					/* translators: %s: page type, e.g. "Service page". */
+					? sprintf( __( 'Google can’t tell this is a %s, so it reads it as a plain web page.', 'ai-seo-assistant' ), mb_strtolower( (string) $labels[ $suggest ] ) )
+					: __( 'Google can’t tell what this page is for, so it reads it as a plain web page.', 'ai-seo-assistant' ),
+				'' !== $suggest && isset( $labels[ $suggest ] )
+					/* translators: %s: page type. */
+					? sprintf( __( 'Fix: set the page type to %s (one click, in “What Google reads on this page”).', 'ai-seo-assistant' ), (string) $labels[ $suggest ] )
+					: __( 'Fix: choose the page type (one click, in “What Google reads on this page”).', 'ai-seo-assistant' ),
+				'click'
 			);
 		}
 		if ( '' === (string) ( $facts['og_image'] ?? '' ) ) {

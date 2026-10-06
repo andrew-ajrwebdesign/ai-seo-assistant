@@ -1,6 +1,8 @@
 <?php
 /**
- * Admin UI: settings page, editor metabox, asset loading, and saving fields.
+ * Admin UI: the editor metabox, its assets, and saving its fields.
+ *
+ * @package AJR\SEOAssistant
  */
 
 namespace AJR\SEOAssistant\Admin;
@@ -20,9 +22,32 @@ class Admin {
 	const NONCE_ACTION = 'ai_seo_assistant_generate';
 	const NONCE_NAME   = 'ai_seo_assistant_nonce';
 
+	/**
+	 * Fallback SEO adapter.
+	 *
+	 * @var \AJR\SEOAssistant\Adapters\TSF_Adapter
+	 */
 	private $tsf_adapter;
+
+	/**
+	 * Generation log.
+	 *
+	 * @var \AJR\SEOAssistant\Core\Logger
+	 */
 	private $logger;
+
+	/**
+	 * Local SEO context.
+	 *
+	 * @var \AJR\SEOAssistant\Content\Local_SEO_Context
+	 */
 	private $local_seo_context;
+
+	/**
+	 * Picks the active SEO plugin's adapter.
+	 *
+	 * @var \AJR\SEOAssistant\Adapters\SEO_Adapter_Resolver
+	 */
 	private $seo_adapter_resolver;
 
 	/**
@@ -57,9 +82,13 @@ class Admin {
 		$this->ai_client            = $ai_client;
 	}
 
+	/**
+	 * Register hooks.
+	 */
 	public function init() {
 		add_action( 'add_meta_boxes', [ $this, 'add_meta_box' ] );
 		add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_admin_assets' ] );
+
 		/*
 		 * ONE save hook, deliberately the late one. Yoast writes its own meta on wp_after_insert_post at
 		 * priority 10, after save_post, so a value written on save_post was overwritten by Yoast's copy of
@@ -69,6 +98,9 @@ class Admin {
 		// 5.0: the settings screen moved to Admin\Settings_Page (mockup G1); this class is the editor box only.
 	}
 
+	/**
+	 * Add the AI SEO Assistant box to the editor (agency users only).
+	 */
 	public function add_meta_box() {
 		// The editor box calls Claude on the agency's key: agency users only (4.3.0). Without the box
 		// there is no nonce in the form, so save_metadata_fields() does nothing for anyone else.
@@ -93,6 +125,11 @@ class Admin {
 		}
 	}
 
+	/**
+	 * Print the editor box.
+	 *
+	 * @param \WP_Post $post Post.
+	 */
 	public function render_meta_box( $post ) {
 		wp_nonce_field( self::NONCE_ACTION, self::NONCE_NAME );
 
@@ -363,6 +400,11 @@ class Admin {
 		<?php
 	}
 
+	/**
+	 * The editor box's assets, on the post editor only.
+	 *
+	 * @param string $hook Admin page hook.
+	 */
 	public function enqueue_admin_assets( $hook ) {
 		// The editor box is agency-only (see add_meta_box()), so its assets are too.
 		$is_editor = in_array( $hook, [ 'post.php', 'post-new.php' ], true ) && current_user_can( \AJR\SEOAssistant\Report\Access::TOOLS_CAP );
@@ -382,6 +424,11 @@ class Admin {
 		);
 	}
 
+	/**
+	 * Save the editor box's fields (after the SEO plugin, so its copy does not overwrite them).
+	 *
+	 * @param int $post_id Post ID.
+	 */
 	public function save_metadata_fields( $post_id ) {
 		if ( ! isset( $_POST[ self::NONCE_NAME ] ) ) {
 			return;
@@ -455,6 +502,12 @@ class Admin {
 		return $value;
 	}
 
+	/**
+	 * The latest successful generation for a post.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return array<string,mixed>|null
+	 */
 	private function get_latest_successful_log( $post_id ) {
 		$log = $this->logger->get_latest_log( $post_id );
 

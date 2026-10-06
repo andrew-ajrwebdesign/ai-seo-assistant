@@ -120,6 +120,9 @@ class Scheduler {
 		if ( [] === $queue['ids'] ) {
 			$result = $scanner->finalize();
 			delete_option( self::QUEUE );
+			// Once per push: sort the searches the intent rules leave (one cheap Claude call; skipped when capped).
+			$result['intent'] = Intent::run_pass();
+			Ranking::flush();
 			delete_transient( self::LOCK );
 
 			return [

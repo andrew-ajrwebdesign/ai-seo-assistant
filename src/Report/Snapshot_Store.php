@@ -46,6 +46,87 @@ class Snapshot_Store {
 	public const RECEIVED_ACTION = 'ai_seo_assistant_report_received';
 
 	/**
+	 * The stored Google listing check (Snapshot_V2::listing() shape), or null.
+	 *
+	 * @return array<string,mixed>|null
+	 */
+	public static function listing(): ?array {
+		$held = get_option( self::LISTING, null );
+
+		return is_array( $held ) && isset( $held['fields'] ) && is_array( $held['fields'] ) ? $held : null;
+	}
+
+	/**
+	 * Contract 3 with AJR Core 0.22 (`ajr_core_business_profile_check`): the stored check in the snapshot v2
+	 * schema's own shape (`business_profile_check`, PR claude-workspace#144), summary recounted from the rows
+	 * that survived validation. Null when no push has carried one.
+	 *
+	 * @return array<string,mixed>|null
+	 */
+	public static function listing_block(): ?array {
+		$l = self::listing();
+		if ( null === $l ) {
+			return null;
+		}
+		$checked = ! empty( $l['checked'] );
+		$fields  = [];
+		$summary = [
+			'fields'            => 0,
+			'match'             => 0,
+			'mismatch'          => 0,
+			'missing_on_site'   => 0,
+			'missing_on_google' => 0,
+			'not_compared'      => 0,
+			'problems'          => 0,
+			'worst'             => null,
+		];
+		$levels  = [ 'info', 'low', 'medium', 'high' ];
+		foreach ( (array) $l['fields'] as $f ) {
+			$fields[] = [
+				'field'    => (string) $f['field'],
+				'status'   => (string) $f['status'],
+				'severity' => (string) $f['severity'],
+				'site'     => '' === (string) $f['site'] ? null : (string) $f['site'],
+				'google'   => '' === (string) $f['google'] ? null : (string) $f['google'],
+				'message'  => (string) $f['message'],
+				'detail'   => (string) $f['detail'],
+				'fix'      => is_array( $f['fix'] ?? null ) ? [
+					'where'  => (string) $f['fix']['where'],
+					'site'   => '' === (string) $f['fix']['site'] ? null : (string) $f['fix']['site'],
+					'google' => '' === (string) $f['fix']['google'] ? null : (string) $f['fix']['google'],
+				] : null,
+			];
+			++$summary['fields'];
+			if ( isset( $summary[ $f['status'] ] ) ) {
+				++$summary[ $f['status'] ];
+			}
+			if ( ! in_array( $f['status'], [ 'match', 'not_compared' ], true ) && 'info' !== $f['severity'] ) {
+				++$summary['problems'];
+				if ( null === $summary['worst'] || array_search( $f['severity'], $levels, true ) > array_search( $summary['worst'], $levels, true ) ) {
+					$summary['worst'] = (string) $f['severity'];
+				}
+			}
+		}
+		$block = [
+			'version'    => 1,
+			'checked'    => $checked,
+			'checked_at' => (int) $l['checked_at'] > 0 ? gmdate( 'Y-m-d\TH:i:s.000\Z', (int) $l['checked_at'] ) : null,
+			'page'       => '' !== (string) ( $l['page'] ?? '' ) ? (string) $l['page'] : null,
+			'place_id'   => '' !== (string) ( $l['place_id'] ?? '' ) ? (string) $l['place_id'] : null,
+			'summary'    => $checked ? $summary : null,
+			'fields'     => $checked ? $fields : [],
+		];
+		if ( $checked ) {
+			$block['maps_url'] = (string) ( $l['maps_url'] ?? '' );
+			$block['google']   = (array) ( $l['google'] ?? [] );
+		} else {
+			$block['reason'] = (string) ( $l['reason'] ?? '' );
+		}
+
+		return $block;
+	}
+
+	/**
 	 * Store whatever a validated push carries: the week or month, the per-page search data (v2), and the
 	 * billing day. The single entry point for the push endpoint and the Import form.
 	 *
@@ -67,8 +148,9 @@ class Snapshot_Store {
 		if ( is_int( $day ) ) {
 			update_option( \AJR\SEOAssistant\AI\Spend::PUSHED_DAY_OPTION, $day, false );
 		}
-		if ( is_array( $listing ) ) {
-			update_option( self::LISTING, $listing + [ 'received' => $now ], false );
+		$held_listing = self::listing();
+		if ( is_array( $listing ) && ( null === $held_listing || (int) $listing['checked_at'] >= (int) $held_listing['checked_at'] ) ) {
+			update_option( self::LISTING, $listing + [ 'received' => $now ], false ); // The newest check wins.
 		}
 		// The freshest 90-day window wins: a month push (its window ends on the month's last Sunday) must not
 		// replace the newer window a weekly push brought.

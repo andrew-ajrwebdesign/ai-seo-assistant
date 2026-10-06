@@ -90,6 +90,8 @@ class Report_Page {
 			'agency'   => (string) apply_filters( 'ai_seo_assistant_report_agency', 'AJR Web Design' ),
 			'now'      => time(),
 			'tabs'     => $this->tabs( $view ),
+			// AJR Core's "Need a hand?" card (AJR Core 0.22+): it is for the client, so the Report shows it too.
+			'aside'    => \AJR\SEOAssistant\Admin\Ui::support_card(),
 		];
 
 		// wp-header-end: WordPress moves other plugins' notices to this marker, not into the dark header.

@@ -62,7 +62,7 @@ class Page_Data {
 				$args[]   = (string) wp_json_encode( $page );
 				$args[]   = $now;
 			}
-			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare -- placeholders built above, one triple per row.
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare,WordPress.DB.PreparedSQL.NotPrepared -- placeholders built above, one triple per row.
 			$wpdb->query( $wpdb->prepare( "INSERT INTO `{$table}` (path, data, updated_at) VALUES " . implode( ',', $values ), $args ) );
 		}
 

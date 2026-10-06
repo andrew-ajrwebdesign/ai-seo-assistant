@@ -70,7 +70,7 @@ class Ranking {
 	}
 
 	/**
-	 * Every scanned page, ranked: opportunity first, then impressions and issue count.
+	 * Every scanned page, ranked by opportunity value (weighted quick win a year), then impressions and issues.
 	 *
 	 * @return array<int,array<string,mixed>> Keyed by post ID, in rank order.
 	 */
@@ -87,6 +87,7 @@ class Ranking {
 		$titles = self::titles( array_keys( $scan ) );
 		$latest = self::latest_applies();
 		$roles  = Page_Role::for_posts( array_map( static fn( $r ) => (string) $r['post_type'], $scan ) );
+		$intent = static fn( string $q ): string => Intent::of( $q );
 
 		$site_enq    = 0;
 		$site_visits = 0;
@@ -95,8 +96,7 @@ class Ranking {
 			$site_visits += (int) ( $page['ga4']['visits'] ?? 0 );
 		}
 
-		$rows     = [];
-		$weighted = [];
+		$rows = [];
 		foreach ( $scan as $id => $row ) {
 			$page   = self::page( $data, (string) $row['path'] );
 			$gsc    = is_array( $page['gsc'] ?? null ) ? $page['gsc'] : null;
@@ -105,16 +105,19 @@ class Ranking {
 			$ctr    = null === $gsc ? null : ( null !== ( $gsc['ctr'] ?? null ) ? (float) $gsc['ctr'] : ( $shown > 0 ? round( $gsc['clicks'] / $shown * 100, 2 ) : 0.0 ) );
 			$enq    = (int) ( $page['ga4']['enquiries'] ?? 0 );
 			$visits = (int) ( $page['ga4']['visits'] ?? 0 );
-			$split  = Opportunity::breakdown( $gsc );
+			$split  = Opportunity::breakdown( $gsc, $intent );
 			$role   = $roles[ $id ] ?? [
 				'role' => 'unclassified',
 				'set'  => false,
+				'type' => '',
 			];
 			$bumped = Opportunity::earns_bump( $enq, $visits, $site_enq, $site_visits );
 			$value  = Opportunity::value( $role['role'], $bumped );
+			$worth  = Opportunity::value_of( $split['weighted'], $value, $enq );
+			$quick  = Opportunity::yearly( $split['missed'] );
+			$prize  = Opportunity::yearly( $split['prize'] );
 
-			$weighted[ $id ] = Opportunity::weighted( $split['missed'], $enq, $value );
-			$rows[ $id ]     = $row + [
+			$rows[ $id ] = $row + [
 				'title'       => $titles[ $id ] ?? $row['path'],
 				'impressions' => $shown,
 				'clicks'      => (int) ( $gsc['clicks'] ?? 0 ),
@@ -123,20 +126,29 @@ class Ranking {
 				'expected'    => $pos > 0 ? Opportunity::expected_ctr( $pos ) : null,
 				'enquiries'   => $enq,
 				'missed'      => $split['missed'],
+				'quick_win'   => $quick,
+				'prize'       => $prize,
+				'quick_enq'   => Opportunity::enquiries( $quick, $enq, $visits, $site_enq, $site_visits ),
+				'prize_enq'   => Opportunity::enquiries( $prize, $enq, $visits, $site_enq, $site_visits ),
+				'mix'         => $split['mix'],
 				'method'      => $split['method'],
 				'breakdown'   => $split['rows'],
 				'role'        => $role['role'],
 				'role_set'    => $role['set'],
+				'page_type'   => $role['type'],
 				'bumped'      => $bumped,
 				'value'       => $value,
+				'worth'       => $worth,
+				'tier'        => $shown > 0 ? Opportunity::tier( $worth ) : 'none',
 				'seen'        => $shown > 0,
 				'applied_at'  => $latest[ $id ] ?? '',
 			];
 		}
-		foreach ( Opportunity::scores( $weighted ) as $id => $score ) {
+		$scores = Opportunity::scores( array_map( static fn( $r ) => $r['worth'], $rows ) );
+		foreach ( $scores as $id => $score ) {
 			$rows[ $id ]['score'] = $score;
 		}
-		uasort( $rows, static fn( $a, $b ) => [ $b['score'], $b['impressions'], $b['issue_count'] ] <=> [ $a['score'], $a['impressions'], $a['issue_count'] ] );
+		uasort( $rows, static fn( $a, $b ) => [ $b['worth'], $b['impressions'], $b['issue_count'] ] <=> [ $a['worth'], $a['impressions'], $a['issue_count'] ] );
 		$rank = 0;
 		foreach ( $rows as $id => $row ) {
 			$rows[ $id ]['rank'] = ++$rank;

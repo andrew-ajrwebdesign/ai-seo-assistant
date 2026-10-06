@@ -23,6 +23,8 @@ namespace AJR\SEOAssistant\Scan;
 
 defined( 'ABSPATH' ) || exit;
 
+// phpcs:disable WordPress.NamingConventions.ValidVariableName.UsedPropertyNotSnakeCase -- PHP's DOM API names its properties nodeName, textContent, childNodes…
+
 /**
  * Extracts page facts from HTML.
  */
@@ -52,13 +54,14 @@ class Html_Parser {
 		$xp = new \DOMXPath( $dom );
 
 		$facts            = [
-			'title'       => self::text_of( $xp->query( '//head/title' ) ),
-			'description' => self::meta( $xp, 'name', 'description' ),
-			'robots'      => strtolower( self::meta( $xp, 'name', 'robots' ) ),
-			'canonical'   => self::attr( $xp->query( '//link[translate(@rel,"CANONIL","canonil")="canonical"]' ), 'href' ),
-			'og_image'    => self::meta( $xp, 'property', 'og:image' ),
-			'lang'        => self::attr( $xp->query( '//html' ), 'lang' ),
-			'schema'      => self::schema_types( $xp ),
+			'title'        => self::text_of( $xp->query( '//head/title' ) ),
+			'description'  => self::meta( $xp, 'name', 'description' ),
+			'robots'       => strtolower( self::meta( $xp, 'name', 'robots' ) ),
+			'canonical'    => self::attr( $xp->query( '//link[translate(@rel,"CANONIL","canonil")="canonical"]' ), 'href' ),
+			'og_image'     => self::meta( $xp, 'property', 'og:image' ),
+			'lang'         => self::attr( $xp->query( '//html' ), 'lang' ),
+			'schema'       => self::schema_types( $xp ),
+			'schema_nodes' => self::schema_nodes( $xp ),
 		];
 		$facts['noindex'] = false !== strpos( $facts['robots'], 'noindex' );
 
@@ -249,6 +252,37 @@ class Html_Parser {
 		}
 
 		return array_values( array_unique( $types ) );
+	}
+
+	/**
+	 * The page's top-level JSON-LD nodes (each script's object or list, and @graph items): type, name and @id,
+	 * capped. What "What Google reads on this page" shows in plain words.
+	 *
+	 * @param \DOMXPath $xp XPath.
+	 * @return array<int,array{type:string,name:string,id:string}>
+	 */
+	protected static function schema_nodes( \DOMXPath $xp ): array {
+		$out = [];
+		foreach ( $xp->query( '//script[@type="application/ld+json"]' ) as $script ) {
+			$data = json_decode( trim( $script->textContent ), true );
+			if ( ! is_array( $data ) ) {
+				continue;
+			}
+			$nodes = isset( $data['@graph'] ) && is_array( $data['@graph'] ) ? $data['@graph'] : ( isset( $data[0] ) ? $data : [ $data ] ); // A list of nodes, or one node (PHP 8.0: no array_is_list).
+			foreach ( $nodes as $node ) {
+				if ( ! is_array( $node ) || ! isset( $node['@type'] ) || count( $out ) >= 30 ) {
+					continue;
+				}
+				$type  = (array) $node['@type'];
+				$out[] = [
+					'type' => mb_substr( (string) ( is_string( $type[0] ?? null ) ? $type[0] : '' ), 0, 60 ),
+					'name' => is_string( $node['name'] ?? null ) ? mb_substr( wp_strip_all_tags( $node['name'] ), 0, 80 ) : '',
+					'id'   => is_string( $node['@id'] ?? null ) ? mb_substr( $node['@id'], 0, 200 ) : '',
+				];
+			}
+		}
+
+		return $out;
 	}
 
 	/**

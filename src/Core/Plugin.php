@@ -110,6 +110,15 @@ class Plugin {
 				\AJR\SEOAssistant\Scan\Scheduler::run_post( (int) $post_id );
 			}
 		);
+		// Contract 3 (AJR Core 0.22 Business details): the latest pushed Google listing check, or null.
+		add_filter(
+			'ajr_core_business_profile_check',
+			static function ( $value ) {
+				$block = Report\Snapshot_Store::listing_block();
+
+				return null !== $block ? $block : $value;
+			}
+		);
 		add_action(
 			Report\Snapshot_Store::RECEIVED_ACTION,
 			static function (): void {
@@ -152,6 +161,17 @@ class Plugin {
 		// One-time data changes and the agency's notices.
 		( new Upgrade() )->register();
 		( new Secret_Notices() )->register();
+
+		// Once AJR Core 0.22+ keeps page types: move the old AISA page roles into them (one query, then a flag).
+		add_action(
+			'admin_init',
+			static function (): void {
+				if ( \AJR\SEOAssistant\Scan\Page_Role::core() && ! get_option( 'ai_seo_assistant_roles_migrated' ) ) {
+					\AJR\SEOAssistant\Scan\Page_Role::migrate();
+					update_option( 'ai_seo_assistant_roles_migrated', time(), false );
+				}
+			}
+		);
 	}
 
 	/**

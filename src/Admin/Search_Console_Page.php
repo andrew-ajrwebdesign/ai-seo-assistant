@@ -47,7 +47,7 @@ class Search_Console_Page {
 		}
 		$latest = ( new Snapshot_Store() )->latest();
 		echo '<div class="wrap aisa-wrap"><hr class="wp-header-end"><div class="aisa-tool">';
-		echo Ui::hero( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+		$hero = Ui::hero(
 			[
 				/* translators: %s: agency name. */
 				'label' => sprintf( __( 'Search Console by %s', 'ai-seo-assistant' ), Ui::agency() ),
@@ -56,10 +56,11 @@ class Search_Console_Page {
 				'sub'   => sprintf( __( 'How %s shows up on Google: the whole site, each page and the searches behind it. From the weekly push.', 'ai-seo-assistant' ), wp_specialchars_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES ) ),
 			]
 		);
+		echo $hero; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		$this->site( $latest );
 		$this->pages();
 		$this->freshness();
-		echo '</div></div>';
+		echo Ui::layout_close() . '</div></div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui (the card is AJR Core's own).
 	}
 
 	/**

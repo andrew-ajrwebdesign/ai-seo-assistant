@@ -78,6 +78,7 @@ class Spend {
 		'metadata'        => 0.04,
 		'recommendations' => 0.08,
 		'review'          => 0.12,
+		'intent'          => 0.02,
 		'test'            => 0.01,
 	];
 

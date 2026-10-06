@@ -56,7 +56,7 @@ class Changes_Page {
 		$export = '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="aisa-inline">' . wp_nonce_field( self::EXPORT, '_wpnonce', true, false )
 			. '<input type="hidden" name="action" value="' . esc_attr( self::EXPORT ) . '"><button type="submit" class="aisa-btn aisa-btn--dark">' . Ui::icon( 'media-spreadsheet' ) . esc_html__( 'Export as CSV', 'ai-seo-assistant' ) . '</button></form>';
 		echo '<div class="wrap aisa-wrap"><hr class="wp-header-end"><div class="aisa-tool">';
-		echo Ui::hero( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+		$hero = Ui::hero(
 			[
 				/* translators: %s: agency name. */
 				'label'   => sprintf( __( 'Changes by %s', 'ai-seo-assistant' ), Ui::agency() ),
@@ -65,6 +65,7 @@ class Changes_Page {
 				'actions' => $export,
 			]
 		);
+		echo $hero; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- display-only result code from our own redirect.
 		$code = isset( $_GET['aisa'] ) ? sanitize_key( wp_unslash( $_GET['aisa'] ) ) : '';
 		if ( 'kept' === $code ) {
@@ -74,7 +75,7 @@ class Changes_Page {
 		}
 		$this->summary( $rows, $effects );
 		$this->log( $rows, $effects );
-		echo '</div></div>';
+		echo Ui::layout_close() . '</div></div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui (the card is AJR Core's own).
 	}
 
 	/**

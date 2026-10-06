@@ -72,9 +72,9 @@ class Ui {
 					'generateN'    => __( 'Generate for selected (%1$d), about %2$s', 'ai-seo-assistant' ),
 					/* translators: %d: page count. */
 					'selected'     => __( '%d pages selected', 'ai-seo-assistant' ),
-					'selectHint'   => __( 'Select pages to generate suggestions or set their role', 'ai-seo-assistant' ),
-					'savingRole'   => __( 'Saving the role…', 'ai-seo-assistant' ),
-					'roleFailed'   => __( 'The role was not changed.', 'ai-seo-assistant' ),
+					'selectHint'   => __( 'Select pages to generate suggestions', 'ai-seo-assistant' ),
+					'savingRole'   => __( 'Saving the page type…', 'ai-seo-assistant' ),
+					'roleFailed'   => __( 'The page type was not changed.', 'ai-seo-assistant' ),
 					/* translators: 1: width in px, 2: limit in px. */
 					'fitPx'        => __( '%1$d px of about %2$d px', 'ai-seo-assistant' ),
 					/* translators: 1: characters, 2: limit. */
@@ -82,6 +82,62 @@ class Ui {
 				],
 			]
 		);
+	}
+
+	/** AJR Core's support card (contract 1, AJR Core 0.22+). */
+	public const SUPPORT = 'AJR\Core\Admin\Support';
+
+	/**
+	 * Whether a layout column is open (hero() opened it; layout_close() closes it once).
+	 *
+	 * @var bool
+	 */
+	protected static bool $open = false;
+
+	/**
+	 * The card waiting for layout_close().
+	 *
+	 * @var string
+	 */
+	protected static string $card = '';
+
+	/**
+	 * AJR Core's "Need a hand?" card, as HTML ('' before AJR Core 0.22, or for a user who cannot see it).
+	 * render_card() prints the card and enqueues its own stylesheet.
+	 */
+	public static function support_card(): string {
+		if ( ! class_exists( self::SUPPORT ) || ! method_exists( self::SUPPORT, 'render_card' ) ) {
+			return '';
+		}
+		$support = self::SUPPORT;
+		ob_start();
+		$support::render_card();
+
+		return trim( (string) ob_get_clean() );
+	}
+
+	/**
+	 * Open the full-width layout under the header: content, with the support card in a right-hand column
+	 * (below the content on narrow screens), the same place as AJR Core's own screens.
+	 */
+	public static function layout_open(): string {
+		self::$open = true;
+		$card       = self::support_card();
+		self::$card = $card;
+
+		return '<div class="aisa-layout' . ( '' !== $card ? ' aisa-layout--card' : '' ) . '"><div class="aisa-layout__main">';
+	}
+
+	/**
+	 * Close the layout ('' when none is open). The card is AJR Core's own markup, escaped there.
+	 */
+	public static function layout_close(): string {
+		if ( ! self::$open ) {
+			return '';
+		}
+		self::$open = false;
+
+		return '</div>' . ( '' !== self::$card ? '<aside class="aisa-layout__side" aria-label="' . esc_attr__( 'Help', 'ai-seo-assistant' ) . '">' . self::$card . '</aside>' : '' ) . '</div>';
 	}
 
 	/**
@@ -102,7 +158,8 @@ class Ui {
 			. '<h1 class="aisa-hero__title">' . esc_html( (string) $a['title'] ) . '</h1>'
 			. ( ! empty( $a['sub'] ) ? '<p class="aisa-hero__sub">' . esc_html( (string) $a['sub'] ) . '</p>' : '' )
 			. ( ! empty( $a['actions'] ) ? '<div class="aisa-hero__actions">' . $a['actions'] . '</div>' : '' ) // Escaped by the caller.
-			. '</header>';
+			. '</header>'
+			. self::layout_open(); // Closed by layout_close() at the end of the screen.
 	}
 
 	/**

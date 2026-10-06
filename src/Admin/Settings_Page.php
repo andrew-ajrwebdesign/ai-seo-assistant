@@ -71,7 +71,7 @@ class Settings_Page {
 		}
 		echo '<div class="wrap aisa-wrap"><hr class="wp-header-end"><div class="aisa-tool">';
 		$last = (int) get_option( Snapshot_Store::LAST_PUSH, 0 );
-		echo Ui::hero( // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+		$hero = Ui::hero(
 			[
 				/* translators: %s: agency name. */
 				'label' => sprintf( __( 'Settings by %s', 'ai-seo-assistant' ), Ui::agency() ),
@@ -80,6 +80,7 @@ class Settings_Page {
 				'fresh' => false,
 			]
 		);
+		echo $hero; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		$this->notices();
 
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" id="aisa-settings" class="aisa-settings">';
@@ -102,7 +103,7 @@ class Settings_Page {
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" id="aisa-overrideform">';
 		wp_nonce_field( self::OVERRIDE );
 		echo '<input type="hidden" name="action" value="' . esc_attr( self::OVERRIDE ) . '"></form>';
-		echo '</div></div>';
+		echo Ui::layout_close() . '</div></div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui (the card is AJR Core's own).
 	}
 
 	/**
@@ -137,10 +138,10 @@ class Settings_Page {
 	 * @param string $label Label (HTML, escaped by the caller).
 	 * @param string $help  Help under the label.
 	 * @param string $field Field HTML (escaped by the caller).
-	 * @param string $for   ID the label is for ('' for a group).
+	 * @param string $target ID the label is for ('' for a group).
 	 */
-	protected function row( string $label, string $help, string $field, string $for = '' ): string {
-		$head = '' !== $for ? '<label for="' . esc_attr( $for ) . '">' . $label . '</label>' : '<span class="aisa-setrow__label">' . $label . '</span>';
+	protected function row( string $label, string $help, string $field, string $target = '' ): string {
+		$head = '' !== $target ? '<label for="' . esc_attr( $target ) . '">' . $label . '</label>' : '<span class="aisa-setrow__label">' . $label . '</span>';
 
 		return '<div class="aisa-setrow"><div class="aisa-setrow__head">' . $head . ( '' !== $help ? '<p class="aisa-small">' . esc_html( $help ) . '</p>' : '' ) . '</div><div class="aisa-setrow__field">' . $field . '</div></div>';
 	}
@@ -332,6 +333,8 @@ class Settings_Page {
 		echo '</section>';
 	}
 
+	// phpcs:disable WordPress.Security.NonceVerification.Missing -- each handler below calls guard() first: capability, then check_admin_referer().
+
 	/**
 	 * Save the settings form.
 	 */
@@ -423,6 +426,8 @@ class Settings_Page {
 		Access::flush();
 		$this->back( 'override' );
 	}
+
+	// phpcs:enable WordPress.Security.NonceVerification.Missing
 
 	/**
 	 * Capability + nonce.

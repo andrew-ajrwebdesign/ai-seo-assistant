@@ -100,7 +100,8 @@ class Prompt_Builder {
 
 	/**
 	 * JSON schema for the 5.0 page review: title, description, focus keyphrase and image alt text to apply,
-	 * plus "do in the editor" advice for what the plugin never edits (headings, links, content, schema).
+	 * plus "do in the editor" advice for what the plugin never edits (headings, links, content). Never schema: AJR
+	 * Core prints it from the page type and the business details, and the scan's rules report it.
 	 *
 	 * @return array
 	 */
@@ -141,7 +142,7 @@ class Prompt_Builder {
 						'properties'           => [
 							'area'   => [
 								'type' => 'string',
-								'enum' => [ 'headings', 'links', 'content', 'schema' ],
+								'enum' => [ 'headings', 'links', 'content' ],
 							],
 							'advice' => [ 'type' => 'string' ],
 						],
@@ -169,7 +170,8 @@ class Prompt_Builder {
 	public function build_review_prompt( $args ) {
 		$p   = [];
 		$p[] = 'Review one page of a small business website and write what its search listing and images need.';
-		$p[] = 'Return: an SEO title, a meta description, a focus keyphrase, alt text for each attached image, and "editor" advice for headings, links, content and schema, which a person will change by hand.';
+		$p[] = 'Return: an SEO title, a meta description, a focus keyphrase, alt text for each attached image, and "editor" advice for headings, links and content, which a person will change by hand.';
+		$p[] = 'Never give advice about schema, structured data or JSON-LD: the site prints it from the page type and the business details, and the scan checks it.';
 		$p[] = '';
 		$p[] = 'Rules for the title:';
 		$p[] = '- At most about 55 characters, so it fits Google\'s desktop width (about 580 px in Arial 20px). Never longer than 60 characters.';
@@ -202,6 +204,12 @@ class Prompt_Builder {
 				$p[] = '- ' . $line;
 			}
 			$p[] = '';
+		}
+		if ( ! empty( $args['page_type'] ) ) {
+			$p[] = 'Page type (set by the agency): ' . $args['page_type'] . '. Write for what this kind of page is for.';
+		}
+		if ( ! empty( $args['business_node'] ) ) {
+			$p[] = 'What the site tells Google about the business: ' . $args['business_node'];
 		}
 		$p[] = 'Page: ' . ( $args['post_title'] ?? '' ) . ' (' . ( $args['permalink'] ?? '' ) . ')';
 		$p[] = 'Now: title "' . ( $args['current']['title'] ?? '' ) . '"; description "' . ( $args['current']['description'] ?? '' ) . '"; focus keyphrase "' . ( $args['current']['keyphrase'] ?? '' ) . '".';

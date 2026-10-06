@@ -149,13 +149,13 @@
 		refresh();
 	}
 
-	/* ---- Page roles: the list's tag, the bulk bar, the review header ----------------------------- */
+	/* ---- Page types (AJR Core): the list's tag and the bulk bar ---------------------------------- */
 
-	async function setRole( ids, role, status ) {
+	async function setType( ids, type, status ) {
 		if ( status ) {
 			status.textContent = t.savingRole;
 		}
-		const res = await post( 'aisa_set_role', { posts: ids.join( ',' ), role } );
+		const res = await post( 'aisa_set_page_type', { posts: ids.join( ',' ), type } );
 		if ( res.success ) {
 			window.location.reload();
 			return;
@@ -168,7 +168,7 @@
 	document.querySelectorAll( '[data-aisa-role]' ).forEach( ( select ) => {
 		select.addEventListener( 'change', () => {
 			select.disabled = true;
-			setRole( [ select.dataset.aisaRole ], select.value, select.closest( 'tr' ).querySelector( '[data-aisa-row-status]' ) );
+			setType( [ select.dataset.aisaRole ], select.value, select.closest( 'tr' ).querySelector( '[data-aisa-row-status]' ) );
 		} );
 	} );
 
@@ -183,18 +183,10 @@
 		[ bulkRole, all, ...picks ].forEach( ( el ) => el && el.addEventListener( 'change', update ) );
 		bulkRoleButton.addEventListener( 'click', () => {
 			bulkRoleButton.disabled = true;
-			setRole( picks.filter( ( box ) => box.checked ).map( ( box ) => box.value ), bulkRole.value, document.querySelector( '[data-aisa-bulk-status]' ) );
+			setType( picks.filter( ( box ) => box.checked ).map( ( box ) => box.value ), bulkRole.value, document.querySelector( '[data-aisa-bulk-status]' ) );
 		} );
 		update();
 	}
-
-	document.querySelectorAll( '[data-aisa-role-submit]' ).forEach( ( select ) => {
-		const button = select.form.querySelector( '[data-aisa-role-button]' );
-		if ( button ) {
-			button.hidden = true;
-		}
-		select.addEventListener( 'change', () => select.form.submit() );
-	} );
 
 	/* ---- One page: "Writing…" while Claude works (C2) ------------------------------------------- */
 

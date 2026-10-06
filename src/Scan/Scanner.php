@@ -238,7 +238,7 @@ class Scanner {
 			}
 			foreach ( array_unique( array_column( (array) ( $f['links'] ?? [] ), 'p' ) ) as $path ) {
 				$path = self::norm_path( (string) $path );
-				if ( $path !== self::norm_path( $row['path'] ) ) {
+				if ( self::norm_path( $row['path'] ) !== $path ) {
 					$in[ $path ][]  = $row['path'];
 					$links[ $path ] = true;
 				}
@@ -259,6 +259,8 @@ class Scanner {
 		$front      = (int) get_option( 'page_on_front' );
 		$discourage = '0' === (string) get_option( 'blog_public', '1' );
 		$popular    = self::popular_paths( $data );
+		$has_types  = Page_Role::core();
+		$type_names = $has_types ? array_map( static fn( $t ) => $t['label'], Page_Role::types() ) : [];
 
 		$total    = 0;
 		$rendered = 0;
@@ -282,6 +284,10 @@ class Scanner {
 				'is_utility'       => (bool) preg_match( '#/(contact|privacy|terms|cookie|thank|accessibility|sitemap|login|account|cart|checkout)#i', $path ),
 				'is_service'       => 'page' === $row['post_type'] && self::matches_service( $f, $path, $services ),
 				'custom_schema_on' => $schema_on,
+				'page_types'       => $has_types,
+				'page_type'        => $has_types ? Page_Role::type_of( (int) $id ) : '',
+				'suggested_type'   => $has_types ? Page_Role::suggest( (int) $id ) : '',
+				'type_labels'      => $type_names,
 				'discouraged'      => $discourage,
 				'heavy'            => [],
 			];

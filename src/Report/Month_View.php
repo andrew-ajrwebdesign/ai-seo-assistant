@@ -34,8 +34,8 @@ class Month_View extends Report_View {
 	 */
 	public static function month( array $snap, array $context, array $done ): string {
 		$since  = __( 'on last month', 'ai-seo-assistant' );
-		$html   = self::month_header( $snap, $context );
-		$html  .= '<div class="aisa-row">' . self::month_enquiries( $snap, $since ) . self::month_note( $snap['note'] ?? null, $context ) . '</div>';
+		$head   = self::month_header( $snap, $context );
+		$html   = '<div class="aisa-row">' . self::month_enquiries( $snap, $since ) . self::month_note( $snap['note'] ?? null, $context ) . '</div>';
 		$html  .= self::achieved( $done );
 		$html  .= self::month_search( $snap, $since );
 		$visits = self::month_visits( $snap['ga4'] ?? null, $snap, $since );
@@ -48,7 +48,7 @@ class Month_View extends Report_View {
 			. esc_html( sprintf( __( 'Figures cover %1$s, your billing month. Sent by %2$s; this site stores no Google passwords or keys.', 'ai-seo-assistant' ), self::range_long( $snap['month'] ), (string) $context['agency'] ) )
 			. '</p></footer>';
 
-		return '<article class="aisa-report aisa-report--month" aria-labelledby="aisa-headline">' . $html . '</article>';
+		return '<article class="aisa-report aisa-report--month" aria-labelledby="aisa-headline">' . self::with_aside( $head, $html, $context ) . '</article>';
 	}
 
 	/**

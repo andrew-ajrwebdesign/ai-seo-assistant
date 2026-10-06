@@ -79,6 +79,13 @@ class Claude_Client {
 			'max_tokens' => 16000,
 			'timeout'    => 90,
 		],
+		// 5.0: one cheap pass per push sorting the site's searches by intent (Scan/Intent). Always Haiku.
+		'intent'          => [
+			'effort'     => 'low',
+			'max_tokens' => 8000,
+			'timeout'    => 60,
+			'model'      => 'claude-haiku-4-5',
+		],
 		'test'            => [
 			'effort'     => 'low',
 			'max_tokens' => 1024,
@@ -314,9 +321,9 @@ class Claude_Client {
 			return $capped;
 		}
 
-		$model  = $this->get_model();
-		$models = self::available_models();
 		$shape  = self::TASKS[ $task ] ?? self::TASKS['metadata'];
+		$model  = isset( $shape['model'] ) ? (string) $shape['model'] : $this->get_model();
+		$models = self::available_models();
 
 		$body = [
 			'model'      => $model,

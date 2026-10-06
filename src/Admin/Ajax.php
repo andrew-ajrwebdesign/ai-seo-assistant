@@ -1,20 +1,38 @@
 <?php
 /**
- * AJAX handlers.
+ * AJAX handlers for the editor box (agency only): metadata, recommendations, focus suggestion.
+ *
+ * @package AJR\SEOAssistant
  */
 
 namespace AJR\SEOAssistant\Admin;
 
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * The editor box's AJAX actions. Each checks the editor box nonce first (check_ajax_referer).
+ */
 class Ajax {
 
+	/**
+	 * Writes metadata and recommendations.
+	 *
+	 * @var \AJR\SEOAssistant\AI\Metadata_Generator
+	 */
 	private $metadata_generator;
 
+	/**
+	 * Build.
+	 *
+	 * @param \AJR\SEOAssistant\AI\Metadata_Generator $metadata_generator Generator.
+	 */
 	public function __construct( $metadata_generator ) {
 		$this->metadata_generator = $metadata_generator;
 	}
 
+	/**
+	 * Register the AJAX actions.
+	 */
 	public function init() {
 		add_action( 'wp_ajax_ai_seo_assistant_generate', [ $this, 'generate_metadata' ] );
 		add_action( 'wp_ajax_ai_seo_assistant_generate_recommendations', [ $this, 'generate_recommendations' ] );
@@ -35,6 +53,9 @@ class Ajax {
 		}
 	}
 
+	/**
+	 * AJAX: write a title and description for one post.
+	 */
 	public function generate_metadata() {
 		check_ajax_referer( Admin::NONCE_ACTION, 'nonce' );
 		$this->allow_long_request();
@@ -62,6 +83,9 @@ class Ajax {
 		wp_send_json_success( $result );
 	}
 
+	/**
+	 * AJAX: page recommendations for one post.
+	 */
 	public function generate_recommendations() {
 		check_ajax_referer( Admin::NONCE_ACTION, 'nonce' );
 		$this->allow_long_request();
@@ -89,8 +113,13 @@ class Ajax {
 		wp_send_json_success( $result );
 	}
 
+	/**
+	 * The posted post ID; every caller has checked the nonce first.
+	 *
+	 * @return int|\WP_Error
+	 */
 	private function get_valid_post_id() {
-		$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0;
+		$post_id = isset( $_POST['post_id'] ) ? absint( $_POST['post_id'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- each caller ran check_ajax_referer() first.
 
 		if ( ! $post_id ) {
 			return new \WP_Error(
@@ -127,6 +156,9 @@ class Ajax {
 		return $post_id;
 	}
 
+	/**
+	 * AJAX: suggest the focus keyphrase for one post.
+	 */
 	public function suggest_focus() {
 		check_ajax_referer( Admin::NONCE_ACTION, 'nonce' );
 

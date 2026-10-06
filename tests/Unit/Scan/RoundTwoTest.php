@@ -1,0 +1,343 @@
+<?php
+/**
+ * Tests for the 2026-10-06 round two: opportunity v3 (quick win, top-3 prize, intent, enquiry estimate,
+ * tiers), page types from AJR Core in place of the AISA role (with the migration), the Google listing group
+ * with pins, "What Google reads", the business_profile_check hand-over to AJR Core, and the support card.
+ *
+ * AJR Core's classes are stood in with eval() in separate processes: the contract is their names.
+ *
+ * @package AJR\SEOAssistant
+ */
+
+declare( strict_types=1 );
+
+namespace AJR\SEOAssistant\Tests\Unit\Scan;
+
+use AJR\SEOAssistant\Admin\Ui;
+use AJR\SEOAssistant\Report\Snapshot_Store;
+use AJR\SEOAssistant\Scan\Google_Reads;
+use AJR\SEOAssistant\Scan\Intent;
+use AJR\SEOAssistant\Scan\Listing;
+use AJR\SEOAssistant\Scan\Opportunity;
+use AJR\SEOAssistant\Scan\Page_Role;
+use AJR\SEOAssistant\Tests\Unit\Wp_Basics;
+use WP_Mock\Tools\TestCase;
+
+/**
+ * Round two.
+ */
+class RoundTwoTest extends TestCase {
+	use Wp_Basics;
+
+	/**
+	 * Options.
+	 *
+	 * @var array<string,mixed>
+	 */
+	protected array $options = [];
+
+	/**
+	 * WP basics and an option store.
+	 */
+	public function setUp(): void {
+		parent::setUp();
+		$this->wp_basics();
+		$this->options = [];
+		\WP_Mock::userFunction( 'get_option' )->andReturnUsing( fn( $n, $d = false ) => array_key_exists( $n, $this->options ) ? $this->options[ $n ] : $d );
+		\WP_Mock::userFunction( 'update_option' )->andReturnUsing(
+			function ( $n, $v ) {
+				$this->options[ $n ] = $v;
+				return true;
+			}
+		);
+		Opportunity::use_curve( null );
+	}
+
+	/**
+	 * Intent rules: the longest phrase wins, a tie goes to the higher intent, the brand is navigational.
+	 */
+	public function test_intent_rules(): void {
+		$rules = Intent::GENERIC;
+		$brand = [ 'Welcome to Boise and Beyond', 'Jennifer Louis' ];
+		$this->assertSame( 'lead', Intent::by_rules( 'boise realtor near me', $rules, $brand ) );
+		$this->assertSame( 'commercial', Intent::by_rules( 'best neighborhoods boise', $rules, $brand ) );
+		$this->assertSame( 'informational', Intent::by_rules( 'boise idaho weather', $rules, $brand ) );
+		$this->assertSame( 'informational', Intent::by_rules( 'cost of living boise', $rules, $brand ), '"cost of living" beats "cost"' );
+		$this->assertSame( 'navigational', Intent::by_rules( 'jennifer louis boise', $rules, $brand ) );
+		$this->assertSame( '', Intent::by_rules( 'boise idaho', $rules, $brand ), 'no rule: left for Claude' );
+		$this->assertSame( '', Intent::by_rules( 'bestow gifts', $rules, $brand ), 'whole words only' );
+		$this->assertSame( 3.0, Intent::weight( 'lead' ) );
+		$this->assertSame( 0.5, Intent::weight( 'navigational' ) );
+		$this->assertSame( 1.0, Intent::weight( 'unknown' ), 'unsorted counts as learning, never upwards' );
+	}
+
+	/**
+	 * The Claude pass gets only what the rules and the cache leave, most impressions first, once each.
+	 */
+	public function test_intent_pending(): void {
+		$queries = [
+			[ 'query' => 'boise idaho', 'impressions' => 40 ],
+			[ 'query' => 'boise weather', 'impressions' => 900 ],
+			[ 'query' => 'Eagle Idaho', 'impressions' => 300 ],
+			[ 'query' => 'eagle idaho', 'impressions' => 10 ],
+			[ 'query' => 'meridian', 'impressions' => 5 ],
+		];
+		$todo    = Intent::pending( $queries, Intent::GENERIC, [], [ 'meridian' => 'informational' ] );
+		$this->assertSame( [ 'eagle idaho', 'boise idaho' ], $todo );
+		$schema = Intent::schema();
+		$this->assertSame( array_keys( Intent::WEIGHTS ), $schema['properties']['items']['items']['properties']['intent']['enum'] );
+	}
+
+	/**
+	 * Quick win and top-3 prize, per search, a year; intent-weighted totals and the mix.
+	 */
+	public function test_quick_win_and_prize(): void {
+		$gsc   = [
+			'impressions' => 3000,
+			'clicks'      => 10,
+			'position'    => 8.0,
+			'queries'     => [
+				[ 'query' => 'boise realtor', 'impressions' => 1000, 'clicks' => 10, 'position' => 4.0 ],
+				[ 'query' => 'boise weather', 'impressions' => 2000, 'clicks' => 0, 'position' => 2.0 ],
+			],
+		];
+		$split = Opportunity::breakdown( $gsc, static fn( $q ) => false !== strpos( $q, 'realtor' ) ? 'lead' : 'informational' );
+		$by    = array_column( $split['rows'], null, 'query' );
+		$this->assertEqualsWithDelta( 1000 * ( 6.3 - 1.0 ) / 100, $by['boise realtor']['missed'], 0.001 );
+		$this->assertEqualsWithDelta( 1000 * ( 7.2 - 1.0 ) / 100, $by['boise realtor']['prize'], 0.001, 'at position 3: 7.2%' );
+		$this->assertSame( 0.0, $by['boise weather']['prize'], 'already above position 3: no prize' );
+		$this->assertEqualsWithDelta( 53.0 * 3 + 300.0 * 1, $split['weighted'], 0.01 );
+		$this->assertSame( [ 'informational' => 0.667, 'lead' => 0.333 ], $split['mix'] );
+		$this->assertSame( 'boise weather', $split['rows'][0]['query'], 'largest weighted quick win first' );
+		$this->assertEqualsWithDelta( 365.0, Opportunity::yearly( 90.0 ), 0.0001 );
+
+		// Searches Google does not name take the named ones' weight, and stay out of the mix.
+		$gsc['impressions'] = 4000;
+		$split              = Opportunity::breakdown( $gsc, static fn( $q ) => false !== strpos( $q, 'realtor' ) ? 'lead' : 'informational' );
+		$rest               = array_values( array_filter( $split['rows'], static fn( $r ) => $r['remain'] ) )[0];
+		$this->assertEqualsWithDelta( ( 3 * 1000 + 1 * 2000 ) / 3000, $rest['weight'], 0.0001 );
+		$this->assertSame( 'unnamed', $rest['intent'] );
+		$this->assertSame( [ 'informational' => 0.667, 'lead' => 0.333 ], $split['mix'] );
+	}
+
+	/**
+	 * Enquiry estimate: page rate from 30 visits, else the site's; omitted under 10 site enquiries.
+	 */
+	public function test_enquiry_estimate(): void {
+		$this->assertNull( Opportunity::enquiries( 400.0, 2, 100, 9, 1000 ), 'under 10 tracked enquiries: omitted, never 0' );
+		$this->assertEqualsWithDelta( 8.0, Opportunity::enquiries( 400.0, 2, 100, 12, 1000 ), 0.0001, 'page rate 2%' );
+		$this->assertEqualsWithDelta( 4.8, Opportunity::enquiries( 400.0, 1, 20, 12, 1000 ), 0.0001, 'thin page: site rate 1.2%' );
+	}
+
+	/**
+	 * Tiers by absolute thresholds, filterable.
+	 */
+	public function test_tiers(): void {
+		$this->assertSame( 'high', Opportunity::tier( 300.0 ) );
+		$this->assertSame( 'medium', Opportunity::tier( 60.0 ) );
+		$this->assertSame( 'low', Opportunity::tier( 59.0 ) );
+		$this->assertSame( 'none', Opportunity::tier( 0.4 ) );
+		\WP_Mock::onFilter( 'ai_seo_assistant_opportunity_tiers' )->with( Opportunity::TIERS )->reply(
+			[
+				'high'   => 1000,
+				'medium' => 100,
+			]
+		);
+		$this->assertSame( 'medium', Opportunity::tier( 300.0 ) );
+		$value = Opportunity::value_of( 90.0, 1.5, 0 );
+		$this->assertEqualsWithDelta( 365.0 * 1.5, $value, 0.001, 'a year × the page type’s value' );
+	}
+
+	/**
+	 * Page type → role, and the default for a page without one (a post listing is information).
+	 */
+	public function test_page_type_roles(): void {
+		$this->assertSame( 'money', Page_Role::role_of_type( 'service' ) );
+		$this->assertSame( 'money', Page_Role::role_of_type( 'contact' ) );
+		$this->assertSame( 'location', Page_Role::role_of_type( 'area' ) );
+		$this->assertSame( 'info', Page_Role::role_of_type( 'faq' ) );
+		$this->assertSame( 'info', Page_Role::role_of_type( 'team_member' ) );
+		$this->assertSame( 'unclassified', Page_Role::role_of_type( 'other' ) );
+		$this->assertSame( '', Page_Role::role_of_type( '' ) );
+		$this->assertSame( 'info', Page_Role::default_role( 'page', true, true ), 'Blog and Beyond: a post listing in the menu is information' );
+		$this->assertTrue( Page_Role::is_listing( '[et_pb_section][et_pb_blog posts_number="9"][/et_pb_section]' ) );
+		$this->assertTrue( Page_Role::is_listing( '<!-- wp:query {"queryId":1} -->' ) );
+		$this->assertFalse( Page_Role::is_listing( '[et_pb_text]Blog tips[/et_pb_text]' ) );
+		$this->assertFalse( Page_Role::core(), 'no AJR Core 0.22 here: the controls stay hidden' );
+		$this->assertSame( '', Page_Role::type_of( 5 ) );
+		$this->assertFalse( Page_Role::set_type( 5, 'service' ) );
+	}
+
+	/**
+	 * With AJR Core's Page_Types: the old roles move into page types (money noted, left unset) and go.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_migrate_roles_into_page_types(): void {
+		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- test double for AJR Core 0.22's contract.
+		eval( 'namespace AJR\Core\Schema; class Page_Types { public static $t = [ 30 => "faq" ]; public static function types(): array { return [ "service" => [ "Service page", "the service", "" ], "area" => [ "Area page", "the area", "" ], "article" => [ "Article", "headline", "" ], "faq" => [ "FAQ", "q and a", "" ] ]; } public static function get( int $id ): string { return self::$t[ $id ] ?? ""; } public static function set( int $id, string $type ): bool { self::$t[ $id ] = $type; return true; } public static function suggest( int $id ): string { return "service"; } }' );
+		global $wpdb;
+		$wpdb = new class() { // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test double.
+			/**
+			 * Postmeta table.
+			 *
+			 * @var string
+			 */
+			public $postmeta = 'wp_postmeta';
+
+			/**
+			 * Prepare passthrough.
+			 *
+			 * @param string $q Query.
+			 */
+			public function prepare( $q ) {
+				return $q;
+			}
+
+			/**
+			 * The old role rows.
+			 */
+			public function get_results() {
+				return [
+					[ 'post_id' => 10, 'meta_value' => 'location' ],
+					[ 'post_id' => 20, 'meta_value' => 'money' ],
+					[ 'post_id' => 30, 'meta_value' => 'info' ],
+					[ 'post_id' => 40, 'meta_value' => 'unclassified' ],
+				];
+			}
+		};
+		$deleted = [];
+		\WP_Mock::userFunction( 'delete_post_meta' )->andReturnUsing(
+			function ( $id ) use ( &$deleted ) {
+				$deleted[] = $id;
+				return true;
+			}
+		);
+		$this->assertTrue( Page_Role::core() );
+		$out = Page_Role::migrate();
+		$this->assertSame(
+			[
+				'moved'   => 1,
+				'noted'   => 1,
+				'dropped' => 2,
+			],
+			$out
+		);
+		$this->assertSame( 'area', \AJR\Core\Schema\Page_Types::get( 10 ) );
+		$this->assertSame( 'faq', \AJR\Core\Schema\Page_Types::get( 30 ), 'a page type already set is kept' );
+		$this->assertSame( '', \AJR\Core\Schema\Page_Types::get( 20 ), 'money: service or contact is the agency’s call' );
+		$this->assertSame( [ 20 ], $this->options[ Page_Role::NOTES_OPTION ] );
+		$this->assertSame( [ 10, 20, 30, 40 ], $deleted, 'every old role meta is deleted' );
+		$this->assertSame( 'Service page', Page_Role::types()['service']['label'] );
+		$this->assertSame( 'service', Page_Role::suggest( 1 ) );
+	}
+
+	/**
+	 * Google listing group: differences counted, pinned ones kept on purpose and not counted; not checked
+	 * never reads as a match.
+	 */
+	public function test_listing_group_and_pins(): void {
+		$listing = [
+			'checked'    => true,
+			'checked_at' => 1791200000,
+			'fields'     => [
+				[ 'field' => 'name', 'status' => 'match', 'severity' => 'info', 'site' => 'A', 'google' => 'A', 'message' => '', 'detail' => '', 'fix' => null ],
+				[ 'field' => 'hours', 'status' => 'mismatch', 'severity' => 'medium', 'site' => '24h', 'google' => '8-6', 'message' => 'Hours differ', 'detail' => '', 'fix' => null ],
+				[ 'field' => 'phone', 'status' => 'mismatch', 'severity' => 'high', 'site' => '1', 'google' => '2', 'message' => 'Phone differs', 'detail' => '', 'fix' => null ],
+				[ 'field' => 'rating', 'status' => 'missing_on_site', 'severity' => 'info', 'site' => '', 'google' => '4.8', 'message' => '', 'detail' => '', 'fix' => null ],
+			],
+		];
+		$group   = Listing::group( $listing, [ 'phone' => [ 'reason' => 'Old landline; change requested' ] ] );
+		$this->assertSame( 'checked', $group['state'] );
+		$this->assertSame( [ 'hours' ], array_column( $group['issues'], 'field' ) );
+		$this->assertSame( [ 'phone' ], array_column( $group['kept'], 'field' ) );
+		$this->assertSame( 'Old landline; change requested', $group['kept'][0]['pin']['reason'] );
+		$this->assertSame( 'not_checked', Listing::group( [ 'checked' => false, 'fields' => [] ], [] )['state'] );
+		$this->assertSame( 'none', Listing::group( null, [] )['state'] );
+		$this->assertSame( [], Listing::pins(), 'no AJR Core 0.22: no pins' );
+	}
+
+	/**
+	 * Contract 3: the stored check goes back to AJR Core in the snapshot schema's own shape.
+	 */
+	public function test_listing_block_for_core(): void {
+		\WP_Mock::userFunction( 'wp_json_encode' )->andReturnUsing( 'json_encode' );
+		$this->assertNull( Snapshot_Store::listing_block() );
+		$this->options[ Snapshot_Store::LISTING ] = [
+			'checked'    => true,
+			'checked_at' => 1791184300,
+			'reason'     => '',
+			'maps_url'   => 'https://maps.google.com/?cid=1',
+			'page'       => 'https://example.com/',
+			'place_id'   => 'ChIJabc',
+			'google'     => [ 'name' => 'A' ],
+			'fields'     => [
+				[ 'field' => 'hours', 'status' => 'mismatch', 'severity' => 'medium', 'site' => '24h', 'google' => '', 'message' => 'm', 'detail' => 'd', 'fix' => [ 'where' => 'site', 'site' => 'AJR Core', 'google' => '' ] ],
+				[ 'field' => 'name', 'status' => 'match', 'severity' => 'info', 'site' => 'A', 'google' => 'A', 'message' => '', 'detail' => '', 'fix' => null ],
+			],
+			'problems'   => 1,
+		];
+		$block                                    = Snapshot_Store::listing_block();
+		$this->assertSame( 1, $block['version'] );
+		$this->assertSame( '2026-10-05T07:11:40.000Z', $block['checked_at'] );
+		$this->assertSame( 1, $block['summary']['problems'] );
+		$this->assertSame( 'medium', $block['summary']['worst'] );
+		$this->assertSame( 1, $block['summary']['match'] );
+		$this->assertNull( $block['fields'][0]['google'], 'empty values are null, as in the schema' );
+		$this->assertNull( $block['fields'][0]['fix']['google'] );
+		$this->assertSame( 'https://maps.google.com/?cid=1', $block['maps_url'] );
+
+		$this->options[ Snapshot_Store::LISTING ] = [
+			'checked'    => false,
+			'checked_at' => 0,
+			'reason'     => 'Places lookup failed',
+			'fields'     => [],
+		];
+		$block                                    = Snapshot_Store::listing_block();
+		$this->assertFalse( $block['checked'] );
+		$this->assertNull( $block['summary'], 'not checked: summary null' );
+		$this->assertSame( [], $block['fields'] );
+		$this->assertArrayNotHasKey( 'maps_url', $block );
+		$this->assertSame( 'Places lookup failed', $block['reason'] );
+	}
+
+	/**
+	 * "What Google reads": plain words, what the page type adds, the business link, the test link.
+	 */
+	public function test_google_reads(): void {
+		$nodes = [
+			[ 'type' => 'RealEstateAgent', 'name' => 'Welcome to Boise and Beyond', 'id' => 'https://x/#organization' ],
+			[ 'type' => 'BreadcrumbList', 'name' => '', 'id' => '' ],
+			[ 'type' => 'WebPage', 'name' => 'Real Estate', 'id' => '' ],
+			[ 'type' => 'ImageObject', 'name' => '', 'id' => '' ],
+			[ 'type' => 'Service', 'name' => 'Relocation', 'id' => '' ],
+		];
+		$this->assertSame( [ 'Business', 'Breadcrumb', 'Web page', 'Service: Relocation' ], Google_Reads::chips( $nodes ) );
+		$this->assertSame( '', Google_Reads::missing( 'service', $nodes ) );
+		$this->assertSame( 'Questions and answers', Google_Reads::missing( 'faq', $nodes ) );
+		$this->assertSame( '', Google_Reads::missing( 'other', $nodes ) );
+		$this->assertTrue( Google_Reads::has_business( $nodes ) );
+		$this->assertFalse( Google_Reads::has_business( [ $nodes[1] ] ) );
+		$this->assertSame( 'https://search.google.com/test/rich-results?url=https%3A%2F%2Fx.test%2Fa%2F', Google_Reads::rich_results_url( 'https://x.test/a/' ) );
+		$this->assertSame( 'Local Business Thing', Google_Reads::words( 'LocalBusinessThing' ) );
+	}
+
+	/**
+	 * Without AJR Core 0.22 the layout is full width with no card; with it, the card sits in the side column.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_support_card_layout(): void {
+		$this->assertSame( '', Ui::support_card() );
+		$this->assertSame( '<div class="aisa-layout"><div class="aisa-layout__main">', Ui::layout_open() );
+		$this->assertSame( '</div></div>', Ui::layout_close() );
+		$this->assertSame( '', Ui::layout_close(), 'closes once' );
+
+		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- test double for AJR Core 0.22's contract.
+		eval( 'namespace AJR\Core\Admin; class Support { public static function render_card(): void { echo "<section class=\"ajr-support\">Need a hand?</section>"; } }' );
+		$this->assertStringContainsString( 'aisa-layout--card', Ui::layout_open() );
+		$this->assertStringContainsString( '<aside class="aisa-layout__side" aria-label="Help"><section class="ajr-support">Need a hand?</section></aside>', Ui::layout_close() );
+	}
+}
