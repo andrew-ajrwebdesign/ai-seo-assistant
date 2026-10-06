@@ -73,7 +73,8 @@ class Plugin {
 	 * ⚖ FRONT-END WEIGHT (4.4.0). Until 4.3.2 every request, a visitor's page view included, built all
 	 * twenty-odd classes (the editor box, the audit, the Search Console screens, the Claude client...),
 	 * none of which does anything outside wp-admin. Now a visitor's request builds only what acts there:
-	 * the weekly-report push endpoint (REST), its daily lateness check (cron), the tools capability, and,
+	 * the weekly-report push endpoint (REST), its daily lateness check (cron), the tools capability, the
+	 * secret-option write guard (Secret_Guard: a few filters; the cipher code loads only on a write), and,
 	 * on a site without a core plugin, this plugin's own redirects. Everything else is built when
 	 * is_admin(), which covers admin-ajax.php and admin-post.php as well as the screens. None of the
 	 * admin classes registers a REST route, a cron event or a WP-CLI command, so nothing else needs them.
@@ -90,6 +91,10 @@ class Plugin {
 		( new Report\Access() )->register();
 		( new Report\Push_Endpoint( $report_store ) )->register();
 		( new Report\Stale_Alert( $report_store ) )->register();
+
+		// Every write to a secret option, from any screen, plugin, cron job or REST call, is checked and
+		// sealed (4.4.0). On every request: a write that bypasses wp-admin must not bypass the guard.
+		( new Secret_Guard() )->register();
 
 		if ( is_admin() ) {
 			$this->init_admin( $report_store );

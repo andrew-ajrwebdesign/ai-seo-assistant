@@ -38,6 +38,8 @@ $ai_seo_assistant_options = [
 	// Settings that exist only for the credentials above.
 	'ai_seo_assistant_model',
 	'ai_seo_assistant_settings_version',
+	'ai_seo_assistant_upgrade_attempt', // Core\Upgrade::ATTEMPT_OPTION (a failed sealing attempt).
+	'ai_seo_assistant_secrets_resealed', // Core\Secret_Store::RESEALED_OPTION (a pending notice).
 	// Search Console data fetched with those credentials: not site content.
 	'ai_seo_assistant_gsc_selected_site',
 	'ai_seo_assistant_gsc_cache',

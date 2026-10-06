@@ -42,6 +42,7 @@ class FrontEndWeightTest extends TestCase {
 	public function provide_sites(): array {
 		$always = [
 			'AJR\SEOAssistant\Core\Plugin',
+			'AJR\SEOAssistant\Core\Secret_Guard', // The secret-option write filters: small, and they must run everywhere.
 			'AJR\SEOAssistant\Report\Access',
 			'AJR\SEOAssistant\Report\Push_Endpoint',
 			'AJR\SEOAssistant\Report\Snapshot_Store',

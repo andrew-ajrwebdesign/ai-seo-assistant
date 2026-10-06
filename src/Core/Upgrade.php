@@ -45,6 +45,12 @@ class Upgrade {
 	/** This plugin's redirects schema marker (Redirects\Redirect_Store::DB_VERSION_OPTION). */
 	public const REDIRECTS_DB_VERSION_OPTION = 'ai_seo_assistant_redirects_db_version';
 
+	/** A failed 4.4.0 attempt (a secret could not be sealed): see waiting(). Exists only while failing. */
+	public const ATTEMPT_OPTION = 'ai_seo_assistant_upgrade_attempt';
+
+	/** Seconds between admin-load retries after a failed attempt. */
+	public const RETRY_AFTER = 86400;
+
 	/**
 	 * Register hooks (admin requests only: the caller builds this class in wp-admin).
 	 */
@@ -61,10 +67,35 @@ class Upgrade {
 	 * before it checks the login, and current_user_can() at plugins_loaded runs before authentication.
 	 */
 	public function maybe_run(): void {
-		if ( self::is_current() || ! current_user_can( 'manage_options' ) ) {
+		if ( self::is_current() || ! current_user_can( 'manage_options' ) || self::waiting() ) {
 			return;
 		}
 		self::run();
+	}
+
+	/**
+	 * Whether a failed attempt is recent enough that this admin load should not try again.
+	 *
+	 * Until round 2 of the 4.4.0 review a server that cannot seal (no libsodium) re-ran the whole step,
+	 * table check included, on EVERY admin page load, for good. Now a failure is recorded and retried once
+	 * a day (and after each update of this plugin), and Secret_Notices tells the agency in the meantime.
+	 * Only read while the site is below the current level, so an upgraded site never queries for it.
+	 */
+	public static function waiting(): bool {
+		$attempt = self::attempt();
+
+		return isset( $attempt['at'] ) && ( time() - (int) $attempt['at'] ) < self::RETRY_AFTER;
+	}
+
+	/**
+	 * The recorded failed attempt: [ 'at' => timestamp, 'failed' => option names, 'redirects' => result ].
+	 *
+	 * @return array<string,mixed> [] when none is recorded.
+	 */
+	public static function attempt(): array {
+		$attempt = get_option( self::ATTEMPT_OPTION, [] );
+
+		return is_array( $attempt ) ? $attempt : [];
 	}
 
 	/**
@@ -97,8 +128,9 @@ class Upgrade {
 	/**
 	 * Run every step above the site's level, then record the level.
 	 *
-	 * The level is NOT advanced when a secret could not be sealed, so the next admin load tries again
-	 * rather than leaving a plain-text key behind for good.
+	 * The level is NOT advanced when a secret could not be sealed, so a later run tries again rather than
+	 * leaving a plain-text key behind for good. The failure is recorded (ATTEMPT_OPTION) so the retry
+	 * waits a day (waiting()), the agency is told, and the table check is not repeated: it is done once.
 	 *
 	 * @return array<string,string> Secret migration results (option => result), for WP-CLI and tests.
 	 */
@@ -111,15 +143,31 @@ class Upgrade {
 		}
 
 		if ( version_compare( $level, '4.4.0', '<' ) ) {
+			$attempt = self::attempt();
 			$results = Secret_Store::migrate_all();
 			add_option( Access::OPTION, [], '', true ); // No-op when it exists.
-			self::retire_redirects_table();
+			$redirects = isset( $attempt['redirects'] ) ? (string) $attempt['redirects'] : self::retire_redirects_table();
 
-			if ( in_array( 'failed', $results, true ) ) {
+			$failed = array_keys( array_filter( $results, static fn( $result ) => 'failed' === $result ) );
+			if ( [] !== $failed ) {
 				if ( version_compare( $level, '4.0.0', '<' ) ) {
 					update_option( self::OPTION, '4.0.0', true );
 				}
+				// Autoloaded: maybe_run() reads it on every admin load while (and only while) the site is
+				// below the level, which is exactly when it exists.
+				update_option(
+					self::ATTEMPT_OPTION,
+					[
+						'at'        => time(),
+						'failed'    => $failed,
+						'redirects' => $redirects,
+					],
+					true
+				);
 				return $results;
+			}
+			if ( [] !== $attempt ) {
+				delete_option( self::ATTEMPT_OPTION );
 			}
 		}
 

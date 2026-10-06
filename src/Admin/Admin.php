@@ -73,8 +73,11 @@ class Admin {
 		add_action( 'admin_menu', [ $this, 'add_settings_page' ] );
 		add_action( 'admin_init', [ $this, 'register_settings' ] );
 
-		// options.php only checks manage_options for a settings group unless told otherwise, so a client
-		// Administrator who cannot see this screen could still post to it and replace the agency's key.
+		// options.php checks only manage_options for a settings group unless told otherwise, so a client
+		// Administrator who cannot see this screen could still post THIS GROUP (option_page=
+		// ai_seo_assistant_settings) and change its settings. This filter covers that group and nothing
+		// else: options.php's generic form (option_page=options&page_options=...) and any other
+		// update_option() caller are stopped for the secret options by Core\Secret_Guard instead.
 		add_filter( 'option_page_capability_ai_seo_assistant_settings', [ $this, 'settings_capability' ] );
 
 		// A saved key is only needed when generating, so keep it out of the
