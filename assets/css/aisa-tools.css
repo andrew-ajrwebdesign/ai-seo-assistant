@@ -471,6 +471,170 @@ a.aisa-pagecell__title:hover {
 	gap: 6px;
 }
 
+/* ---- Phone: the pages list and the Changes log as stacked cards (no sideways scrolling) ------------ */
+
+@media (max-width: 600px) {
+	.aisa-tablewrap:has(.aisa-table--pages),
+	.aisa-tablewrap:has(.aisa-table--log) {
+		overflow-x: visible;
+	}
+
+	.aisa-table--pages,
+	.aisa-table--pages tbody,
+	.aisa-table--log,
+	.aisa-table--log tbody {
+		display: block;
+		inline-size: 100%;
+	}
+
+	/* The column names stay for screen readers; each card labels its own figures. */
+	.aisa-table--pages thead,
+	.aisa-table--log thead {
+		position: absolute;
+		inline-size: 1px;
+		block-size: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+	}
+
+	.aisa-table--pages tr,
+	.aisa-table--log tr {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr) auto;
+		gap: 6px 10px;
+		padding-block: 14px;
+		border-block-end: 1px solid var(--aisa-border);
+	}
+
+	.aisa-table--pages td,
+	.aisa-table--pages th,
+	.aisa-table--log td {
+		display: block;
+		padding: 0;
+		border: 0;
+		text-align: start;
+	}
+
+	.aisa-table--pages .aisa-col-check {
+		grid-column: 1;
+		grid-row: 1 / span 2;
+		inline-size: auto;
+	}
+
+	.aisa-table--pages .aisa-pagecell {
+		grid-column: 2 / 4;
+		min-inline-size: 0;
+	}
+
+	.aisa-table--pages .aisa-col-opp {
+		grid-column: 2 / 4;
+	}
+
+	.aisa-table--pages .aisa-col-shown,
+	.aisa-table--pages .aisa-col-ctr,
+	.aisa-table--pages .aisa-col-issues {
+		text-align: start;
+	}
+
+	.aisa-table--pages .aisa-col-shown,
+	.aisa-table--pages .aisa-col-ctr {
+		grid-column: 2 / 4;
+		font-size: 12px;
+	}
+
+	.aisa-table--pages .aisa-col-shown br,
+	.aisa-table--pages .aisa-col-ctr br {
+		display: none;
+	}
+
+	.aisa-table--pages .aisa-col-shown .aisa-small,
+	.aisa-table--pages .aisa-col-ctr .aisa-small {
+		margin-inline-start: 6px;
+	}
+
+	.aisa-table--pages .aisa-col-issues {
+		grid-column: 2;
+		align-self: center;
+	}
+
+	.aisa-table--pages .aisa-col-action,
+	.aisa-table--log .aisa-col-action {
+		grid-column: 3;
+		align-self: center;
+		text-align: end;
+	}
+
+	.aisa-table--pages [data-label]::before,
+	.aisa-table--log [data-label]::before {
+		content: attr(data-label) ": ";
+		color: var(--aisa-muted);
+		font-size: 12px;
+	}
+
+	.aisa-table--log .aisa-col-date {
+		grid-column: 1 / 4;
+	}
+
+	.aisa-table--log td {
+		grid-column: 1 / 4;
+		min-inline-size: 0;
+		overflow-wrap: anywhere;
+	}
+
+	.aisa-table--log .aisa-col-action {
+		grid-column: 1 / 4;
+		text-align: start;
+	}
+
+	.aisa-opp__line {
+		white-space: normal;
+	}
+
+	/* Figure tables (searches): the search on its own line, its figures labelled underneath. */
+	.aisa-tablewrap:has(.aisa-table--stack) {
+		overflow-x: visible;
+	}
+
+	.aisa-table--stack,
+	.aisa-table--stack tbody,
+	.aisa-table--stack tr,
+	.aisa-table--stack th {
+		display: block;
+		inline-size: 100%;
+	}
+
+	.aisa-table--stack thead {
+		position: absolute;
+		inline-size: 1px;
+		block-size: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+	}
+
+	.aisa-table--stack tr {
+		padding-block: 10px;
+		border-block-end: 1px solid var(--aisa-border);
+	}
+
+	.aisa-table--stack th,
+	.aisa-table--stack td {
+		padding: 0;
+		border: 0;
+		text-align: start;
+	}
+
+	.aisa-table--stack td {
+		display: inline-block;
+		margin-inline-end: 12px;
+		font-size: 12px;
+	}
+
+	.aisa-table--stack td[data-label]::before {
+		content: attr(data-label) " ";
+		color: var(--aisa-muted);
+	}
+}
+
 /* ---- Opportunity v3: tier chip, yearly estimates, intent tags --------------------------------------- */
 
 .aisa-opp {

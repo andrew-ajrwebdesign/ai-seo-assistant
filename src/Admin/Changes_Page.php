@@ -234,12 +234,12 @@ class Changes_Page {
 				],
 				admin_url( 'admin.php' )
 			);
-			echo '<tr><td><strong>' . esc_html( wp_date( 'D j M', (int) strtotime( $row['applied_at'] . ' UTC' ) ) ) . '</strong><br><span class="aisa-small">' . esc_html( $user ? $user->display_name : '' ) . '</span></td>'
-				. '<td><a href="' . esc_url( $edit ) . '"><strong>' . esc_html( '' !== $title ? $title : $row['path'] ) . '</strong></a><br><span class="aisa-path">' . esc_html( $row['path'] ) . '</span></td>'
-				. '<td>' . esc_html( $labels[ $row['field'] ] ?? $row['field'] ) . '</td>'
+			echo '<tr><td class="aisa-col-date"><strong>' . esc_html( wp_date( 'D j M', (int) strtotime( $row['applied_at'] . ' UTC' ) ) ) . '</strong><br><span class="aisa-small">' . esc_html( $user ? $user->display_name : '' ) . '</span></td>'
+				. '<td class="aisa-col-page"><a href="' . esc_url( $edit ) . '"><strong>' . esc_html( '' !== $title ? $title : $row['path'] ) . '</strong></a><br><span class="aisa-path">' . esc_html( $row['path'] ) . '</span></td>'
+				. '<td data-label="' . esc_attr__( 'Field', 'ai-seo-assistant' ) . '">' . esc_html( $labels[ $row['field'] ] ?? $row['field'] ) . '</td>'
 				. '<td>' . ( 'content' === $row['field'] ? '<p class="aisa-small">' . esc_html( self::content_summary( (string) $row['before_value'], (string) $row['after_value'] ) ) . '</p>' : '<dl class="aisa-ba"><dt>' . esc_html__( 'Before', 'ai-seo-assistant' ) . '</dt><dd class="aisa-before">' . esc_html( '' !== $row['before_value'] ? (string) $row['before_value'] : __( '(empty)', 'ai-seo-assistant' ) ) . '</dd><dt>' . esc_html__( 'After', 'ai-seo-assistant' ) . '</dt><dd>' . esc_html( (string) $row['after_value'] ) . '</dd></dl>' ) . '</td>'
-				. '<td>' . Ui::pill( $pill, $tone ) . '<p class="aisa-small">' . esc_html( $text ) . '</p></td>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
-				. '<td>' . $undo . '</td></tr>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above.
+				. '<td data-label="' . esc_attr__( 'Effect', 'ai-seo-assistant' ) . '">' . Ui::pill( $pill, $tone ) . '<p class="aisa-small">' . esc_html( $text ) . '</p></td>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+				. '<td class="aisa-col-action">' . $undo . '</td></tr>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above.
 		}
 		echo '</tbody></table></div>';
 		echo '<p class="aisa-small">' . esc_html__( 'Effect = click-through rate in the 4 weeks after a change against the 4 weeks before, from the weekly push. Position is shown beside it so a ranking move is not mistaken for a better listing. “Better” or “worse” is always written, not only coloured.', 'ai-seo-assistant' ) . '</p></section>';
