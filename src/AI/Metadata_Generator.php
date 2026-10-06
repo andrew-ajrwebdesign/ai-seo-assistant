@@ -92,35 +92,6 @@ class Metadata_Generator {
 		return $result;
 	}
 
-	public function generate_and_save( $post_id ) {
-		$result = $this->generate( $post_id );
-
-		if ( is_wp_error( $result ) ) {
-			return $result;
-		}
-
-		if ( ! empty( $result['error'] ) ) {
-			return new \WP_Error(
-				'ai_seo_generation_error',
-				$result['error']
-			);
-		}
-
-		if ( empty( $result['title'] ) || empty( $result['description'] ) ) {
-			return new \WP_Error(
-				'ai_seo_missing_generated_metadata',
-				'Generated metadata was missing a title or description.'
-			);
-		}
-
-		$this->tsf_adapter->save_title( $post_id, $result['title'] );
-		$this->tsf_adapter->save_description( $post_id, $result['description'] );
-
-		$result['saved'] = true;
-
-		return $result;
-	}
-
 	public function generate_recommendations( $post_id ) {
 		$content = $this->content_extractor->get_content( $post_id );
 

@@ -690,7 +690,7 @@ class Scan_Page {
 		$capped  = ! Spend::allows( $spend['usd'], Spend::cap(), 'review' );
 		$per     = Page_Review::estimate( $this->past_costs(), $claude->get_model() );
 
-		echo '<section class="aisa-card aisa-card--claude" aria-labelledby="aisa-claude" data-aisa-panel>';
+		echo '<section class="aisa-card aisa-card--claude" aria-labelledby="aisa-claude" data-aisa-panel data-writing="' . esc_attr__( 'Claude is reading the page, its searches and how visitors use it. Usually about 20 seconds; you can leave this screen.', 'ai-seo-assistant' ) . '">';
 		$source = is_array( $s )
 			/* translators: 1: date and time, 2: cost. */
 			? sprintf( __( 'Written %1$s · cost %2$s', 'ai-seo-assistant' ), wp_date( 'D j M, g:ia', (int) $s['generated_at'] ), Spend::money( (float) $s['cost'] ) )

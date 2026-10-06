@@ -63,6 +63,10 @@ class Ui {
 					/* translators: %d: page count. */
 					'selected'   => __( '%d pages selected', 'ai-seo-assistant' ),
 					'selectHint' => __( 'Select pages to generate suggestions', 'ai-seo-assistant' ),
+					/* translators: 1: width in px, 2: limit in px. */
+					'fitPx'      => __( '%1$d px of about %2$d px', 'ai-seo-assistant' ),
+					/* translators: 1: characters, 2: limit. */
+					'fitChars'   => __( '%1$d of about %2$d characters', 'ai-seo-assistant' ),
 				],
 			]
 		);

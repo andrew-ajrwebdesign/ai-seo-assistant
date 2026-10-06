@@ -11,6 +11,7 @@
     <file>src/Report</file>
     <!-- 4.4.0: new files start inside the ratchet. -->
     <file>src/Core/Secret_Store.php</file>
+    <file>src/Core/Secret_Guard.php</file>
     <file>src/Core/Upgrade.php</file>
     <file>src/Admin/Secret_Notices.php</file>
 

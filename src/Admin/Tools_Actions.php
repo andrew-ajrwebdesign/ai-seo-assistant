@@ -41,6 +41,9 @@ class Tools_Actions {
 	/** Clear a page's (fully undone) review so it can be generated again. */
 	public const CLEAR = 'aisa_clear_review';
 
+	/** Confirm the 4.x redirects are in AJR Core, so the old table can go. */
+	public const REDIRECTS = 'aisa_redirects_moved';
+
 	/**
 	 * Register hooks.
 	 */
@@ -50,6 +53,8 @@ class Tools_Actions {
 		add_action( 'admin_post_' . self::APPLY, [ $this, 'apply' ] );
 		add_action( 'admin_post_' . self::UNDO, [ $this, 'undo' ] );
 		add_action( 'admin_post_' . self::CLEAR, [ $this, 'clear' ] );
+		add_action( 'admin_post_' . self::REDIRECTS, [ $this, 'redirects_moved' ] );
+		Changes_Page::register_export();
 		add_action( 'wp_ajax_aisa_scan_start', [ $this, 'ajax_scan_start' ] );
 		add_action( 'wp_ajax_aisa_scan_step', [ $this, 'ajax_scan_step' ] );
 		add_action( 'wp_ajax_aisa_generate', [ $this, 'ajax_generate' ] );
@@ -218,6 +223,18 @@ class Tools_Actions {
 		$post_id = isset( $_POST['post'] ) ? absint( $_POST['post'] ) : 0;
 		( new Scan_Store() )->save_suggestions( $post_id, null );
 		$this->back( [ 'post' => $post_id ] );
+	}
+
+	/**
+	 * The agency confirms the old redirects are in AJR Core: the table goes only if every one is found.
+	 */
+	public function redirects_moved(): void {
+		$this->guard( self::REDIRECTS );
+		$missing = \AJR\SEOAssistant\Core\Upgrade::confirm_redirects_moved();
+		$ref     = wp_get_referer();
+		$url     = $ref ? $ref : admin_url( 'admin.php?page=' . Settings_Page::SLUG );
+		wp_safe_redirect( [] === $missing ? remove_query_arg( 'aisa_missing', $url ) : add_query_arg( 'aisa_missing', rawurlencode( implode( ', ', array_slice( $missing, 0, 20 ) ) ), $url ) );
+		exit;
 	}
 
 	/**

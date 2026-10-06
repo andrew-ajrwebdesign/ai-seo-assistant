@@ -142,12 +142,7 @@ class Report_View {
 	 * @param array<string,mixed> $context Context.
 	 */
 	protected static function header( array $snap, array $context ): string {
-		$total    = 0;
-		$previous = 0;
-		foreach ( $snap['enquiries']['sources'] as $source ) {
-			$total   += $source['count'];
-			$previous = null === $source['previous'] || null === $previous ? null : $previous + $source['previous'];
-		}
+		[ $total, $previous ] = self::totals( $snap['enquiries']['sources'] );
 		$late  = ! empty( $context['latest'] ) && self::is_late( $snap, (int) $context['now'] );
 		$stamp = $late
 			/* translators: 1: date and time the figures arrived, 2: how long ago. */
@@ -166,7 +161,7 @@ class Report_View {
 		}
 
 		return '<header class="aisa-hero' . ( $late ? ' aisa-hero--late' : '' ) . '">'
-			. '<div class="aisa-hero__top">' . self::brand( (string) $context['agency'] )
+			. '<div class="aisa-hero__top">' . self::brand( (string) $context['agency'] ) . ( $context['tabs'] ?? '' ) // Escaped by Report_Page::tabs().
 			. '<p class="aisa-fresh' . ( $late ? ' aisa-fresh--late' : '' ) . '"><span class="aisa-fresh__dot" aria-hidden="true"></span>' . esc_html( $stamp ) . '</p></div>'
 			. '<h1 class="aisa-hero__headline" id="aisa-headline">' . esc_html( [] === $snap['enquiries']['sources'] ? __( 'Your website this week', 'ai-seo-assistant' ) : Format::headline( $total, $previous ) ) . '</h1>'
 			. '<p class="aisa-hero__sub">' . $sub . '</p>'
@@ -189,20 +184,7 @@ class Report_View {
 				. '<p class="aisa-pending">' . esc_html__( 'Enquiries are not being counted yet. Once form and call tracking is set up, every enquiry will appear here each week, by where it came from.', 'ai-seo-assistant' ) . '</p>'
 				. $note . '</section>';
 		}
-		$max   = max( 1, max( array_column( $sources, 'count' ) ) );
-		$rows  = '';
-		$total = 0;
-		$prev  = 0;
-		foreach ( $sources as $s ) {
-			$total += $s['count'];
-			$prev   = null === $s['previous'] || null === $prev ? null : $prev + $s['previous'];
-			$rows  .= '<li class="aisa-source"><div class="aisa-source__line"><span class="aisa-source__label">' . esc_html( $s['label'] ) . '</span>'
-				. '<span class="aisa-source__count">' . esc_html( number_format_i18n( $s['count'] ) ) . '</span>'
-				. self::change_html( Format::change( $s['count'], $s['previous'] ) ) . '</div>'
-				. '<span class="aisa-meter" aria-hidden="true"><span class="aisa-meter__value" style="inline-size:' . esc_attr( (string) round( $s['count'] / $max * 100, 1 ) ) . '%"></span></span></li>';
-		}
-		$rows .= '<li class="aisa-source aisa-source--total"><div class="aisa-source__line"><span class="aisa-source__label">' . esc_html__( 'Total', 'ai-seo-assistant' ) . '</span>'
-			. '<span class="aisa-source__count">' . esc_html( number_format_i18n( $total ) ) . '</span>' . self::change_html( Format::change( $total, $prev ) ) . '</div></li>';
+		$rows = self::source_rows( $sources, __( 'on last week', 'ai-seo-assistant' ) );
 
 		$series = $snap['enquiries']['series_12w'];
 		$figure = '';
@@ -216,6 +198,92 @@ class Report_View {
 		return '<section class="aisa-card aisa-card--grow" aria-labelledby="aisa-enquiries">'
 			. self::card_head( 'aisa-enquiries', 'phone', $title, __( 'All sources, not just Google', 'ai-seo-assistant' ) )
 			. '<div class="aisa-split"><ul class="aisa-sources">' . $rows . '</ul>' . $figure . '</div>' . $note . '</section>';
+	}
+
+	/**
+	 * The enquiry total and the previous period's, from the sources counted in it.
+	 *
+	 * 5.0 (approved correction 1): a v2 source marked `in_total: false` (a GA4 TAP on a phone number,
+	 * email or booking button) is shown but never added, because most taps become the calls already
+	 * counted. v1 sources carry no flag and are all counted, as they always were.
+	 *
+	 * @param array<int,array<string,mixed>> $sources Clean sources.
+	 * @return array{0:int,1:int|null}
+	 */
+	public static function totals( array $sources ): array {
+		$total    = 0;
+		$previous = 0;
+		foreach ( $sources as $source ) {
+			if ( ! Snapshot_V2::counts( $source ) ) {
+				continue;
+			}
+			$total   += $source['count'];
+			$previous = null === $source['previous'] || null === $previous ? null : $previous + $source['previous'];
+		}
+
+		return [ $total, $previous ];
+	}
+
+	/**
+	 * The enquiry rows: counted sources, the total, then taps listed apart and not added.
+	 *
+	 * @param array<int,array<string,mixed>> $sources Clean sources.
+	 * @param string                         $since   "on last week" / "on last month" (the change wording).
+	 */
+	public static function source_rows( array $sources, string $since ): string {
+		$counted = array_values( array_filter( $sources, [ Snapshot_V2::class, 'counts' ] ) );
+		$taps    = array_values( array_filter( $sources, static fn( $s ) => ! Snapshot_V2::counts( $s ) ) );
+		$max     = max( 1, max( array_merge( [ 1 ], array_column( $counted, 'count' ) ) ) );
+		$rows    = '';
+		foreach ( $counted as $s ) {
+			$rows .= '<li class="aisa-source"><div class="aisa-source__line"><span class="aisa-source__label">' . esc_html( $s['label'] )
+				. ( '' !== (string) ( $s['counted_by'] ?? '' ) ? '<span class="aisa-source__by">' . esc_html( self::counted_by( (string) $s['counted_by'] ) ) . '</span>' : '' ) . '</span>'
+				. '<span class="aisa-source__count">' . esc_html( number_format_i18n( $s['count'] ) ) . '</span>'
+				. self::change_html( self::since( Format::change( $s['count'], $s['previous'] ), $since ) ) . '</div>'
+				. '<span class="aisa-meter" aria-hidden="true"><span class="aisa-meter__value" style="inline-size:' . esc_attr( (string) round( $s['count'] / $max * 100, 1 ) ) . '%"></span></span></li>';
+		}
+		[ $total, $prev ] = self::totals( $sources );
+		$rows            .= '<li class="aisa-source aisa-source--total"><div class="aisa-source__line"><span class="aisa-source__label">' . esc_html__( 'Total', 'ai-seo-assistant' ) . '</span>'
+			. '<span class="aisa-source__count">' . esc_html( number_format_i18n( $total ) ) . '</span>' . self::change_html( self::since( Format::change( $total, $prev ), $since ) ) . '</div></li>';
+		foreach ( $taps as $s ) {
+			$by    = '' !== (string) ( $s['counted_by'] ?? '' ) ? ' · ' . self::counted_by( (string) $s['counted_by'] ) : '';
+			$rows .= '<li class="aisa-source aisa-source--tap"><div class="aisa-source__line"><span class="aisa-source__label">' . esc_html( $s['label'] )
+				. '<span class="aisa-source__by">' . esc_html( __( 'Not added: most become the calls above', 'ai-seo-assistant' ) . $by ) . '</span></span>'
+				. '<span class="aisa-source__count">' . esc_html( number_format_i18n( $s['count'] ) ) . '</span>'
+				. self::change_html( self::since( Format::change( $s['count'], $s['previous'] ), $since ), 'aisa-source__change aisa-tone--flat' ) . '</div></li>';
+		}
+
+		return $rows;
+	}
+
+	/**
+	 * "Counted by Google Ads" / "Counted on this website".
+	 *
+	 * @param string $by counted_by.
+	 */
+	protected static function counted_by( string $by ): string {
+		/* translators: %s: who counted it, e.g. "Google Ads". */
+		return 'this website' === strtolower( $by ) ? __( 'Counted on this website', 'ai-seo-assistant' ) : sprintf( __( 'Counted by %s', 'ai-seo-assistant' ), $by );
+	}
+
+	/**
+	 * Swap Format::change()'s "on last week" for another period's wording.
+	 *
+	 * @param array{text:string,tone:string} $change Change.
+	 * @param string                         $since  Wording.
+	 * @return array{text:string,tone:string}
+	 */
+	protected static function since( array $change, string $since ): array {
+		if ( __( 'on last week', 'ai-seo-assistant' ) === $since ) {
+			return $change;
+		}
+		$change['text'] = str_replace(
+			[ __( 'on last week', 'ai-seo-assistant' ), __( 'same as last week', 'ai-seo-assistant' ) ],
+			[ $since, __( 'same', 'ai-seo-assistant' ) ],
+			$change['text']
+		);
+
+		return $change;
 	}
 
 	/**
@@ -311,8 +379,10 @@ class Report_View {
 			return '';
 		}
 		$w     = $ga4['week'];
+		// "Actions on your website", never "people who got in touch": GA4 key events include taps, and a
+		// second enquiry-like total beside the headline would contradict it (Andrew, 2026-10-06).
 		$tiles = self::tile( __( 'Visits', 'ai-seo-assistant' ), $w['visits'], Format::PERCENT )
-			. self::tile( __( 'People who got in touch', 'ai-seo-assistant' ), $w['key_events'], Format::COUNT )
+			. self::tile( __( 'Actions on your website', 'ai-seo-assistant' ), $w['key_events'], Format::COUNT, '', '', __( 'Google Analytics key events, incl. taps', 'ai-seo-assistant' ) )
 			. self::tile( __( 'Stayed and read', 'ai-seo-assistant' ), $w['engaged'], Format::POINTS, '', '%' );
 		$list  = '';
 		foreach ( $ga4['top_pages'] as $p ) {
@@ -388,17 +458,23 @@ class Report_View {
 	 * @param string                   $kind   Format kind.
 	 * @param string                   $series 'clicks' / 'shown' when the tile doubles as the chart key.
 	 * @param string                   $suffix Unit after the value ('%').
+	 * @param string                   $note   Small line under the label (what the figure counts).
+	 * @param string                   $since  Change wording for another period ('' = "on last week").
 	 */
-	protected static function tile( string $label, ?array $metric, string $kind, string $series = '', string $suffix = '' ): string {
+	protected static function tile( string $label, ?array $metric, string $kind, string $series = '', string $suffix = '', string $note = '', string $since = '' ): string {
 		if ( null === $metric ) {
 			return '';
 		}
-		$value = Format::PLACES === $kind || '%' === $suffix ? number_format_i18n( (float) $metric['value'], floor( (float) $metric['value'] ) === (float) $metric['value'] ? 0 : 1 ) : Format::short( $metric['value'] );
+		$value  = Format::PLACES === $kind || '%' === $suffix ? number_format_i18n( (float) $metric['value'], floor( (float) $metric['value'] ) === (float) $metric['value'] ? 0 : 1 ) : Format::short( $metric['value'] );
+		$change = Format::change( $metric['value'], $metric['previous'], $kind );
+		if ( '' !== $since ) {
+			$change = self::since( $change, $since );
+		}
 
 		return '<div class="aisa-metric' . ( '' !== $series ? ' aisa-metric--key aisa-metric--' . esc_attr( $series ) : '' ) . '">'
-			. '<p class="aisa-metric__label">' . esc_html( $label ) . '</p>'
+			. '<p class="aisa-metric__label">' . esc_html( $label ) . ( '' !== $note ? '<span class="aisa-metric__note">' . esc_html( $note ) . '</span>' : '' ) . '</p>'
 			. '<p class="aisa-metric__value">' . esc_html( $value . $suffix ) . '</p>'
-			. self::change_html( Format::change( $metric['value'], $metric['previous'], $kind ), 'aisa-metric__change' ) . '</div>';
+			. self::change_html( $change, 'aisa-metric__change' ) . '</div>';
 	}
 
 	/**

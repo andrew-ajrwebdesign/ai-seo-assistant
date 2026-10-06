@@ -140,98 +140,6 @@ jQuery(function ($) {
 			});
 	}
 
-	function renderBadge(statusText) {
-		let badgeClass = 'ai-seo-assistant-badge';
-		if (statusText === 'Looks good') {
-			badgeClass += ' is-good';
-		} else if (statusText === 'Missing') {
-			badgeClass += ' is-missing';
-		} else {
-			badgeClass += ' is-warning';
-		}
-		return '<span class="' + badgeClass + '">' + escapeHtml(statusText) + '</span>';
-	}
-
-	function formatGeneratedDetails(data) {
-		if (data.error) {
-			return 'Never';
-		}
-		let details = '';
-		if (data.generated_at) {
-			details += escapeHtml(data.generated_at);
-		}
-		if (data.source || data.model) {
-			details += '<div class="ai-seo-assistant-audit-small">';
-			if (data.source) {
-				details += escapeHtml(data.source);
-			}
-			if (data.model) {
-				details += ' / ' + escapeHtml(data.model);
-			}
-			details += '</div>';
-		}
-		return details || 'Just now';
-	}
-
-	function updateAuditRow(row, data) {
-		const titleCell = row.find('.ai-seo-audit-title-cell');
-		const descriptionCell = row.find('.ai-seo-audit-description-cell');
-		const lastGeneratedCell = row.find('.ai-seo-audit-last-generated-cell');
-		titleCell.html(renderBadge(data.title_status || '') + '<div class="ai-seo-assistant-audit-meta-preview">' + escapeHtml(data.title || '') + '</div>');
-		descriptionCell.html(renderBadge(data.description_status || '') + '<div class="ai-seo-assistant-audit-meta-preview">' + escapeHtml(data.description || '') + '</div>');
-		lastGeneratedCell.html(formatGeneratedDetails(data));
-	}
-
-	function generateAndSaveFromAudit(button) {
-		const postId = button.data('post-id');
-		const row = button.closest('tr');
-		const rowStatus = row.find('.ai-seo-audit-row-status');
-		if (!postId) {
-			rowStatus.removeClass('is-success is-error is-warning').addClass('is-error').text('Missing post ID.');
-			return;
-		}
-		rowStatus.removeClass('is-success is-error is-warning').addClass('is-warning').text('Generating...');
-		button.prop('disabled', true);
-		$.ajax({
-			url: aiSeoAssistant.ajaxUrl,
-			method: 'POST',
-			dataType: 'json',
-			timeout: 120000,
-			data: {
-				action: 'ai_seo_assistant_generate_and_save',
-				nonce: aiSeoAssistant.nonce,
-				post_id: postId,
-			},
-		})
-			.done(function (response) {
-				console.log('AI SEO Assistant audit response:', response);
-				const data = getResponseData(response);
-				if (!response || response.success !== true) {
-					rowStatus.removeClass('is-success is-warning').addClass('is-error').text(getErrorMessage(response, 'Something went wrong.'));
-					return;
-				}
-				if (data.error) {
-					rowStatus.removeClass('is-success is-warning').addClass('is-error').text(data.error);
-					return;
-				}
-				updateAuditRow(row, data);
-				rowStatus.removeClass('is-error is-warning').addClass('is-success').text(buildGeneratedStatus(data));
-			})
-			.fail(function (xhr, textStatus) {
-				console.error('AI SEO Assistant audit AJAX error:', xhr);
-				let message = 'Request failed. Check the browser console.';
-				if (textStatus === 'timeout') {
-					message = 'The request timed out. Try again or use a shorter page/content extract.';
-				} else if (xhr && xhr.responseJSON) {
-					message = getErrorMessage(xhr.responseJSON, message);
-				}
-				rowStatus.removeClass('is-success is-warning').addClass('is-error').text(message);
-			})
-			.always(function () {
-				button.prop('disabled', false);
-			});
-	}
-
 	function renderRecommendationList(items) {
 		if (!Array.isArray(items) || !items.length) {
 			return '<p class="ai-seo-assistant-recommendations-empty">No recommendations returned.</p>';
@@ -527,9 +435,6 @@ jQuery(function ($) {
 	});
 	recommendationsButton.on('click', function () {
 		generateRecommendations($(this));
-	});
-	$(document).on('click', '.ai-seo-audit-generate-save', function () {
-		generateAndSaveFromAudit($(this));
 	});
 	$(document).on('click', '#ai-seo-autofill-focus-button', function () {
 		autofillSeoFocus($(this));

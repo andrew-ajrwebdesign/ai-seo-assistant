@@ -219,11 +219,14 @@ Do not commit a real API key to this repository.
 
 ### Keys saved on the settings screens are encrypted (4.4.0)
 
-Every secret the plugin stores in the database (the Claude key, the Google client ID and secret, the Search Console tokens, the report push key) is sealed with libsodium `secretbox` before it is written, with a key derived from the site's `AUTH_*` and `SECURE_AUTH_*` salts in `wp-config.php` (`Core\Secret_Store`). A database backup on its own cannot open them. The fields are write-only: a saved value shows as "Saved · ends …XXXX" with Replace and Clear, and is never sent back to the browser.
+Every secret the plugin stores in the database (the Claude key, the Google client ID and secret, the Search Console tokens, the report push key) is sealed with libsodium `secretbox` before it is written, with a key derived from the site's `AUTH_*` and `SECURE_AUTH_*` salts in `wp-config.php` (`Core\Secret_Store`). A database backup on its own cannot open them. The fields are write-only: a saved secret shows as "Saved · ends …XXXX" (the Google client ID, which is not secret and always ends `.apps.googleusercontent.com`, shows its start instead) with Replace and Clear, and is never sent back to the browser.
 
-* **Upgrading from 4.3.x:** the first admin page load by an Administrator after the update seals any plain-text secret in place and deletes the plain text (recorded at level 4.4.0 in `ai_seo_assistant_settings_version`).
+* **Upgrading from 4.3.x:** the first admin page load by an Administrator after the update seals any plain-text secret in place, overwriting the plain text in the same row (recorded at level 4.4.0 in `ai_seo_assistant_settings_version`). If the server cannot encrypt (no libsodium), the attempt is recorded, agency users are told, and it is retried once a day rather than on every admin page.
+* **Plain text found later** (an update run from cron or WP-CLI, a restored backup) is sealed the first time it is read in wp-admin, cron or WP-CLI (never on a visitor's page view), and agency users are told once.
+* **Who may change a key:** every write to a secret option, from any screen (WordPress's generic `options.php` form included), plugin, cron job or REST call, is refused unless it comes from a user with the agency tools capability, from WP-CLI, or from the plugin's own code; an allowed plain-text write is sealed on the way in (`Core\Secret_Guard`).
 * **Rotating the salts** makes saved secrets unreadable: the plugin treats them as missing and tells agency users which one to re-enter.
-* **Salts not in `wp-config.php`:** WordPress then keeps them in the database, so the secrets are only obfuscated; agency users see a warning.
+* **Salts not in `wp-config.php`** (missing, the sample phrase, or one value shared by two salt constants, which `wp_salt()` treats as unset): WordPress then keeps them in the database, so the secrets are only obfuscated; agency users see a warning.
+* The rules are shared with AJR Core's copy of the scheme through `tests/fixtures/secret-store-cases.json`, kept byte-identical in both repos.
 * A `wp-config.php` constant still wins over a saved value. **Disconnect** in Search Console, and deleting the plugin, revoke the Google grant at Google before deleting the tokens.
 
 ### Model

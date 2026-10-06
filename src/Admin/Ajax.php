@@ -17,7 +17,6 @@ class Ajax {
 
 	public function init() {
 		add_action( 'wp_ajax_ai_seo_assistant_generate', [ $this, 'generate_metadata' ] );
-		add_action( 'wp_ajax_ai_seo_assistant_generate_and_save', [ $this, 'generate_and_save_metadata' ] );
 		add_action( 'wp_ajax_ai_seo_assistant_generate_recommendations', [ $this, 'generate_recommendations' ] );
 		add_action( 'wp_ajax_ai_seo_assistant_suggest_focus', [ $this, 'suggest_focus' ] );
 	}
@@ -51,33 +50,6 @@ class Ajax {
 		}
 
 		$result = $this->metadata_generator->generate( $post_id );
-
-		if ( is_wp_error( $result ) ) {
-			wp_send_json_error(
-				[
-					'message' => $result->get_error_message(),
-				]
-			);
-		}
-
-		wp_send_json_success( $result );
-	}
-
-	public function generate_and_save_metadata() {
-		check_ajax_referer( Admin::NONCE_ACTION, 'nonce' );
-		$this->allow_long_request();
-
-		$post_id = $this->get_valid_post_id();
-
-		if ( is_wp_error( $post_id ) ) {
-			wp_send_json_error(
-				[
-					'message' => $post_id->get_error_message(),
-				]
-			);
-		}
-
-		$result = $this->metadata_generator->generate_and_save( $post_id );
 
 		if ( is_wp_error( $result ) ) {
 			wp_send_json_error(

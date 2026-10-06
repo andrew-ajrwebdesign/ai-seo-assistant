@@ -1,6 +1,8 @@
 <?php
 /**
  * Main plugin bootstrap.
+ *
+ * @package AJR\SEOAssistant
  */
 
 namespace AJR\SEOAssistant\Core;
@@ -16,47 +18,31 @@ use AJR\SEOAssistant\AI\Claude_Client;
 use AJR\SEOAssistant\AI\Metadata_Generator;
 use AJR\SEOAssistant\Admin\Admin;
 use AJR\SEOAssistant\Admin\Ajax;
-use AJR\SEOAssistant\Admin\Audit_Page;
-use AJR\SEOAssistant\Admin\Report_Page;
-use AJR\SEOAssistant\Admin\Markdown_Page;
-use AJR\SEOAssistant\Admin\Indexing_Tools_Page;
+use AJR\SEOAssistant\Admin\Menu;
 use AJR\SEOAssistant\Admin\Secret_Notices;
-use AJR\SEOAssistant\GSC\GSC_Client;
-use AJR\SEOAssistant\GSC\GSC_Page;
-use AJR\SEOAssistant\Redirects\Redirect_Store;
-use AJR\SEOAssistant\Redirects\Redirect_Handler;
-use AJR\SEOAssistant\Redirects\Core_Suggestions;
-use AJR\SEOAssistant\Admin\Redirects_Page;
+use AJR\SEOAssistant\Admin\Tools_Actions;
 use AJR\SEOAssistant\Report;
+use AJR\SEOAssistant\Search\Page_Data;
 
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * Wires the plugin for each request.
+ */
 class Plugin {
 
+	/**
+	 * The one instance (a bootstrap holder, not a service locator).
+	 *
+	 * @var Plugin|null
+	 */
 	private static $instance = null;
 
-	private $tsf_adapter;
-	private $yoast_adapter;
-	private $rankmath_adapter;
-	private $seo_adapter_resolver;
-	private $seo_adapter;
-
-	private $content_extractor;
-	private $prompt_builder;
-	private $ai_client;
-	private $logger;
-	private $local_seo_context;
-	private $metadata_generator;
-	private $admin;
-	private $audit_page;
-	private $report_page;
-	private $gsc_client;
-	private $gsc_page;
-	private $indexing_tools_page;
-	private $ajax;
-	private $redirect_store;
-	private $redirects_page;
-
+	/**
+	 * The instance.
+	 *
+	 * @return Plugin
+	 */
 	public static function instance() {
 		if ( null === self::$instance ) {
 			self::$instance = new self();
@@ -65,271 +51,113 @@ class Plugin {
 		return self::$instance;
 	}
 
+	/**
+	 * Private: use instance().
+	 */
 	private function __construct() {}
 
 	/**
 	 * Wire the plugin for this request.
 	 *
-	 * ⚖ FRONT-END WEIGHT (4.4.0). Until 4.3.2 every request, a visitor's page view included, built all
-	 * twenty-odd classes (the editor box, the audit, the Search Console screens, the Claude client...),
-	 * none of which does anything outside wp-admin. Now a visitor's request builds only what acts there:
-	 * the weekly-report push endpoint (REST), its daily lateness check (cron), the tools capability, and,
-	 * on a site without a core plugin, this plugin's own redirects. Everything else is built when
-	 * is_admin(), which covers admin-ajax.php and admin-post.php as well as the screens. None of the
-	 * admin classes registers a REST route, a cron event or a WP-CLI command, so nothing else needs them.
+	 * ⚖ FRONT-END WEIGHT (4.4.0, kept in 5.0). A visitor's page view builds only what acts there: the report
+	 * push endpoint (REST), its daily lateness check (cron), the tools capability and the secret-option
+	 * write guard. The SEO scan's three hooks (a page saved, the scan's cron events, a push received) are
+	 * closures that name the scan classes only inside their bodies, so the scan code loads when one of them
+	 * fires (a save, a cron run, a push), never on a page view. Everything else is built when is_admin(),
+	 * which covers admin-ajax.php and admin-post.php as well as the screens.
 	 */
 	public function init() {
 		add_action( 'init', [ $this, 'load_textdomain' ] );
 
-		/*
-		 * Weekly report (4.3.0). The figures arrive by a signed push from the agency's machine;
-		 * this site stores the snapshots and holds no Google keys. Access keeps the tool screens
-		 * for agency users, so the client's Administrator sees the report only.
-		 */
 		$report_store = new Report\Snapshot_Store();
 		( new Report\Access() )->register();
 		( new Report\Push_Endpoint( $report_store ) )->register();
 		( new Report\Stale_Alert( $report_store ) )->register();
 
+		// Every write to a secret option, from any screen, plugin, cron job or REST call, is checked and
+		// sealed (4.4.0). On every request: a write that bypasses wp-admin must not bypass the guard.
+		( new Secret_Guard() )->register();
+
+		$this->register_scan_hooks();
+
 		if ( is_admin() ) {
 			$this->init_admin( $report_store );
 		}
+	}
 
-		/*
-		 * ⛔ REDIRECTS HAVE MOVED TO AJR CORE. ONE FEATURE, ONE PLUGIN.
-		 *
-		 * AJR Core 0.5.0 owns redirects on every site, retainer or not. Both plugins
-		 * hooked `template_redirect` at priority 1, so with both active the same rules
-		 * were applied twice by two owners — and a rule edited on one screen and not the
-		 * other would have been decided by whichever plugin happened to load first. That
-		 * is not a conflict anyone would see in testing; it is one that appears months
-		 * later as "that redirect stopped working".
-		 *
-		 * So this feature stands down the moment AJR Core is present: no handler, no
-		 * menu item, no table install. It keeps running only on a site that does not
-		 * have AJR Core yet, because standing down there would drop that site's
-		 * redirects on an update — the one outcome worse than duplication.
-		 *
-		 * AJR Core copies this plugin's rules into its own table on first run and
-		 * changes nothing here, so the hand-over needs no migration and is reversible.
-		 * The code goes altogether in 5.0, once AJR Core is on every site. (4.4.0: an
-		 * EMPTY leftover table is dropped by Core\Upgrade::retire_redirects_table().)
-		 */
-		if ( self::core_owns_redirects() ) {
-			/*
-			 * The SUGGESTIONS do not move with the redirects, and should not: they need
-			 * Search Console, which is this plugin's job and part of what a retainer pays
-			 * for. AJR Core owns the screen and the rules; this supplies the knowledge of
-			 * which addresses Google is still asking for. Admin only — it is a screen.
-			 */
-			if ( is_admin() ) {
-				( new Core_Suggestions( $this->gsc_client ) )->register();
+	/**
+	 * The SEO scan's triggers (decision 2026-10-06): after each push, per page on save (deferred to a
+	 * single cron event, never inline), and its own cron events.
+	 */
+	protected function register_scan_hooks(): void {
+		add_action(
+			'transition_post_status',
+			static function ( $new_status, $old_status, $post ): void {
+				\AJR\SEOAssistant\Scan\Scheduler::on_transition( $new_status, $old_status, $post );
+			},
+			10,
+			3
+		);
+		add_action(
+			'aisa_scan_run',
+			static function (): void {
+				\AJR\SEOAssistant\Scan\Scheduler::run();
 			}
-		} else {
-			$this->redirect_store = new Redirect_Store();
-			( new Redirect_Handler( $this->redirect_store ) )->register();
-
-			if ( is_admin() ) {
-				/*
-				 * ⛔ is_admin() is a CONTEXT flag, not a permission check. admin-post.php
-				 * defines WP_ADMIN and fires admin_init (line 27) BEFORE it checks
-				 * is_user_logged_in() (line 36) — verified in core on this site — so anything
-				 * gated on is_admin() alone is reachable by a request carrying no cookie.
-				 * Here that only ever meant a dbDelta while the version flag was stale, which
-				 * self-heals, so nothing was exposed; this makes the gate say what it means.
-				 *
-				 * The capability is checked ON admin_init, not here: calling
-				 * current_user_can() at plugins_loaded resolves the current user before the
-				 * authentication filters have run, which breaks application-password and REST
-				 * logins — a worse bug than the one being fixed.
-				 */
-				add_action(
-					'admin_init',
-					function (): void {
-						if ( current_user_can( 'manage_options' ) ) {
-							$this->redirect_store->maybe_install();
-						}
-					}
-				);
-				$this->redirects_page = new Redirects_Page( $this->redirect_store, $this->gsc_client );
-				$this->redirects_page->init();
+		);
+		add_action(
+			'aisa_scan_post',
+			static function ( $post_id ): void {
+				\AJR\SEOAssistant\Scan\Scheduler::run_post( (int) $post_id );
 			}
-		}
+		);
+		add_action(
+			Report\Snapshot_Store::RECEIVED_ACTION,
+			static function (): void {
+				\AJR\SEOAssistant\Scan\Scheduler::after_push();
+			}
+		);
 	}
 
 	/**
 	 * Build and register everything that only acts in wp-admin (screens, editor box, AJAX, admin-post).
 	 *
-	 * @param Report\Snapshot_Store $report_store Weekly report storage.
+	 * @param Report\Snapshot_Store $report_store Report storage.
 	 */
 	protected function init_admin( Report\Snapshot_Store $report_store ) {
-		$this->tsf_adapter      = new TSF_Adapter();
-		$this->yoast_adapter    = new Yoast_Adapter();
-		$this->rankmath_adapter = new RankMath_Adapter();
+		$tsf      = new TSF_Adapter();
+		$resolver = new SEO_Adapter_Resolver( $tsf, new Yoast_Adapter(), new RankMath_Adapter() );
+		$adapter  = $resolver->get_adapter() ?? $tsf;
+		$claude   = new Claude_Client();
+		$logger   = new Logger();
+		$context  = new Local_SEO_Context();
 
-		$this->seo_adapter_resolver = new SEO_Adapter_Resolver(
-			$this->tsf_adapter,
-			$this->yoast_adapter,
-			$this->rankmath_adapter
+		$generator = new Metadata_Generator(
+			$adapter,
+			new Content_Extractor(),
+			new Prompt_Builder(),
+			$claude,
+			$logger,
+			$context,
+			new Page_Data() // The page's pushed Search Console data (the on-site connection is gone).
 		);
 
-		$this->seo_adapter       = $this->seo_adapter_resolver->get_adapter() ?? $this->tsf_adapter;
-		$this->content_extractor = new Content_Extractor();
-		$this->prompt_builder    = new Prompt_Builder();
-		$this->ai_client         = new Claude_Client();
-		$this->logger            = new Logger();
-		$this->local_seo_context = new Local_SEO_Context();
-		$this->gsc_client        = new GSC_Client();
+		// The editor box (agency only) and its AJAX actions.
+		( new Admin( $adapter, $logger, $context, $resolver, $claude ) )->init();
+		( new Ajax( $generator ) )->init();
 
-		$this->metadata_generator = new Metadata_Generator(
-			$this->seo_adapter,
-			$this->content_extractor,
-			$this->prompt_builder,
-			$this->ai_client,
-			$this->logger,
-			$this->local_seo_context,
-			$this->gsc_client
-		);
+		// The menu and the screens: Report (everyone with manage_options), then the agency's tools.
+		( new Menu( $report_store ) )->register();
+		( new Tools_Actions() )->register();
 
-		$this->admin = new Admin(
-			$this->seo_adapter,
-			$this->logger,
-			$this->local_seo_context,
-			$this->seo_adapter_resolver,
-			$this->ai_client
-		);
-
-		$this->audit_page = new Audit_Page(
-			$this->seo_adapter,
-			$this->logger,
-			$this->content_extractor,
-			$this->local_seo_context,
-			$this->gsc_client
-		);
-
-		$this->report_page = new Report_Page(
-			$this->seo_adapter
-		);
-
-		$this->gsc_page = new GSC_Page(
-			$this->gsc_client
-		);
-
-		$this->indexing_tools_page = new Indexing_Tools_Page(
-			$this->seo_adapter
-		);
-
-		$this->ajax = new Ajax(
-			$this->metadata_generator
-		);
-
-		$this->admin->init();
-
-		// Markdown for AI moved to AJR Core 0.8.0 — see core_owns_markdown(). Its screen lives
-		// under AJR Core's menu there, editing the same settings.
-		if ( ! self::core_owns_markdown() ) {
-			( new Markdown_Page() )->init();
-		}
-
-		$this->audit_page->init();
-		$this->report_page->init();
-		$this->gsc_page->init();
-		$this->indexing_tools_page->init();
-		$this->ajax->init();
-
-		( new Report\Report_Page( $report_store ) )->register();
-
-		// One-time data changes (secrets sealed, leftover redirects table) and the agency's key warnings.
+		// One-time data changes and the agency's notices.
 		( new Upgrade() )->register();
 		( new Secret_Notices() )->register();
 	}
 
 	/**
-	 * Whether AJR Core — or, from 4.3.2, the site's own core plugin — owns redirects on this site.
-	 *
-	 * Checks for the class rather than the plugin file, so it is true exactly when AJR
-	 * Core has actually loaded — a plugin that is installed but not active, or active but
-	 * fatally broken, must NOT switch this plugin's redirects off.
-	 *
-	 * @return bool
-	 */
-	public static function core_owns_redirects() {
-		if ( class_exists( '\AJR\Core\Redirects\Redirect_Store' ) ) {
-			return true;
-		}
-
-		/*
-		 * A site's OWN core plugin (4.3.2) — e.g. ocb-core on Office Coffee Break, which has run the
-		 * site's redirects since its build — says so through this filter, and the empty Redirects
-		 * screen here goes away. ⛔ Never while this plugin holds ENABLED rules of its own: AJR Core
-		 * copies our rules across on first run, a site core does not, so stepping back would silently
-		 * drop live redirects. The lookup map holds exactly the enabled rules and is autoloaded, so
-		 * this costs nothing; disabled rules (which never fire) stay in the table, screen hidden.
-		 *
-		 * ⏱ Answer from the core plugin's FILE load, never on plugins_loaded: this is asked on
-		 * plugins_loaded:10, and a site core loads after this plugin (alphabetical), so a later
-		 * registration is not seen and both plugins would run.
-		 *
-		 * @param bool $owns Whether the site's core plugin runs this site's redirects.
-		 */
-		if ( ! (bool) apply_filters( 'ai_seo_assistant_core_owns_redirects', false ) ) {
-			return false;
-		}
-		$map = get_option( 'ai_seo_assistant_redirect_map', [] );
-
-		return ! is_array( $map ) || [] === $map;
-	}
-
-	/**
-	 * Whether AJR Core (0.8.0+) — or, from 4.3.2, the site's own core plugin — owns Markdown for AI.
-	 *
-	 * ⛔ MARKDOWN FOR AI HAS MOVED TO AJR CORE. ONE FEATURE, ONE PLUGIN — the same hand-over as
-	 * redirects in 4.1.0, and for the same reason: two copies answering /llms.txt, the REST
-	 * routes and ?format=markdown on one site would be decided by load order.
-	 *
-	 * The hand-over is safe in either update order. AJR Core reads the same `wpmai_settings`,
-	 * the same `wpmai_` caches and the same filters, so nothing migrates; and AJR Core stands
-	 * ITS copy down while this plugin is older than 4.2.0, so the two never both serve. On a
-	 * site without AJR Core this keeps serving exactly as before. The code goes in 5.0.
-	 *
-	 * The class, not the plugin file: installed-but-inactive or fatally broken must not switch
-	 * this plugin's endpoints off.
-	 *
-	 * @return bool
-	 */
-	public static function core_owns_markdown() {
-		if ( ! class_exists( '\AJR\Core\Markdown\Module' ) ) {
-			/*
-			 * A site's OWN core plugin that carries Markdown for AI (4.3.2; ocb-core 1.8.0) says so
-			 * through this filter. It answers true only when its copy is serving, and its copy only
-			 * serves beside this plugin from 4.3.2 on (it stands down for anything older), so the two
-			 * never both answer /llms.txt and never both stay silent, whichever is updated first.
-			 *
-			 * ⏱ Register from the core plugin's FILE load and work the answer out INSIDE the callback
-			 * (the same check that decides whether it serves): this is asked on plugins_loaded:10,
-			 * before a site core's own plugins_loaded code runs.
-			 *
-			 * @param bool $owns Whether the site's core plugin serves Markdown for AI.
-			 */
-			return (bool) apply_filters( 'ai_seo_assistant_core_owns_markdown', false );
-		}
-
-		/*
-		 * ⛔ One decision, asked of one function. AJR Core stands its copy down while this plugin
-		 * is older than its minimum; asking AJR Core that same question here means the two can
-		 * never BOTH stand down. When each decided on its own, a version mismatch left /llms.txt
-		 * answered by nobody (hand-over scenario test, 2026-09-23).
-		 */
-		return ! method_exists( '\AJR\Core\Markdown\Module', 'older_assistant_serves' )
-			|| ! \AJR\Core\Markdown\Module::older_assistant_serves();
-	}
-
-	/**
 	 * Load the plugin text domain for translations.
 	 *
-	 * Hooked on `init` (not earlier) so it runs after WordPress has finished
-	 * setting up locales, avoiding the just-in-time translation-loading notice
-	 * introduced in WordPress 6.7.
+	 * Hooked on `init` (not earlier) so it runs after WordPress has finished setting up locales.
 	 */
 	public function load_textdomain() {
 		load_plugin_textdomain(
