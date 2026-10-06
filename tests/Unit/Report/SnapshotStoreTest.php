@@ -145,4 +145,46 @@ class SnapshotStoreTest extends TestCase {
 		$this->options[ Snapshot_Store::OPTION ] = 'garbage';
 		$this->assertSame( [], ( new Snapshot_Store() )->all() );
 	}
+
+	/**
+	 * Last round A12: per-page data that could not be stored leaves a notice flag and says so; the next
+	 * push that stores clears it.
+	 */
+	public function test_failed_page_data_is_reported(): void {
+		\WP_Mock::userFunction( 'delete_option' )->andReturnUsing(
+			function ( $name ) {
+				unset( $this->options[ $name ] );
+				return true;
+			}
+		);
+		$fake  = new class() extends \AJR\SEOAssistant\Search\Page_Data {
+			/** @var bool */
+			public $ok = false;
+			public function replace_all( array $pages, array $range, int $generated_at ): bool {
+				return $this->ok;
+			}
+		};
+		$store = new class( $fake ) extends Snapshot_Store {
+			/** @var \AJR\SEOAssistant\Search\Page_Data */
+			public $fake;
+			public function __construct( $fake ) {
+				$this->fake = $fake;
+			}
+			protected function page_data(): \AJR\SEOAssistant\Search\Page_Data {
+				return $this->fake;
+			}
+		};
+		$snap = $this->week( '2026-09-28' ) + [
+			'pages'       => [ '/a/' => [ 'gsc' => null ] ],
+			'pages_range' => [ 'start' => '2026-07-01', 'end' => '2026-09-27' ],
+		];
+		$store->receive( $snap, 500 );
+		$this->assertFalse( $store->pages_stored() );
+		$this->assertSame( [ 'at' => 500, 'pages' => 1 ], $this->options[ Snapshot_Store::PAGES_FAILED ] );
+
+		$fake->ok = true;
+		$store->receive( $this->week( '2026-10-05' ) + [ 'pages' => $snap['pages'], 'pages_range' => [ 'start' => '2026-07-08', 'end' => '2026-10-04' ] ], 600 );
+		$this->assertTrue( $store->pages_stored() );
+		$this->assertArrayNotHasKey( Snapshot_Store::PAGES_FAILED, $this->options );
+	}
 }

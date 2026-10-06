@@ -42,6 +42,16 @@ class Snapshot_Store {
 	/** Option: the last Google Business Profile check (snapshot v2 `business_profile_check`). Not autoloaded. */
 	public const LISTING = 'ai_seo_assistant_listing_check';
 
+	/** Option: when the last push's per-page data could not be stored ({ at, pages }); gone once one is. */
+	public const PAGES_FAILED = 'ai_seo_assistant_pages_failed';
+
+	/**
+	 * Whether the last receive() stored its per-page data (null: it carried none, or an older window).
+	 *
+	 * @var bool|null
+	 */
+	protected ?bool $pages_stored = null;
+
 	/** Action fired after a push or import is stored; the SEO scan listens (Scan\Scheduler::after_push). */
 	public const RECEIVED_ACTION = 'ai_seo_assistant_report_received';
 
@@ -129,6 +139,20 @@ class Snapshot_Store {
 	}
 
 	/**
+	 * Whether the last receive() stored its per-page data (null when it carried none to store).
+	 */
+	public function pages_stored(): ?bool {
+		return $this->pages_stored;
+	}
+
+	/**
+	 * Where per-page data is stored (a seam for tests).
+	 */
+	protected function page_data(): \AJR\SEOAssistant\Search\Page_Data {
+		return new \AJR\SEOAssistant\Search\Page_Data();
+	}
+
+	/**
 	 * Store whatever a validated push carries: the week or month, the per-page search data (v2), and the
 	 * billing day. The single entry point for the push endpoint and the Import form.
 	 *
@@ -156,9 +180,23 @@ class Snapshot_Store {
 		}
 		// The freshest 90-day window wins: a month push (its window ends on the month's last Sunday) must not
 		// replace the newer window a weekly push brought.
-		$held = \AJR\SEOAssistant\Search\Page_Data::meta();
+		$held               = \AJR\SEOAssistant\Search\Page_Data::meta();
+		$this->pages_stored = null;
 		if ( is_array( $pages ) && [] !== $pages && (string) ( $range['end'] ?? '' ) >= $held['end'] ) {
-			( new \AJR\SEOAssistant\Search\Page_Data() )->replace_all( $pages, is_array( $range ) ? $range : [], (int) $snapshot['generated_at'] );
+			$this->pages_stored = $this->page_data()->replace_all( $pages, is_array( $range ) ? $range : [], (int) $snapshot['generated_at'] );
+			if ( $this->pages_stored ) {
+				delete_option( self::PAGES_FAILED );
+			} else {
+				// The previous push's rows are kept (the write is all or nothing): the agency is told.
+				update_option(
+					self::PAGES_FAILED,
+					[
+						'at'    => $now,
+						'pages' => count( $pages ),
+					],
+					false
+				);
+			}
 		}
 
 		/**

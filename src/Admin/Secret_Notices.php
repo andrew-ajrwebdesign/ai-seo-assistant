@@ -88,6 +88,13 @@ class Secret_Notices {
 			delete_option( Secret_Store::RESEALED_OPTION );
 		}
 
+		// The last push's per-page search data could not be saved: the scan still ranks on the previous one.
+		$failed = get_option( \AJR\SEOAssistant\Report\Snapshot_Store::PAGES_FAILED, false );
+		if ( is_array( $failed ) ) {
+			/* translators: 1: number of pages, 2: date. */
+			echo '<div class="notice notice-warning"><p>' . esc_html( sprintf( __( 'AI SEO Assistant: the search data for %1$d pages pushed on %2$s could not be saved (the database refused it), so the scan still uses the previous push. The next push tries again; if this stays, check the database.', 'ai-seo-assistant' ), (int) ( $failed['pages'] ?? 0 ), wp_date( 'D j M', (int) ( $failed['at'] ?? time() ) ) ) ) . '</p></div>';
+		}
+
 		// 5.0: Google did not confirm revoking the old on-site Search Console grant. Shown once.
 		if ( false !== get_option( Upgrade::REVOKE_FAILED, false ) ) {
 			echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'AI SEO Assistant 5.0 removed its old Search Console connection, but Google did not confirm revoking the access it held. Remove "AI SEO Assistant" (or the Google Cloud app it used) from the Google account’s third-party access:', 'ai-seo-assistant' ) . ' <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">myaccount.google.com/permissions</a></p></div>';

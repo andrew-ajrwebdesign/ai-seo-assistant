@@ -180,11 +180,13 @@ class Push_Endpoint {
 
 		return new \WP_REST_Response(
 			[
-				'result' => $result,
-				'week'   => $start, // Kept for v1 senders (retainer-scan reads this key).
-				'period' => $period,
-				'start'  => $start,
-				'pages'  => $pages,
+				'result'       => $result,
+				'week'         => $start, // Kept for v1 senders (retainer-scan reads this key).
+				'period'       => $period,
+				'start'        => $start,
+				'pages'        => $pages,
+				// false: the per-page data could not be saved (the site keeps the previous push's).
+				'pages_stored' => $this->store->pages_stored(),
 			],
 			'stale' === $result ? 409 : 200
 		);
