@@ -84,16 +84,16 @@ class Changes_Page {
 	 * @param array<int,array<string,mixed>> $effects Effects by row ID.
 	 */
 	protected function summary( array $rows, array $effects ): void {
-		$period  = Spend::current();
-		$start   = gmdate( 'Y-m-d H:i:s', $period['start']->getTimestamp() );
-		$applied = 0;
-		$pages   = [];
+		$period   = Spend::current();
+		$start    = gmdate( 'Y-m-d H:i:s', $period['start']->getTimestamp() );
+		$applied  = 0;
+		$pages    = [];
 		$measured = 0;
-		$better  = 0;
-		$worse   = 0;
-		$waiting = 0;
-		$undone  = 0;
-		$by      = [];
+		$better   = 0;
+		$worse    = 0;
+		$waiting  = 0;
+		$undone   = 0;
+		$by       = [];
 		foreach ( $rows as $row ) {
 			if ( $row['applied_at'] < $start ) {
 				continue;
@@ -103,7 +103,7 @@ class Changes_Page {
 			$e                        = $effects[ $row['id'] ];
 			if ( 'undone' === $e['state'] ) {
 				++$undone;
-				$who = get_userdata( (int) $row['undone_by'] );
+				$who                                  = get_userdata( (int) $row['undone_by'] );
 				$by[ $who ? $who->display_name : '' ] = true;
 			} elseif ( 'measured' === $e['state'] ) {
 				++$measured;
@@ -158,9 +158,9 @@ class Changes_Page {
 		];
 		$pages  = [];
 		foreach ( $rows as $row ) {
-			$s        = $effects[ $row['id'] ]['state'];
-			$bucket   = in_array( $s, [ 'measured', 'undone' ], true ) ? $s : ( 'not_measured' === $s ? 'none' : 'waiting' );
-			$counts[ $bucket ] = ( $counts[ $bucket ] ?? 0 ) + 1;
+			$s                        = $effects[ $row['id'] ]['state'];
+			$bucket                   = in_array( $s, [ 'measured', 'undone' ], true ) ? $s : ( 'not_measured' === $s ? 'none' : 'waiting' );
+			$counts[ $bucket ]        = ( $counts[ $bucket ] ?? 0 ) + 1;
 			$pages[ $row['post_id'] ] = wp_strip_all_tags( (string) get_the_title( $row['post_id'] ) );
 		}
 		$labels = $this->field_labels();
@@ -174,7 +174,17 @@ class Changes_Page {
 			'waiting'  => __( 'Waiting for data', 'ai-seo-assistant' ),
 			'undone'   => __( 'Undone', 'ai-seo-assistant' ),
 		] as $key => $label ) {
-			$url = add_query_arg( array_filter( [ 'page' => self::SLUG, 'state' => $key, 'post' => $post, 'field' => $field ] ), admin_url( 'admin.php' ) );
+			$url = add_query_arg(
+				array_filter(
+					[
+						'page'  => self::SLUG,
+						'state' => $key,
+						'post'  => $post,
+						'field' => $field,
+					]
+				),
+				admin_url( 'admin.php' )
+			);
 			echo '<li><a class="aisa-chip' . ( $key === $state ? ' is-current' : '' ) . '" href="' . esc_url( $url ) . '"' . ( $key === $state ? ' aria-current="true"' : '' ) . '>' . esc_html( $label ) . ' <span>' . esc_html( (string) ( $counts[ $key ] ?? 0 ) ) . '</span></a></li>';
 		}
 		echo '</ul><form method="get" class="aisa-filters aisa-push"><input type="hidden" name="page" value="' . esc_attr( self::SLUG ) . '"><input type="hidden" name="state" value="' . esc_attr( $state ) . '">';
@@ -210,13 +220,19 @@ class Changes_Page {
 		}
 		echo '<div class="aisa-tablewrap"><table class="aisa-table aisa-table--log"><thead><tr><th scope="col">' . esc_html__( 'Date', 'ai-seo-assistant' ) . '</th><th scope="col">' . esc_html__( 'Page', 'ai-seo-assistant' ) . '</th><th scope="col">' . esc_html__( 'Field', 'ai-seo-assistant' ) . '</th><th scope="col">' . esc_html__( 'Before → after', 'ai-seo-assistant' ) . '</th><th scope="col">' . esc_html__( 'Effect', 'ai-seo-assistant' ) . '</th><td></td></tr></thead><tbody>';
 		foreach ( $shown as $row ) {
-			$user = get_userdata( $row['user_id'] );
+			$user                   = get_userdata( $row['user_id'] );
 			[ $pill, $tone, $text ] = $this->effect_words( $row, $effects[ $row['id'] ] );
-			$undo = null === $row['undone_at']
+			$undo                   = null === $row['undone_at']
 				? '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">' . wp_nonce_field( Tools_Actions::UNDO, '_wpnonce', true, false ) . '<input type="hidden" name="action" value="' . esc_attr( Tools_Actions::UNDO ) . '"><input type="hidden" name="ids" value="' . esc_attr( (string) $row['id'] ) . '"><button type="submit" class="aisa-linkbtn">' . esc_html__( 'Undo', 'ai-seo-assistant' ) . '<span class="screen-reader-text"> ' . esc_html( $labels[ $row['field'] ] ?? '' ) . '</span></button></form>'
 				: '';
-			$title = $pages[ $row['post_id'] ] ?? '';
-			$edit  = add_query_arg( [ 'page' => Scan_Page::SLUG, 'post' => $row['post_id'] ], admin_url( 'admin.php' ) );
+			$title                  = $pages[ $row['post_id'] ] ?? '';
+			$edit                   = add_query_arg(
+				[
+					'page' => Scan_Page::SLUG,
+					'post' => $row['post_id'],
+				],
+				admin_url( 'admin.php' )
+			);
 			echo '<tr><td><strong>' . esc_html( wp_date( 'D j M', (int) strtotime( $row['applied_at'] . ' UTC' ) ) ) . '</strong><br><span class="aisa-small">' . esc_html( $user ? $user->display_name : '' ) . '</span></td>'
 				. '<td><a href="' . esc_url( $edit ) . '"><strong>' . esc_html( '' !== $title ? $title : $row['path'] ) . '</strong></a><br><span class="aisa-path">' . esc_html( $row['path'] ) . '</span></td>'
 				. '<td>' . esc_html( $labels[ $row['field'] ] ?? $row['field'] ) . '</td>'

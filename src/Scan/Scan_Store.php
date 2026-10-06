@@ -65,7 +65,7 @@ class Scan_Store {
 		}
 		// How many of them the page review can fix (the rest are "do in the editor"), for the list's wording.
 		$kinds['_claude'] = count( array_filter( $issues, static fn( $i ) => 'claude' === ( $i['who'] ?? '' ) ) );
-		$csv = implode( ',', array_map( static fn( $k, $n ) => $k . ':' . $n, array_keys( $kinds ), $kinds ) );
+		$csv              = implode( ',', array_map( static fn( $k, $n ) => $k . ':' . $n, array_keys( $kinds ), $kinds ) );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the plugin's own table.
 		$wpdb->update(
 			Schema::table( 'scan' ),
@@ -131,13 +131,13 @@ class Scan_Store {
 				[ $k, $n ]   = array_pad( explode( ':', $pair ), 2, '0' );
 				$kinds[ $k ] = (int) $n;
 			}
-			$row['claude_fixable']           = (int) ( $kinds['_claude'] ?? $row['issue_count'] );
+			$row['claude_fixable'] = (int) ( $kinds['_claude'] ?? $row['issue_count'] );
 			unset( $kinds['_claude'] );
-			$row['kinds']                    = $kinds;
-			$row['post_id']                  = (int) $row['post_id'];
-			$row['issue_count']              = (int) $row['issue_count'];
-			$row['has_suggestions']          = (bool) $row['has_suggestions'];
-			$out[ (int) $row['post_id'] ]    = $row;
+			$row['kinds']                 = $kinds;
+			$row['post_id']               = (int) $row['post_id'];
+			$row['issue_count']           = (int) $row['issue_count'];
+			$row['has_suggestions']       = (bool) $row['has_suggestions'];
+			$out[ (int) $row['post_id'] ] = $row;
 		}
 
 		return $out;
@@ -155,7 +155,7 @@ class Scan_Store {
 		$rows = (array) $wpdb->get_results( "SELECT post_id, path, post_type, scanned_at, source, facts FROM `{$table}`", ARRAY_A );
 		$out  = [];
 		foreach ( $rows as $row ) {
-			$facts = json_decode( (string) $row['facts'], true );
+			$facts                        = json_decode( (string) $row['facts'], true );
 			$out[ (int) $row['post_id'] ] = [
 				'path'       => (string) $row['path'],
 				'post_type'  => (string) $row['post_type'],

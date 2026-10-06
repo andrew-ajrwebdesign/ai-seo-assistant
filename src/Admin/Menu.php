@@ -74,7 +74,7 @@ class Menu {
 	public function add(): void {
 		$parent = Report_Page::SLUG;
 		$this->hooks[ (string) add_menu_page( __( 'AI SEO Assistant', 'ai-seo-assistant' ), __( 'AI SEO Assistant', 'ai-seo-assistant' ), 'manage_options', $parent, [ $this->report, 'render' ], 'dashicons-chart-line', 58 ) ] = 'report';
-		$this->hooks[ (string) add_submenu_page( $parent, __( 'Report', 'ai-seo-assistant' ), __( 'Report', 'ai-seo-assistant' ), 'manage_options', $parent, [ $this->report, 'render' ] ) ] = 'report';
+		$this->hooks[ (string) add_submenu_page( $parent, __( 'Report', 'ai-seo-assistant' ), __( 'Report', 'ai-seo-assistant' ), 'manage_options', $parent, [ $this->report, 'render' ] ) ]                                     = 'report';
 
 		$screens = [
 			Scan_Page::SLUG           => [ __( 'SEO scan', 'ai-seo-assistant' ), new Scan_Page() ],

@@ -43,11 +43,11 @@ class Admin {
 	/**
 	 * Wires the admin UI to its collaborators.
 	 *
-	 * @param object               $seo_adapter          Active SEO plugin adapter.
+	 * @param object                        $seo_adapter          Active SEO plugin adapter.
 	 * @param \AJR\SEOAssistant\Core\Logger $logger      Generation log store.
-	 * @param object               $local_seo_context    Site and page SEO focus.
-	 * @param object               $seo_adapter_resolver Detects the active SEO plugin.
-	 * @param Claude_Client        $ai_client            Claude API client.
+	 * @param object                        $local_seo_context    Site and page SEO focus.
+	 * @param object                        $seo_adapter_resolver Detects the active SEO plugin.
+	 * @param Claude_Client                 $ai_client            Claude API client.
 	 */
 	public function __construct( $seo_adapter, $logger, $local_seo_context, $seo_adapter_resolver, Claude_Client $ai_client ) {
 		$this->tsf_adapter          = $seo_adapter;
@@ -365,7 +365,7 @@ class Admin {
 
 	public function enqueue_admin_assets( $hook ) {
 		// The editor box is agency-only (see add_meta_box()), so its assets are too.
-		$is_editor   = in_array( $hook, [ 'post.php', 'post-new.php' ], true ) && current_user_can( \AJR\SEOAssistant\Report\Access::TOOLS_CAP );
+		$is_editor = in_array( $hook, [ 'post.php', 'post-new.php' ], true ) && current_user_can( \AJR\SEOAssistant\Report\Access::TOOLS_CAP );
 		if ( ! $is_editor ) {
 			return;
 		}

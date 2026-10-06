@@ -518,7 +518,7 @@ class Scan_Page {
 		if ( false !== get_transient( Page_Review::RESCAN_FLAG . $post_id ) ) {
 			( new Page_Review( new Claude_Client() ) )->rescan_if_flagged( $post_id );
 		}
-		$row  = ( new Scan_Store() )->get( $post_id );
+		$row = ( new Scan_Store() )->get( $post_id );
 		// Edited since its last scan (the on-save cron event may not have run yet): rescan it now, one page.
 		$edited = get_post( $post_id );
 		if ( null !== $row && $edited instanceof \WP_Post && $edited->post_modified_gmt > (string) $row['scanned_at'] ) {
@@ -686,7 +686,7 @@ class Scan_Page {
 		echo '<div class="aisa-tiles aisa-tiles--search">' . $tiles . '</div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in tile().
 		$weeks = (array) $g['weeks'];
 		if ( count( $weeks ) >= 2 ) {
-			$title = __( 'Clicks and impressions per week', 'ai-seo-assistant' );
+			$title  = __( 'Clicks and impressions per week', 'ai-seo-assistant' );
 			$labels = array_map( static fn( $w ) => (string) wp_date( 'j M', (int) strtotime( $w['start'] . ' 12:00 UTC' ), new \DateTimeZone( 'UTC' ) ), $weeks );
 			echo '<figure class="aisa-figure aisa-figure--wide">' . Chart::lines( array_column( $weeks, 'clicks' ), array_column( $weeks, 'impressions' ), $labels, $title ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- Chart escapes its own output.
 				. '<figcaption class="aisa-small">' . esc_html( $ctr + 0.1 < $exp ? __( 'Solid line: clicks per week (left scale). Dashed line: impressions per week (right scale). Shown often, clicked rarely: the listing is the problem, not the ranking.', 'ai-seo-assistant' ) : __( 'Solid line: clicks per week (left scale). Dashed line: impressions per week (right scale).', 'ai-seo-assistant' ) ) . '</figcaption></figure>';
@@ -898,8 +898,16 @@ class Scan_Page {
 		}
 		echo '<fieldset class="aisa-sfield"><legend class="aisa-sfield__head"><strong>' . esc_html__( 'Image alt text', 'ai-seo-assistant' ) . '</strong>' . Ui::pill( sprintf( /* translators: %d: images. */ _n( '%d image', '%d images', count( $alts ), 'ai-seo-assistant' ), count( $alts ) ), 'bad' ) . '<span class="aisa-small aisa-push">' . esc_html__( 'Tick the ones to apply', 'ai-seo-assistant' ) . '</span></legend><ul class="aisa-alts">'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		foreach ( $alts as $alt ) {
-			$id    = (int) $alt['id'];
-			$thumb = wp_get_attachment_image( $id, [ 56, 56 ], false, [ 'class' => 'aisa-alt__img', 'alt' => '' ] );
+			$id      = (int) $alt['id'];
+			$thumb   = wp_get_attachment_image(
+				$id,
+				[ 56, 56 ],
+				false,
+				[
+					'class' => 'aisa-alt__img',
+					'alt'   => '',
+				]
+			);
 			$mode    = (string) ( $alt['mode'] ?? 'write' );
 			$check   = 'write' !== $mode;
 			$printed = (string) ( $alt['printed'] ?? $alt['now'] );
@@ -994,7 +1002,15 @@ class Scan_Page {
 			/* translators: %d: count. */
 			echo '<div class="aisa-sfield"><p class="aisa-sfield__head"><strong>' . esc_html__( 'Image alt text', 'ai-seo-assistant' ) . '</strong>' . Ui::pill( sprintf( _n( '%d applied', '%d applied', count( $alts ), 'ai-seo-assistant' ), count( $alts ) ), 'good' ) . '<span class="aisa-small aisa-push">' . esc_html__( 'Saved in the Media Library', 'ai-seo-assistant' ) . '</span></p><ul class="aisa-alts">'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 			foreach ( $alts as $c ) {
-				$thumb = wp_get_attachment_image( (int) $c['object_id'], [ 56, 56 ], false, [ 'class' => 'aisa-alt__img', 'alt' => '' ] );
+				$thumb = wp_get_attachment_image(
+					(int) $c['object_id'],
+					[ 56, 56 ],
+					false,
+					[
+						'class' => 'aisa-alt__img',
+						'alt'   => '',
+					]
+				);
 				$file  = (string) basename( (string) get_attached_file( (int) $c['object_id'] ) );
 				/* translators: %s: alt before. */
 				$before = '' === $c['before_value'] ? __( 'Before: no alt text', 'ai-seo-assistant' ) : sprintf( __( 'Before: “%s”', 'ai-seo-assistant' ), (string) $c['before_value'] );
@@ -1055,10 +1071,10 @@ class Scan_Page {
 	/**
 	 * A metric tile.
 	 *
-	 * @param string            $label  Label.
-	 * @param string            $value  Value (formatted).
+	 * @param string                   $label  Label.
+	 * @param string                   $value  Value (formatted).
 	 * @param array{0:string,1:string} $change Text and tone.
-	 * @param string            $series 'clicks' | 'shown' when it doubles as the chart key.
+	 * @param string                   $series 'clicks' | 'shown' when it doubles as the chart key.
 	 */
 	protected function tile( string $label, string $value, array $change, string $series = '' ): string {
 		return '<div class="aisa-metric' . ( '' !== $series ? ' aisa-metric--key aisa-metric--' . esc_attr( $series ) : '' ) . '"><p class="aisa-metric__label">' . esc_html( $label ) . '</p><p class="aisa-metric__value">' . esc_html( $value ) . '</p>'

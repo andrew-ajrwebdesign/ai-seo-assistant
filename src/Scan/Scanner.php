@@ -195,8 +195,8 @@ class Scanner {
 				$src = ( is_ssl() ? 'https:' : 'http:' ) . $src;
 			}
 			if ( empty( $img['id'] ) && false !== strpos( $src, '/uploads/' ) ) {
-				$full = (string) preg_replace( '/-\d+x\d+(?=\.[a-z0-9]+$)/i', '', strtok( $src, '?' ) );
-				$id   = attachment_url_to_postid( $full );
+				$full               = (string) preg_replace( '/-\d+x\d+(?=\.[a-z0-9]+$)/i', '', strtok( $src, '?' ) );
+				$id                 = attachment_url_to_postid( $full );
 				$images[ $i ]['id'] = $id ? $id : (int) attachment_url_to_postid( strtok( $src, '?' ) );
 			}
 			// The served file's weight: the uploads URL maps onto the uploads folder.
@@ -239,16 +239,16 @@ class Scanner {
 			foreach ( array_unique( array_column( (array) ( $f['links'] ?? [] ), 'p' ) ) as $path ) {
 				$path = self::norm_path( (string) $path );
 				if ( $path !== self::norm_path( $row['path'] ) ) {
-					$in[ $path ][]   = $row['path'];
+					$in[ $path ][]  = $row['path'];
 					$links[ $path ] = true;
 				}
 			}
 		}
 
-		$known      = [];
-		$by_path    = [];
+		$known   = [];
+		$by_path = [];
 		foreach ( $rows as $id => $row ) {
-			$known[ self::norm_path( $row['path'] ) ] = true;
+			$known[ self::norm_path( $row['path'] ) ]   = true;
 			$by_path[ self::norm_path( $row['path'] ) ] = $id;
 		}
 		$redirects  = self::redirect_map();
@@ -300,7 +300,7 @@ class Scanner {
 			}
 			$issues = Rules::evaluate( $f, $ctx );
 			$this->store->save_issues( $id, $issues );
-			$total += count( $issues );
+			$total    += count( $issues );
 			$rendered += 'rendered' === $row['source'] ? 1 : 0;
 		}
 
@@ -381,8 +381,8 @@ class Scanner {
 	/**
 	 * Status of internal link targets that are not a scanned page or a redirect (cached a day).
 	 *
-	 * @param array<int,string>   $targets   Normalised link paths.
-	 * @param array<string,true>  $known     Scanned page paths.
+	 * @param array<int,string>    $targets   Normalised link paths.
+	 * @param array<string,true>   $known     Scanned page paths.
 	 * @param array<string,string> $redirects Redirect map.
 	 * @return array<string,int> Path => status.
 	 */

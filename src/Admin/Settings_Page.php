@@ -162,7 +162,7 @@ class Settings_Page {
 				/* translators: %s: last four characters. */
 				? '<span class="aisa-secret">' . Ui::icon( 'lock' ) . '<strong>' . esc_html( sprintf( __( 'Saved · ends …%s', 'ai-seo-assistant' ), $last4 ) ) . '</strong>' . Ui::pill( __( 'Encrypted', 'ai-seo-assistant' ), 'good' ) . '</span>'
 				: '<span class="aisa-secret aisa-secret--empty">' . esc_html__( 'No key saved', 'ai-seo-assistant' ) . '</span>';
-			$key   = '<div class="aisa-keyrow">' . $saved
+			$key = '<div class="aisa-keyrow">' . $saved
 				. '<details class="aisa-replace"><summary class="aisa-btn">' . Ui::icon( 'admin-network' ) . esc_html( '' !== $last4 ? __( 'Replace', 'ai-seo-assistant' ) : __( 'Add a key', 'ai-seo-assistant' ) ) . '</summary>'
 				. '<label class="screen-reader-text" for="aisa-api-key">' . esc_html__( 'New Claude API key', 'ai-seo-assistant' ) . '</label><input type="password" id="aisa-api-key" name="api_key" autocomplete="off" spellcheck="false" placeholder="sk-ant-…"></details>'
 				. ( '' !== $last4 ? '<button type="submit" name="clear_api_key" value="1" class="aisa-btn aisa-btn--danger-outline">' . Ui::icon( 'no-alt' ) . esc_html__( 'Clear', 'ai-seo-assistant' ) . '</button>' : '' ) . '</div>'
@@ -456,7 +456,11 @@ class Settings_Page {
 	 * @param int $day Day.
 	 */
 	protected static function ordinal_day( int $day ): string {
-		$suffix = in_array( $day % 100, [ 11, 12, 13 ], true ) ? 'th' : ( [ 1 => 'st', 2 => 'nd', 3 => 'rd' ][ $day % 10 ] ?? 'th' );
+		$suffix = in_array( $day % 100, [ 11, 12, 13 ], true ) ? 'th' : ( [
+			1 => 'st',
+			2 => 'nd',
+			3 => 'rd',
+		][ $day % 10 ] ?? 'th' );
 
 		return $day . $suffix;
 	}

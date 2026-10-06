@@ -51,7 +51,7 @@ class Html_Parser {
 		libxml_use_internal_errors( $old );
 		$xp = new \DOMXPath( $dom );
 
-		$facts = [
+		$facts            = [
 			'title'       => self::text_of( $xp->query( '//head/title' ) ),
 			'description' => self::meta( $xp, 'name', 'description' ),
 			'robots'      => strtolower( self::meta( $xp, 'name', 'robots' ) ),
@@ -96,10 +96,10 @@ class Html_Parser {
 			}
 		}
 
-		$facts['images'] = self::images( $xp, $content );
+		$facts['images']                        = self::images( $xp, $content );
 		[ $facts['links'], $facts['external'] ] = self::links( $xp, $content, $home );
-		$text           = self::clean( self::visible_text( $content ) );
-		$facts['words'] = '' === $text ? 0 : count( preg_split( '/\s+/u', $text ) );
+		$text                                   = self::clean( self::visible_text( $content ) );
+		$facts['words']                         = '' === $text ? 0 : count( preg_split( '/\s+/u', $text ) );
 
 		return $facts;
 	}

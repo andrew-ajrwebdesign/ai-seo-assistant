@@ -59,7 +59,16 @@ class Report_Page {
 	 */
 	public function enqueue_assets(): void {
 		wp_enqueue_style( self::STYLE, AI_SEO_ASSISTANT_URL . 'assets/css/weekly-report.css', [ 'dashicons' ], AI_SEO_ASSISTANT_VERSION );
-		wp_enqueue_script( 'ai-seo-assistant-report', AI_SEO_ASSISTANT_URL . 'assets/js/aisa-report.js', [], AI_SEO_ASSISTANT_VERSION, [ 'strategy' => 'defer', 'in_footer' => true ] );
+		wp_enqueue_script(
+			'ai-seo-assistant-report',
+			AI_SEO_ASSISTANT_URL . 'assets/js/aisa-report.js',
+			[],
+			AI_SEO_ASSISTANT_VERSION,
+			[
+				'strategy'  => 'defer',
+				'in_footer' => true,
+			]
+		);
 	}
 
 	/**
@@ -132,8 +141,18 @@ class Report_Page {
 			return;
 		}
 		$at                  = (int) array_search( $key, $keys, true );
-		$context['prev_url'] = isset( $keys[ $at + 1 ] ) ? $this->url( [ 'view' => 'monthly', 'month' => $keys[ $at + 1 ] ] ) : '';
-		$context['next_url'] = $at > 0 ? $this->url( [ 'view' => 'monthly', 'month' => $keys[ $at - 1 ] ] ) : '';
+		$context['prev_url'] = isset( $keys[ $at + 1 ] ) ? $this->url(
+			[
+				'view'  => 'monthly',
+				'month' => $keys[ $at + 1 ],
+			]
+		) : '';
+		$context['next_url'] = $at > 0 ? $this->url(
+			[
+				'view'  => 'monthly',
+				'month' => $keys[ $at - 1 ],
+			]
+		) : '';
 		echo Month_View::month( $months[ $key ], $context, self::achievements( $months[ $key ] ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped piecewise in Month_View.
 	}
 
@@ -159,7 +178,7 @@ class Report_Page {
 			if ( null !== $row['undone_at'] ) {
 				continue;
 			}
-			$day                              = substr( (string) $row['applied_at'], 0, 10 );
+			$day                                     = substr( (string) $row['applied_at'], 0, 10 );
 			$group[ $day . '|' . $row['post_id'] ][] = $row;
 		}
 		$out = [];

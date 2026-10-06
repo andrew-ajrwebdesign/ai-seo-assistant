@@ -231,9 +231,9 @@ class Change_Log {
 			'shown_after' => $a['impressions'],
 		];
 		if ( null !== $out['ctr_after'] && null !== $out['ctr_before'] ) {
-			$delta              = round( $out['ctr_after'] - $out['ctr_before'], 2 );
-			$out['delta']       = $delta;
-			$out['verdict']     = $delta >= self::SAME_WITHIN ? 'better' : ( $delta <= -self::SAME_WITHIN ? 'worse' : 'same' );
+			$delta               = round( $out['ctr_after'] - $out['ctr_before'], 2 );
+			$out['delta']        = $delta;
+			$out['verdict']      = $delta >= self::SAME_WITHIN ? 'better' : ( $delta <= -self::SAME_WITHIN ? 'worse' : 'same' );
 			$out['extra_clicks'] = (int) round( $delta / 100 * $a['impressions'] );
 		}
 

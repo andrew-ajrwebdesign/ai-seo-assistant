@@ -211,7 +211,15 @@ class Search_Console_Page {
 	protected function queries( array $r ): void {
 		echo '<div class="aisa-sc__detail"><p class="aisa-sc__detail-head"><strong>' . esc_html( sprintf( /* translators: %s: page title. */ __( 'Searches that showed %s', 'ai-seo-assistant' ), $r['title'] ) ) . '</strong>';
 		if ( $r['id'] ) {
-			echo '<a href="' . esc_url( add_query_arg( [ 'page' => Scan_Page::SLUG, 'post' => $r['id'] ], admin_url( 'admin.php' ) ) ) . '">' . esc_html__( 'Review this page in SEO scan', 'ai-seo-assistant' ) . '</a>';
+			echo '<a href="' . esc_url(
+				add_query_arg(
+					[
+						'page' => Scan_Page::SLUG,
+						'post' => $r['id'],
+					],
+					admin_url( 'admin.php' )
+				)
+			) . '">' . esc_html__( 'Review this page in SEO scan', 'ai-seo-assistant' ) . '</a>';
 		}
 		echo '</p>';
 		$queries = (array) $r['g']['queries'];

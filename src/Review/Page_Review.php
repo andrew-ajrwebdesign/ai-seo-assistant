@@ -117,10 +117,10 @@ class Page_Review {
 			if ( $id <= 0 || isset( $seen[ $id ] ) ) {
 				continue;
 			}
-			$seen[ $id ]  = true;
-			$file         = (string) ( $img['file'] ?? '' );
-			$printed      = trim( (string) ( $img['alt'] ?? '' ) );
-			$stored       = trim( (string) ( $img['stored_alt'] ?? '' ) );
+			$seen[ $id ] = true;
+			$file        = (string) ( $img['file'] ?? '' );
+			$printed     = trim( (string) ( $img['alt'] ?? '' ) );
+			$stored      = trim( (string) ( $img['stored_alt'] ?? '' ) );
 			// One alt pasted onto several different photos describes at most one of them: poor for all.
 			$printed_good = self::good_alt( $printed, $file ) && ! isset( $shared[ Rules::alt_key( $printed ) ] );
 			$stored_good  = self::good_alt( $stored, $file ) && ! isset( $shared[ Rules::alt_key( $stored ) ] );
@@ -188,8 +188,8 @@ class Page_Review {
 		if ( ! $this->claude->has_api_key() ) {
 			return new \WP_Error( 'aisa_review_no_key', __( 'Add the Claude API key in Settings first.', 'ai-seo-assistant' ) );
 		}
-		$facts   = $row['facts'];
-		$page    = ( new Page_Data() )->get( (string) ( $facts['url'] ?? get_permalink( $post ) ) );
+		$facts = $row['facts'];
+		$page  = ( new Page_Data() )->get( (string) ( $facts['url'] ?? get_permalink( $post ) ) );
 		// Only images Claude can SEE are sent for alt text: one that cannot be loaded is left out, never guessed.
 		$blocks  = self::image_blocks( self::images_needing_alt( $facts ) );
 		$ids     = array_column( $blocks, 'id' );
@@ -429,7 +429,7 @@ class Page_Review {
 
 		// Alt text goes where the page PRINTS it (the post content: a Divi module's alt, an Image block's or
 		// classic <img>'s alt) AND to the Media Library. The content is written once, after every splice.
-		$content  = (string) get_post_field( 'post_content', $post_id, 'raw' );
+		$content   = (string) get_post_field( 'post_content', $post_id, 'raw' );
 		$new       = $content;
 		$alt_done  = [];
 		$page_only = 0;
@@ -451,9 +451,9 @@ class Page_Review {
 			} else {
 				++$page_only; // The library was already right; only the page changes.
 			}
-			$splice           = Alt_Writer::splice( $new, $id, (string) ( $alt['src'] ?? $alt['file'] ?? '' ), $value );
-			$new              = $splice['content'];
-			$alt_done[ $id ]  = [
+			$splice          = Alt_Writer::splice( $new, $id, (string) ( $alt['src'] ?? $alt['file'] ?? '' ), $value );
+			$new             = $splice['content'];
+			$alt_done[ $id ] = [
 				'value'   => $value,
 				'matches' => $splice['matches'],
 			];
@@ -531,9 +531,9 @@ class Page_Review {
 	/**
 	 * Whether each applied alt now shows on the page, and if not, why.
 	 *
-	 * @param int                                         $post_id Post ID.
+	 * @param int                                        $post_id Post ID.
 	 * @param array<int,array{value:string,matches:int}> $done    Alts applied, by attachment ID.
-	 * @param bool|string|null                            $saved   write_content()'s result (null: no content change).
+	 * @param bool|string|null                           $saved   write_content()'s result (null: no content change).
 	 * @return array<int,array{visible:bool,reason:string}>
 	 */
 	protected function verify_alts( int $post_id, array $done, $saved ): array {

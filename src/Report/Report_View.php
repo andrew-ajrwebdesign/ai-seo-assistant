@@ -143,8 +143,8 @@ class Report_View {
 	 */
 	protected static function header( array $snap, array $context ): string {
 		[ $total, $previous ] = self::totals( $snap['enquiries']['sources'] );
-		$late  = ! empty( $context['latest'] ) && self::is_late( $snap, (int) $context['now'] );
-		$stamp = $late
+		$late                 = ! empty( $context['latest'] ) && self::is_late( $snap, (int) $context['now'] );
+		$stamp                = $late
 			/* translators: 1: date and time the figures arrived, 2: how long ago. */
 			? sprintf( __( 'Last updated %1$s · %2$s ago', 'ai-seo-assistant' ), self::local( 'D j M', (int) $snap['generated_at'] ), human_time_diff( (int) $snap['generated_at'], (int) $context['now'] ) )
 			/* translators: %s: date and time the figures arrived. */
@@ -250,7 +250,7 @@ class Report_View {
 			$change = self::since( Format::change( $s['count'], $s['previous'] ), $since );
 			// A tap is not an enquiry, so its change is never shown as good or bad news.
 			$change['tone'] = 'flat';
-			$rows .= '<li class="aisa-source aisa-source--tap"><div class="aisa-source__line"><span class="aisa-source__label">' . esc_html( $s['label'] )
+			$rows          .= '<li class="aisa-source aisa-source--tap"><div class="aisa-source__line"><span class="aisa-source__label">' . esc_html( $s['label'] )
 				. '<span class="aisa-source__by">' . esc_html( __( 'Not added: most become the calls above', 'ai-seo-assistant' ) . $by ) . '</span></span>'
 				. '<span class="aisa-source__count">' . esc_html( number_format_i18n( $s['count'] ) ) . '</span>'
 				. self::change_html( $change ) . '</div></li>';
@@ -381,7 +381,7 @@ class Report_View {
 		if ( null === $ga4 ) {
 			return '';
 		}
-		$w     = $ga4['week'];
+		$w = $ga4['week'];
 		// "Actions on your website", never "people who got in touch": GA4 key events include taps, and a
 		// second enquiry-like total beside the headline would contradict it (Andrew, 2026-10-06).
 		$tiles = self::tile( __( 'Visits', 'ai-seo-assistant' ), $w['visits'], Format::PERCENT )

@@ -42,7 +42,16 @@ class Ui {
 	public static function enqueue(): void {
 		wp_enqueue_style( self::BASE_STYLE, AI_SEO_ASSISTANT_URL . 'assets/css/weekly-report.css', [ 'dashicons' ], AI_SEO_ASSISTANT_VERSION );
 		wp_enqueue_style( self::STYLE, AI_SEO_ASSISTANT_URL . 'assets/css/aisa-tools.css', [ self::BASE_STYLE ], AI_SEO_ASSISTANT_VERSION );
-		wp_enqueue_script( self::SCRIPT, AI_SEO_ASSISTANT_URL . 'assets/js/aisa-tools.js', [], AI_SEO_ASSISTANT_VERSION, [ 'strategy' => 'defer', 'in_footer' => true ] );
+		wp_enqueue_script(
+			self::SCRIPT,
+			AI_SEO_ASSISTANT_URL . 'assets/js/aisa-tools.js',
+			[],
+			AI_SEO_ASSISTANT_VERSION,
+			[
+				'strategy'  => 'defer',
+				'in_footer' => true,
+			]
+		);
 		wp_localize_script(
 			self::SCRIPT,
 			'aisaTools',

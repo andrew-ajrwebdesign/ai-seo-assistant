@@ -305,9 +305,9 @@ class Snapshot_V2 extends Snapshot {
 			if ( '' === $path ) {
 				continue;
 			}
-			$title    = self::text( $row['title'] ?? null, 120 );
+			$title        = self::text( $row['title'] ?? null, 120 );
 			$row['title'] = '' !== $title ? $title : $path;
-			$pages[]  = $row;
+			$pages[]      = $row;
 		}
 		$raw['top_pages'] = $pages;
 
@@ -319,6 +319,7 @@ class Snapshot_V2 extends Snapshot {
 	 *
 	 * @param mixed                          $raw     Raw pages block.
 	 * @param array<int,array<string,mixed>> $sources Clean enquiry sources (for in_total and labels).
+	 * @param string                         $site    The snapshot's site host (page URLs must be on it or the property's).
 	 * @return array{items:array<string,array<string,mixed>>,range:array<string,mixed>}
 	 */
 	protected static function pages( $raw, array $sources, string $site = '' ): array {
@@ -452,7 +453,7 @@ class Snapshot_V2 extends Snapshot {
 	/**
 	 * One page's GA4 block: visits, Google share, engagement, and enquiries started here (taps apart).
 	 *
-	 * @param mixed                              $raw    Raw block.
+	 * @param mixed                             $raw    Raw block.
 	 * @param array<string,array<string,mixed>> $by_key Sources by key.
 	 * @return array<string,mixed>|null
 	 */

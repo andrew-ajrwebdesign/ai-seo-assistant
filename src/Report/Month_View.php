@@ -33,11 +33,11 @@ class Month_View extends Report_View {
 	 * @param array<int,array<string,mixed>> $done    "What we did" rows: date, text, result, detail.
 	 */
 	public static function month( array $snap, array $context, array $done ): string {
-		$since = __( 'on last month', 'ai-seo-assistant' );
-		$html  = self::month_header( $snap, $context );
-		$html .= '<div class="aisa-row">' . self::month_enquiries( $snap, $since ) . self::month_note( $snap['note'] ?? null, $context ) . '</div>';
-		$html .= self::achieved( $done );
-		$html .= self::month_search( $snap, $since );
+		$since  = __( 'on last month', 'ai-seo-assistant' );
+		$html   = self::month_header( $snap, $context );
+		$html  .= '<div class="aisa-row">' . self::month_enquiries( $snap, $since ) . self::month_note( $snap['note'] ?? null, $context ) . '</div>';
+		$html  .= self::achieved( $done );
+		$html  .= self::month_search( $snap, $since );
 		$visits = self::month_visits( $snap['ga4'] ?? null, $snap, $since );
 		$ads    = self::month_ads( $snap['ads'] ?? null, $snap, $since );
 		if ( '' !== $visits || '' !== $ads ) {

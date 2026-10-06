@@ -118,14 +118,14 @@ class Spend {
 	 *
 	 * The anchor day is clamped to the month's length (a 31st anchor is the 30th in September).
 	 *
-	 * @param int $day Anchor day, 1–31.
-	 * @param int $now Unix time.
+	 * @param int           $day Anchor day, 1–31.
+	 * @param int           $now Unix time.
 	 * @param \DateTimeZone $tz Site timezone.
 	 * @return \DateTimeImmutable Midnight on the period's first day.
 	 */
 	public static function period_start( int $day, int $now, \DateTimeZone $tz ): \DateTimeImmutable {
-		$day   = max( 1, min( 31, $day ) );
-		$today = ( new \DateTimeImmutable( '@' . $now ) )->setTimezone( $tz )->setTime( 0, 0 );
+		$day        = max( 1, min( 31, $day ) );
+		$today      = ( new \DateTimeImmutable( '@' . $now ) )->setTimezone( $tz )->setTime( 0, 0 );
 		$this_month = self::anchor( (int) $today->format( 'Y' ), (int) $today->format( 'n' ), $day, $tz );
 		if ( $today >= $this_month ) {
 			return $this_month;
