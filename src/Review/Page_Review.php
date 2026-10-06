@@ -188,6 +188,10 @@ class Page_Review {
 		if ( null === $row || ! $post instanceof \WP_Post ) {
 			return new \WP_Error( 'aisa_review_not_scanned', __( 'Scan this page first.', 'ai-seo-assistant' ) );
 		}
+		if ( '' !== (string) $post->post_password ) {
+			// A password-protected page's words are private: never sent to Claude.
+			return new \WP_Error( 'aisa_review_protected', __( 'This page is password-protected, so it is not reviewed.', 'ai-seo-assistant' ) );
+		}
 		if ( ! $this->claude->has_api_key() ) {
 			return new \WP_Error( 'aisa_review_no_key', __( 'Add the Claude API key in Settings first.', 'ai-seo-assistant' ) );
 		}
@@ -361,7 +365,7 @@ class Page_Review {
 				$url,
 				[
 					'timeout'             => 8,
-					'redirection'         => 2,
+					'redirection'         => 0, // Never followed: a redirect is reported as one, and cannot lead off this site.
 					'sslverify'           => (bool) apply_filters( 'https_local_ssl_verify', false ),
 					'limit_response_size' => self::MAX_IMAGE_BYTES,
 				]
@@ -701,9 +705,8 @@ class Page_Review {
 	protected function rescan( int $post_id, array $known = [] ): void {
 		$scanner = new Scanner( $this->store );
 		$scanner->scan_page( $post_id, array_filter( $known, static fn( $v ) => '' !== $v && false === strpos( $v, '%%' ) ) );
-		$scanner->finalize();
-		set_transient( self::RESCAN_FLAG . $post_id, 1, HOUR_IN_SECONDS );
-		wp_schedule_single_event( time() + MINUTE_IN_SECONDS, \AJR\SEOAssistant\Scan\Scheduler::POST_HOOK, [ $post_id ] );
+		$scanner->finalize( false ); // No link checks or sitemap fetch in the agency's request.
+		set_transient( self::RESCAN_FLAG . $post_id, 1, HOUR_IN_SECONDS ); // The review rescans once more on its next load (Yoast's indexable is rebuilt at shutdown).
 	}
 
 	/**
@@ -718,7 +721,7 @@ class Page_Review {
 		delete_transient( self::RESCAN_FLAG . $post_id );
 		$scanner = new Scanner( $this->store );
 		$scanner->scan_page( $post_id );
-		$scanner->finalize();
+		$scanner->finalize( false );
 	}
 
 	/**

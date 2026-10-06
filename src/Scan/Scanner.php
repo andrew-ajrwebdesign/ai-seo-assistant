@@ -125,8 +125,8 @@ class Scanner {
 	 */
 	public function scan_page( int $post_id, array $known = [] ): string {
 		$post = get_post( $post_id );
-		if ( ! $post instanceof \WP_Post || 'publish' !== $post->post_status || ! in_array( $post->post_type, self::post_types(), true ) ) {
-			$this->store->delete( $post_id );
+		if ( ! $post instanceof \WP_Post || 'publish' !== $post->post_status || '' !== (string) $post->post_password || ! in_array( $post->post_type, self::post_types(), true ) ) {
+			$this->store->delete( $post_id ); // Password-protected pages are never scanned (their words are private).
 			return 'skipped';
 		}
 		$url     = (string) get_permalink( $post );
@@ -217,10 +217,14 @@ class Scanner {
 	/**
 	 * Phase 2: every page's issues, from every page's facts.
 	 *
+	 * @param bool $network False for an inline rescan: cached link checks and sitemap only.
 	 * @return array{pages:int,issues:int,rendered:int,fallback:int}
 	 */
-	public function finalize(): array {
-		$rows   = $this->store->all_facts();
+	public function finalize( bool $network = true ): array {
+		$rows = $this->store->all_facts();
+		if ( function_exists( 'update_meta_cache' ) ) {
+			update_meta_cache( 'post', array_keys( $rows ) ); // Page types and SEO meta, one query for all pages.
+		}
 		$data   = ( new Page_Data() )->all();
 		$titles = [];
 		$descs  = [];
@@ -251,9 +255,11 @@ class Scanner {
 			$known[ self::norm_path( $row['path'] ) ]   = true;
 			$by_path[ self::norm_path( $row['path'] ) ] = $id;
 		}
-		$redirects  = self::redirect_map();
-		$link_state = $this->check_unknown_links( array_keys( $links ), $known, $redirects );
-		$sitemap    = $this->sitemap();
+		$redirects = self::redirect_map();
+		// An inline rescan (Apply, Undo, a page type) reads only what is cached: no link checks, no sitemap
+		// fetch in the agency's request. The next queued run does the network part.
+		$link_state = $network ? $this->check_unknown_links( array_keys( $links ), $known, $redirects ) : self::cached_links();
+		$sitemap    = $network ? $this->sitemap() : self::cached_sitemap();
 		$services   = self::service_names();
 		$schema_on  = self::custom_schema_on();
 		$front      = (int) get_option( 'page_on_front' );
@@ -305,7 +311,9 @@ class Scanner {
 				}
 			}
 			$issues = Rules::evaluate( $f, $ctx );
-			$this->store->save_issues( $id, $issues );
+			if ( (string) wp_json_encode( $issues ) !== (string) ( $row['issues_json'] ?? '' ) ) {
+				$this->store->save_issues( $id, $issues ); // Unchanged pages are not rewritten.
+			}
 			$total    += count( $issues );
 			$rendered += 'rendered' === $row['source'] ? 1 : 0;
 		}
@@ -413,8 +421,7 @@ class Scanner {
 	 * @return array<string,int> Path => status.
 	 */
 	protected function check_unknown_links( array $targets, array $known, array $redirects ): array {
-		$cache   = get_transient( self::LINK_CACHE );
-		$cache   = is_array( $cache ) ? $cache : [];
+		$cache   = self::cached_links();
 		$checked = 0;
 		foreach ( $targets as $path ) {
 			if ( isset( $known[ $path ] ) || isset( $redirects[ $path ] ) || isset( $cache[ $path ] ) || '/' === $path ) {
@@ -426,9 +433,35 @@ class Scanner {
 			++$checked;
 			$cache[ $path ] = Page_Fetcher::fetch( home_url( $path ), 'HEAD' )['status'];
 		}
-		set_transient( self::LINK_CACHE, $cache, DAY_IN_SECONDS );
+		if ( $checked > 0 ) {
+			// Written only when something new was checked, so a day-old answer still expires a day after it
+			// was learned (rewriting it on every pass kept stale results alive for ever).
+			set_transient( self::LINK_CACHE, $cache, DAY_IN_SECONDS );
+		}
 
 		return $cache;
+	}
+
+	/**
+	 * The link checks already made (path => status), without checking anything new.
+	 *
+	 * @return array<string,int>
+	 */
+	protected static function cached_links(): array {
+		$cache = get_transient( self::LINK_CACHE );
+
+		return is_array( $cache ) ? $cache : [];
+	}
+
+	/**
+	 * The sitemap as last read, or null when it was not read (then nothing is "not in the sitemap").
+	 *
+	 * @return array<string,true>|null
+	 */
+	protected static function cached_sitemap(): ?array {
+		$cached = get_transient( self::SITEMAP_CACHE );
+
+		return is_array( $cached ) && is_array( $cached['urls'] ?? null ) ? $cached['urls'] : null;
 	}
 
 	/**
@@ -457,6 +490,11 @@ class Scanner {
 				if ( preg_match( '/\.xml(\?|$)/i', $loc ) && $kids < 30 ) {
 					++$kids;
 					$child = self::fetch_xml( $loc );
+					if ( '' === $child['html'] ) {
+						// A child sitemap that did not load: the list is incomplete, so no page may be called
+						// "not in the sitemap", and nothing is cached (the next run tries again).
+						return null;
+					}
 					foreach ( self::locs( $child['html'] ) as $page ) {
 						$urls[ Rules::bare_url( $page ) ] = true;
 					}
@@ -490,7 +528,7 @@ class Scanner {
 			$url,
 			[
 				'timeout'             => Page_Fetcher::TIMEOUT,
-				'redirection'         => 2,
+				'redirection'         => 0, // Never followed: a redirect is reported as one, and cannot lead off this site.
 				'sslverify'           => (bool) apply_filters( 'https_local_ssl_verify', false ),
 				'limit_response_size' => Page_Fetcher::MAX_BYTES,
 			]

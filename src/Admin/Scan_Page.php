@@ -642,7 +642,7 @@ class Scan_Page {
 		if ( null !== $row && $edited instanceof \WP_Post && $edited->post_modified_gmt > (string) $row['scanned_at'] ) {
 			$scanner = new Scanner();
 			$scanner->scan_page( $post_id );
-			$scanner->finalize();
+			$scanner->finalize( false );
 			$row = ( new Scan_Store() )->get( $post_id );
 		}
 		$post = get_post( $post_id );

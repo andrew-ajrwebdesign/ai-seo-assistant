@@ -199,11 +199,13 @@ class Scheduler {
 			if ( ! in_array( $post->ID, $queue['ids'], true ) ) {
 				$queue['ids'][] = (int) $post->ID;
 				++$queue['total'];
+				unset( $queue['finalized'] ); // The site-wide pass runs again after the new page.
 				update_option( self::QUEUE, $queue, false );
 			}
 			return;
 		}
-		wp_schedule_single_event( time() + MINUTE_IN_SECONDS, self::POST_HOOK, [ (int) $post->ID ] );
+		// One queued run for any number of saves (ten saves are not ten site-wide passes).
+		self::start( 'incremental', [ (int) $post->ID ] );
 	}
 
 	/**

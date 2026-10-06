@@ -45,7 +45,7 @@ class Page_Fetcher {
 		$args     = [
 			'method'              => $method,
 			'timeout'             => self::TIMEOUT,
-			'redirection'         => 2,
+			'redirection'         => 0, // Never followed: a redirect is reported as one, and cannot lead off this site.
 			'sslverify'           => (bool) apply_filters( 'https_local_ssl_verify', false ),
 			'limit_response_size' => self::MAX_BYTES,
 			'user-agent'          => 'AI SEO Assistant scan (' . home_url( '/' ) . ')',

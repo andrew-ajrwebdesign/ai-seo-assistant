@@ -153,16 +153,17 @@ class Scan_Store {
 		global $wpdb;
 		$table = Schema::table( 'scan' );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own table; the scan's site-wide pass.
-		$rows = (array) $wpdb->get_results( "SELECT post_id, path, post_type, scanned_at, source, facts FROM `{$table}`", ARRAY_A );
+		$rows = (array) $wpdb->get_results( "SELECT post_id, path, post_type, scanned_at, source, facts, issues FROM `{$table}`", ARRAY_A );
 		$out  = [];
 		foreach ( $rows as $row ) {
 			$facts                        = json_decode( (string) $row['facts'], true );
 			$out[ (int) $row['post_id'] ] = [
-				'path'       => (string) $row['path'],
-				'post_type'  => (string) $row['post_type'],
-				'scanned_at' => (string) $row['scanned_at'],
-				'source'     => (string) $row['source'],
-				'facts'      => is_array( $facts ) ? $facts : [],
+				'path'        => (string) $row['path'],
+				'post_type'   => (string) $row['post_type'],
+				'scanned_at'  => (string) $row['scanned_at'],
+				'source'      => (string) $row['source'],
+				'facts'       => is_array( $facts ) ? $facts : [],
+				'issues_json' => (string) ( $row['issues'] ?? '' ), // As stored, so an unchanged page is not rewritten.
 			];
 		}
 

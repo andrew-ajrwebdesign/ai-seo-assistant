@@ -237,7 +237,7 @@ class Tools_Actions {
 			// shows what Google reads with the new page type, not the old scan.
 			$scanner = new Scanner();
 			$scanner->scan_page( $post_id );
-			$scanner->finalize();
+			$scanner->finalize( false );
 		}
 		$this->back(
 			[
