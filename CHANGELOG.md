@@ -97,6 +97,8 @@ The product cut (decision 2026-10-06, `work/coding-projects/ai-seo-assistant/dec
   - A CI check (`bin/check-builder-safe.php`) fails on any `strip_shortcodes()` call in `src/` unless its line says `// builder-safe: <reason>`.
 - **Editor load is light on big sites.** Each site-wide pass stores the links to every page once (schema 6, `scan.inbound`). The editor box reads that page's list and one row, instead of every page's facts.
 - **A failed table update no longer stops scans.** The table version is stored only once the newest columns really exist. A scan write that fails is logged and saved again without the page text.
+  - Every write to the plugin's tables first brings them up to date (`Schema::ensure()`), so an update that skipped the table update still writes correctly. A zip uploaded over the installed plugin now runs the upgrade steps too.
+  - A CI check (`bin/check-schema-guard.php`) fails on a write to the plugin's tables in a function without that check, unless its line says `// schema-guard: <reason>`.
 
 ### Removed
 - Markdown for AI, Redirects, the `core_owns_*` hand-over filters, the Metadata report, Indexing Tools, the Google Search Console OAuth screen and client, and the runtime Composer dependency (no `vendor/` in the zip).

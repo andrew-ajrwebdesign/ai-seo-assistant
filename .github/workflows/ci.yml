@@ -33,6 +33,12 @@ jobs:
       - name: Builder-safe text check
         run: php bin/check-builder-safe.php
 
+      # A write to the plugin's tables must follow Schema::ensure() in its function (an update that skipped
+      # install() would write a column that is not there yet), unless the line says
+      # "// schema-guard: <reason>".
+      - name: Schema-guard check
+        run: php bin/check-schema-guard.php
+
   phpunit:
     name: Unit Tests
     runs-on: ubuntu-latest
