@@ -127,6 +127,85 @@ class AccessAlertTest extends TestCase {
 	}
 
 	/**
+	 * AJR Core 0.20's resolver (no arguments, current user only): with no list, AJR Core decides, and a
+	 * user other than the current one is refused while an agency user is current. When the current user is
+	 * NOT agency, 0.20 cannot say whether any Administrator is, so the no-lockout rule keeps every
+	 * Administrator's tools (round 2: the pre-4.4.0 behaviour; AJR Core 0.21 answers properly). A list,
+	 * once set, still wins over AJR Core.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_ajr_core_decides_when_no_list(): void {
+		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a stand-in for AJR Core's class, defined only in this process.
+		eval( 'namespace AJR\Core\Admin; class Support { public static $agency = [ 1 ]; public static function is_agency_user(): bool { return in_array( \get_current_user_id(), self::$agency, true ); } }' );
+		$current = 1;
+		\WP_Mock::userFunction( 'get_current_user_id' )->andReturnUsing( function () use ( &$current ) {
+			return $current;
+		} );
+
+		$this->assertTrue( $this->can( 1 ), 'agency-domain admin keeps the tools' );
+		$this->assertFalse( $this->can( 2 ), 'another admin is not asked about while user 1 is current' );
+
+		$current = 2;
+		Access::flush();
+		$this->assertTrue( $this->can( 2 ), 'client admin current: 0.20 cannot prove an agency admin exists, so no lockout' );
+
+		$this->options[ Access::OPTION ] = [ 2 ];
+		Access::flush();
+		$this->assertTrue( $this->can( 2 ), 'the list wins over AJR Core' );
+	}
+
+	/**
+	 * Round 2, CS 1: AJR Core active, no list, and AJR Core counts NO current Administrator as agency:
+	 * every Administrator keeps the tools (the old no-lockout guarantee); an Editor still never does. Once
+	 * one Administrator is agency, only that one has them.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_no_agency_admin_falls_back_to_every_admin(): void {
+		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- see above.
+		eval( 'namespace AJR\Core\Admin; class Support { public static $agency = []; public static function is_agency_user( ?\WP_User $user = null ): bool { return null !== $user && in_array( $user->ID, self::$agency, true ); } }' );
+		\WP_Mock::userFunction( 'get_current_user_id' )->andReturn( 1 );
+		$asked = 0;
+		\WP_Mock::userFunction( 'get_users' )->andReturnUsing(
+			function ( $args ) use ( &$asked ) {
+				++$asked;
+				$this->assertSame( 'administrator', $args['role'] );
+				$this->assertSame( 100, $args['number'], 'bounded' );
+				return [ get_userdata( 1 ), get_userdata( 2 ) ];
+			}
+		);
+
+		$this->assertTrue( $this->can( 1 ), 'no agency admin: admin 1 keeps the tools' );
+		$this->assertTrue( $this->can( 2 ), 'no agency admin: admin 2 keeps the tools' );
+		$this->assertFalse( $this->can( 3, false ), 'an Editor never' );
+		$this->assertSame( 1, $asked, 'Administrators listed once per request' );
+
+		\AJR\Core\Admin\Support::$agency = [ 2 ];
+		Access::flush();
+		$this->assertFalse( $this->can( 1 ), 'an agency admin exists: the client admin loses the tools' );
+		$this->assertTrue( $this->can( 2 ) );
+	}
+
+	/**
+	 * The contract's later resolver (takes a user): any user can be answered.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_ajr_core_resolver_with_user_argument(): void {
+		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- see above.
+		eval( 'namespace AJR\Core\Admin; class Support { public static function is_agency_user( ?\WP_User $user = null ): bool { return null !== $user && 2 === $user->ID; } }' );
+		\WP_Mock::userFunction( 'get_current_user_id' )->andReturn( 1 );
+		\WP_Mock::userFunction( 'get_users' )->andReturnUsing( fn() => [ get_userdata( 1 ), get_userdata( 2 ) ] );
+
+		$this->assertFalse( $this->can( 1 ) );
+		$this->assertTrue( $this->can( 2 ), 'answered for a user who is not the current one' );
+	}
+
+	/**
 	 * Other capabilities pass through untouched.
 	 */
 	public function test_other_caps_untouched(): void {

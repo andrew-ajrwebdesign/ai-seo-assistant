@@ -6,12 +6,20 @@
 namespace AJR\SEOAssistant\Admin;
 
 use AJR\SEOAssistant\Adapters\SEO_Adapter_Resolver;
+use AJR\SEOAssistant\Core\Utils;
 
 defined( 'ABSPATH' ) || exit;
 
 class Indexing_Tools_Page {
 
 	private $seo_adapter;
+
+	/**
+	 * Whether the last page query hit Utils::LIST_CAP.
+	 *
+	 * @var bool
+	 */
+	protected $truncated = false;
 
 	public function __construct( $seo_adapter ) {
 		$this->seo_adapter = $seo_adapter;
@@ -67,6 +75,12 @@ class Indexing_Tools_Page {
 		?>
 		<div class="wrap ai-seo-indexing-wrap">
 			<h1>Indexing Tools</h1>
+
+			<?php
+			if ( $this->truncated ) {
+				Utils::render_list_cap_notice();
+			}
+			?>
 
 			<p>
 				Review all pages and quickly apply noindex to system, legal, WooCommerce, account, checkout, and utility pages.
@@ -342,19 +356,27 @@ class Indexing_Tools_Page {
 		$system_pages = $this->get_system_page_map();
 
 		$query = new \WP_Query(
-			[
-				'post_type'      => 'page',
-				'post_status'    => [ 'publish', 'draft', 'pending', 'private' ],
-				'posts_per_page' => -1,
-				'orderby'        => 'menu_order title',
-				'order'          => 'ASC',
-				'fields'         => 'ids',
-			]
+			Utils::capped_list_args(
+				[
+					'post_type'   => 'page',
+					'post_status' => [ 'publish', 'draft', 'pending', 'private' ],
+					'orderby'     => 'menu_order title',
+					'order'       => 'ASC',
+					'fields'      => 'ids',
+				]
+			)
 		);
+
+		$ids             = array_map( 'absint', $query->posts );
+		$this->truncated = count( $ids ) > Utils::LIST_CAP;
+		$ids             = array_slice( $ids, 0, Utils::LIST_CAP );
+
+		// IDs only, so WP_Query primed nothing: one meta query for every row's noindex flag, not one each.
+		update_meta_cache( 'post', $ids );
 
 		$rows = [];
 
-		foreach ( $query->posts as $post_id ) {
+		foreach ( $ids as $post_id ) {
 			$post_id = absint( $post_id );
 
 			if ( ! $post_id ) {

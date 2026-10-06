@@ -52,6 +52,23 @@ class PushTest extends TestCase {
 				return true;
 			}
 		);
+		\WP_Mock::userFunction( 'add_option' )->andReturnUsing(
+			function ( $n, $v ) {
+				if ( array_key_exists( $n, $this->options ) ) {
+					return false;
+				}
+				$this->options[ $n ] = $v;
+				return true;
+			}
+		);
+		\WP_Mock::userFunction( 'delete_option' )->andReturnUsing(
+			function ( $n ) {
+				unset( $this->options[ $n ] );
+				return true;
+			}
+		);
+		\WP_Mock::userFunction( 'wp_salt' )->andReturnUsing( fn( $scheme ) => 'test-salt-' . $scheme );
+		\AJR\SEOAssistant\Core\Secret_Store::reset();
 		\WP_Mock::userFunction( 'get_transient' )->andReturnUsing( fn( $n ) => $this->transients[ $n ] ?? false );
 		\WP_Mock::userFunction( 'set_transient' )->andReturnUsing(
 			function ( $n, $v ) {
@@ -109,7 +126,7 @@ class PushTest extends TestCase {
 	}
 
 	/**
-	 * A generated key is long, URL-safe and stored un-autoloaded; each one is new.
+	 * A generated key is long and URL-safe; each one is new; it is stored SEALED, never as itself (4.4.0).
 	 */
 	public function test_generate(): void {
 		$a = Push_Key::generate();
@@ -117,7 +134,21 @@ class PushTest extends TestCase {
 
 		$this->assertMatchesRegularExpression( '/^[A-Za-z0-9_-]{43}$/', $a );
 		$this->assertNotSame( $a, $b );
-		$this->assertSame( $b, $this->options[ Push_Key::OPTION ] );
+		$stored = $this->options[ Push_Key::OPTION ];
+		$this->assertTrue( \AJR\SEOAssistant\Core\Secret_Store::is_envelope( $stored ), 'stored as an envelope' );
+		$this->assertStringNotContainsString( $b, serialize( $stored ), 'the key itself is nowhere in the row' ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- what the row would hold.
+		$this->assertSame( $b, Push_Key::get(), 'and it reads back' );
+	}
+
+	/**
+	 * A push signed with a key that is stored sealed is accepted (the endpoint reads through Secret_Store).
+	 */
+	public function test_sealed_key_verifies_a_push(): void {
+		unset( $this->options[ Push_Key::OPTION ] );
+		$key = Push_Key::generate();
+
+		$result = ( new Push_Endpoint( new Snapshot_Store() ) )->handle( $this->request( $this->body(), $key ) );
+		$this->assertSame( 200, $result->get_status() );
 	}
 
 	/**

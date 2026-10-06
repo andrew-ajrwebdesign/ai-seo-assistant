@@ -9,7 +9,7 @@
  * password is involved: the key does one thing only — let this site's reports in.
  *
  * WHERE THE KEY LIVES. Generated on the site (random_bytes, shown ONCE on the report screen, then never
- * printed again) and stored in a non-autoloaded option; a wp-config constant AI_SEO_ASSISTANT_REPORT_KEY
+ * printed again) and stored ENCRYPTED (Core\Secret_Store, 4.4.0) in a non-autoloaded option; a wp-config constant AI_SEO_ASSISTANT_REPORT_KEY
  * wins when set, for sites that keep secrets out of the database. Andrew copies it into the keys file
  * retainer-scan reads (API Keys/report-push.env) — it is never sent anywhere by the site.
  *
@@ -21,6 +21,8 @@
 declare( strict_types=1 );
 
 namespace AJR\SEOAssistant\Report;
+
+use AJR\SEOAssistant\Core\Secret_Store;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -51,9 +53,8 @@ class Push_Key {
 		if ( defined( self::CONSTANT ) && is_string( constant( self::CONSTANT ) ) ) {
 			return trim( (string) constant( self::CONSTANT ) );
 		}
-		$key = get_option( self::OPTION, '' );
-
-		return is_string( $key ) ? $key : '';
+		// Sealed at rest since 4.4.0. Encrypted, not hashed: verifying the HMAC needs the key itself.
+		return Secret_Store::get( self::OPTION );
 	}
 
 	/**
@@ -78,9 +79,9 @@ class Push_Key {
 	 */
 	public static function generate(): string {
 		$key = rtrim( strtr( base64_encode( random_bytes( 32 ) ), '+/', '-_' ), '=' ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- encoding random bytes into a copyable key, not obfuscation.
-		update_option( self::OPTION, $key, false );
 
-		return $key;
+		// A key that could not be stored must not be shown as if it works.
+		return Secret_Store::set( self::OPTION, $key ) ? $key : '';
 	}
 
 	/**

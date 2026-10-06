@@ -9,6 +9,55 @@ defined( 'ABSPATH' ) || exit;
 
 class Utils {
 
+	/**
+	 * Most posts an admin list screen (audit, metadata report, indexing tools) loads at once.
+	 *
+	 * Until 4.4.0 those screens asked for every post (posts_per_page -1); on a large site that is
+	 * thousands of full post rows in memory to fill a page of 20. The screens filter by SEO meta in PHP,
+	 * so they cannot paginate in SQL; they load the first LIST_CAP and say so when there are more.
+	 */
+	const LIST_CAP = 500;
+
+	/**
+	 * WP_Query arguments for a capped admin list: one more than LIST_CAP (to tell when it was cut), no
+	 * SQL_CALC_FOUND_ROWS, no term cache (no list screen reads terms).
+	 *
+	 * Full post objects are still loaded where a screen prints titles and links: asking for IDs only
+	 * would turn the one query into one get_post() query per row.
+	 *
+	 * @param array $args Screen-specific arguments.
+	 * @return array
+	 */
+	public static function capped_list_args( array $args ) {
+		return array_merge(
+			$args,
+			[
+				'posts_per_page'         => self::LIST_CAP + 1,
+				'no_found_rows'          => true,
+				'update_post_term_cache' => false,
+				'ignore_sticky_posts'    => true,
+			]
+		);
+	}
+
+	/**
+	 * The notice a capped list prints when there were more posts than it loaded.
+	 *
+	 * @return void
+	 */
+	public static function render_list_cap_notice() {
+		printf(
+			'<div class="notice notice-warning inline"><p>%s</p></div>',
+			esc_html(
+				sprintf(
+					/* translators: %d: number of posts loaded. */
+					__( 'This site has more than %1$d posts of these types: only the first %1$d are listed. Filter by post type to narrow the list.', 'ai-seo-assistant' ),
+					self::LIST_CAP
+				)
+			)
+		);
+	}
+
 	public static function trim_to_length( $text, $max_length ) {
 		$text = trim( wp_strip_all_tags( (string) $text ) );
 
@@ -139,6 +188,19 @@ class Utils {
 		$text = preg_replace(
 			'/GOCSPX-[A-Za-z0-9_\-]+/',
 			'GOCSPX-***masked***',
+			$text
+		);
+
+		// Google OAuth access tokens (ya29.…) and refresh tokens (1//…), should an error body echo one.
+		$text = preg_replace(
+			'/\bya29\.[A-Za-z0-9_\-.]+/',
+			'ya29.***masked***',
+			$text
+		);
+
+		$text = preg_replace(
+			'#\b1//[A-Za-z0-9_\-]{8,}#',
+			'1//***masked***',
 			$text
 		);
 

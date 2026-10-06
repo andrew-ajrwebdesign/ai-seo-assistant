@@ -5,6 +5,7 @@
 
 namespace AJR\SEOAssistant\GSC;
 
+use AJR\SEOAssistant\Core\Secret_Store;
 use AJR\SEOAssistant\Core\Utils;
 
 defined( 'ABSPATH' ) || exit;
@@ -30,7 +31,7 @@ class GSC_Client {
 			return trim( (string) AI_SEO_ASSISTANT_GOOGLE_CLIENT_ID );
 		}
 
-		return trim( (string) get_option( self::OPTION_CLIENT_ID, '' ) );
+		return trim( Secret_Store::get( self::OPTION_CLIENT_ID ) );
 	}
 
 	public function get_client_secret() {
@@ -38,7 +39,25 @@ class GSC_Client {
 			return trim( (string) AI_SEO_ASSISTANT_GOOGLE_CLIENT_SECRET );
 		}
 
-		return trim( (string) get_option( self::OPTION_CLIENT_SECRET, '' ) );
+		return trim( Secret_Store::get( self::OPTION_CLIENT_SECRET ) );
+	}
+
+	/**
+	 * Whether the client ID comes from wp-config.php (the screen then cannot replace it).
+	 *
+	 * @return bool
+	 */
+	public function client_id_from_config() {
+		return defined( 'AI_SEO_ASSISTANT_GOOGLE_CLIENT_ID' ) && AI_SEO_ASSISTANT_GOOGLE_CLIENT_ID;
+	}
+
+	/**
+	 * Whether the client secret comes from wp-config.php.
+	 *
+	 * @return bool
+	 */
+	public function client_secret_from_config() {
+		return defined( 'AI_SEO_ASSISTANT_GOOGLE_CLIENT_SECRET' ) && AI_SEO_ASSISTANT_GOOGLE_CLIENT_SECRET;
 	}
 
 	public function has_credentials() {
@@ -51,10 +70,13 @@ class GSC_Client {
 		return ! empty( $token_data['access_token'] ) || ! empty( $token_data['refresh_token'] );
 	}
 
+	/**
+	 * The OAuth token data (access and refresh token), sealed at rest since 4.4.0.
+	 *
+	 * @return array
+	 */
 	public function get_token_data() {
-		$token_data = get_option( self::OPTION_TOKEN_DATA, [] );
-
-		return is_array( $token_data ) ? $token_data : [];
+		return Secret_Store::get_array( self::OPTION_TOKEN_DATA );
 	}
 
 	public function save_token_data( $token_data ) {
@@ -68,15 +90,52 @@ class GSC_Client {
 			$token_data['expires_at'] = time() + absint( $token_data['expires_in'] ) - 60;
 		}
 
-		update_option( self::OPTION_TOKEN_DATA, $token_data, false );
+		Secret_Store::set_array( self::OPTION_TOKEN_DATA, (array) $token_data );
 	}
 
+	/**
+	 * Disconnect: revoke the grant at Google, then delete the tokens and cached data.
+	 *
+	 * Deleting the tokens alone left the grant alive at Google, so a refresh token copied out of an old
+	 * backup kept working. The revoke is best effort: a failure (offline, already revoked) never blocks
+	 * the local delete.
+	 */
 	public function delete_connection() {
+		self::revoke( $this->get_token_data() );
 		delete_option( self::OPTION_TOKEN_DATA );
 		delete_option( self::OPTION_SELECTED_SITE );
 		delete_option( self::OPTION_CACHE );
 		delete_option( self::OPTION_LAST_SYNC );
 		delete_option( self::OPTION_LAST_SYNC_RANGE );
+	}
+
+	/**
+	 * Revoke an OAuth grant at Google (best effort).
+	 *
+	 * Revoking the refresh token ends the whole grant, access tokens included; with no refresh token the
+	 * access token is revoked instead. Static so uninstall.php can call it without building the client.
+	 *
+	 * @param array $token_data Token data as stored.
+	 * @return bool Whether Google confirmed the revoke (false also when there was nothing to revoke).
+	 */
+	public static function revoke( array $token_data ) {
+		$token = ! empty( $token_data['refresh_token'] ) ? $token_data['refresh_token'] : ( $token_data['access_token'] ?? '' );
+
+		if ( ! is_string( $token ) || '' === $token ) {
+			return false;
+		}
+
+		$response = wp_remote_post(
+			'https://oauth2.googleapis.com/revoke',
+			[
+				// Best effort, and it runs inside the Disconnect click and the uninstall request: a slow Google
+				// must not hold either for long; a revoke that times out changes nothing locally.
+				'timeout' => 3,
+				'body'    => [ 'token' => $token ],
+			]
+		);
+
+		return ! is_wp_error( $response ) && 200 === (int) wp_remote_retrieve_response_code( $response );
 	}
 
 	public function get_auth_url( $state ) {

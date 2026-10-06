@@ -14,6 +14,13 @@ class Report_Page {
 
 	private $tsf_adapter;
 
+	/**
+	 * Whether the last list query hit Utils::LIST_CAP.
+	 *
+	 * @var bool
+	 */
+	protected $truncated = false;
+
 	public function __construct( $tsf_adapter ) {
 		$this->tsf_adapter = $tsf_adapter;
 	}
@@ -63,6 +70,11 @@ class Report_Page {
 		$available_post_types = get_post_types( [ 'public' => true ], 'objects' );
 		?>
 		<div class="wrap ai-seo-assistant-report-wrap">
+			<?php
+			if ( $this->truncated ) {
+				Utils::render_list_cap_notice();
+			}
+			?>
 			<div class="ai-seo-assistant-report-actions no-print">
 				<button type="button" class="button button-primary" onclick="window.print();">
 					Print / Save as PDF
@@ -188,20 +200,23 @@ class Report_Page {
 		$items = [];
 
 		$query = new \WP_Query(
-			[
-				'post_type'      => $post_types,
-				'post_status'    => [ 'publish', 'draft', 'pending', 'private' ],
-				'posts_per_page' => -1,
-				'orderby'        => 'menu_order title',
-				'order'          => 'ASC',
-			]
+			Utils::capped_list_args(
+				[
+					'post_type'   => $post_types,
+					'post_status' => [ 'publish', 'draft', 'pending', 'private' ],
+					'orderby'     => 'menu_order title',
+					'order'       => 'ASC',
+				]
+			)
 		);
+
+		$this->truncated = count( $query->posts ) > Utils::LIST_CAP;
 
 		if ( ! $query->have_posts() ) {
 			return $items;
 		}
 
-		while ( $query->have_posts() ) {
+		while ( $query->have_posts() && $query->current_post + 1 < Utils::LIST_CAP ) {
 			$query->the_post();
 
 			$post_id = get_the_ID();

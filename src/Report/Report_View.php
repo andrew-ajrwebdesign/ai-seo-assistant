@@ -28,8 +28,8 @@ defined( 'ABSPATH' ) || exit;
  */
 class Report_View {
 
-	/** A week counts as late this many days after its Monday update was due (matches Stale_Alert). */
-	public const LATE_AFTER_DAYS = 8;
+	/** A week counts as late this many days after its Monday update was due: Stale_Alert's rule, one number. */
+	public const LATE_AFTER_DAYS = Stale_Alert::LATE_AFTER_DAYS;
 
 	/**
 	 * The whole report for one week.

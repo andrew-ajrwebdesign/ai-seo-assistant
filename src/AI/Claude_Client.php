@@ -7,6 +7,7 @@
 
 namespace AJR\SEOAssistant\AI;
 
+use AJR\SEOAssistant\Core\Secret_Store;
 use AJR\SEOAssistant\Core\Utils;
 
 defined( 'ABSPATH' ) || exit;
@@ -26,7 +27,8 @@ defined( 'ABSPATH' ) || exit;
  * dependency.
  *
  * The API key is read from the AI_SEO_ASSISTANT_ANTHROPIC_API_KEY constant in
- * wp-config.php first, and from the settings option only as a fallback.
+ * wp-config.php first, and from the encrypted settings option only as a
+ * fallback (Core\Secret_Store, 4.4.0).
  */
 class Claude_Client {
 
@@ -160,7 +162,8 @@ class Claude_Client {
 			return trim( (string) constant( self::CONFIG_CONSTANT ) );
 		}
 
-		return trim( (string) get_option( self::OPTION_API_KEY, '' ) );
+		// Sealed at rest; a key that cannot be opened (salts rotated) reads as no key, never as an error.
+		return trim( Secret_Store::get( self::OPTION_API_KEY ) );
 	}
 
 	/**
@@ -184,8 +187,9 @@ class Claude_Client {
 	/**
 	 * A safe-to-display hint for the configured key.
 	 *
-	 * Shows the non-secret "sk-ant-api" prefix and the last four characters
-	 * only, so an admin can tell which key is in use without exposing it.
+	 * The last four characters only ("…AbCd"), so an admin can tell which key
+	 * is in use without exposing it. (Before 4.4.0 it also showed the first
+	 * ten; nothing needs them.)
 	 *
 	 * @return string
 	 */
@@ -200,7 +204,7 @@ class Claude_Client {
 			return __( 'no key saved', 'ai-seo-assistant' );
 		}
 
-		return substr( $api_key, 0, 10 ) . '...' . substr( $api_key, -4 );
+		return strlen( $api_key ) >= 8 ? '…' . substr( $api_key, -4 ) : '…';
 	}
 
 	/**
