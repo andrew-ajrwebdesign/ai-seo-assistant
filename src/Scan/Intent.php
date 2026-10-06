@@ -63,8 +63,8 @@ class Intent {
 	/** Option: the push the Claude pass last ran for ("end|generated_at"), and its result. Not autoloaded. */
 	public const DONE_OPTION = 'ai_seo_assistant_intent_done';
 
-	/** Most searches sent in the one call per push. */
-	public const MAX_PER_PASS = 400;
+	/** Most searches sent in one call (a push sends as many calls as it needs, one per scan step). */
+	public const MAX_PER_PASS = 150;
 
 	/** Most searches kept in the cache. */
 	public const MAX_CACHE = 5000;
@@ -277,11 +277,12 @@ class Intent {
 		}
 		arsort( $shown );
 
-		return array_slice( array_keys( $shown ), 0, self::MAX_PER_PASS );
+		return array_keys( $shown ); // run_pass() sends them in batches.
 	}
 
 	/**
-	 * Once per push: send the searches the rules leave to Claude (Haiku 4.5), cache the answers.
+	 * One batch of the searches the rules leave, to Claude (Haiku 4.5); the answers are cached batch by
+	 * batch. 'working' while more remain (the scan's next step sends the next batch), 'done' at the end.
 	 *
 	 * @param Claude_Client|null $client Client (null: a new one).
 	 * @return array{state:string,sent:int,sorted:int,cost:float}
@@ -293,13 +294,21 @@ class Intent {
 		// A new push, or changed rules, runs the pass again (rules first, Claude only for what they leave).
 		$key  = $meta['end'] . '|' . $meta['generated_at'] . '|' . md5( (string) wp_json_encode( [ $rules, $brand ] ) );
 		$done = get_option( self::DONE_OPTION, [] );
+		$done = is_array( $done ) ? $done : [];
 		$out  = [
 			'state'  => 'skipped',
 			'sent'   => 0,
 			'sorted' => 0,
 			'cost'   => 0.0,
 		];
-		if ( '' === $meta['end'] || ( is_array( $done ) && ( $done['key'] ?? '' ) === $key ) ) {
+		if ( '' === $meta['end'] || ( ( $done['key'] ?? '' ) === $key && empty( $done['started_at'] ) && 'working' !== ( $done['state'] ?? '' ) ) ) {
+			return $out;
+		}
+		// A batch was sent for this push and its request never came back (killed by a time limit): it may
+		// have been billed, so the pass stops here rather than pay again; the rest stay "not sorted".
+		if ( ( $done['key'] ?? '' ) === $key && ! empty( $done['started_at'] ) ) {
+			$out['state'] = 'interrupted';
+			update_option( self::DONE_OPTION, [ 'key' => $key ] + $out + [ 'at' => time() ], false );
 			return $out;
 		}
 		$client = $client ?? new Claude_Client();
@@ -316,21 +325,35 @@ class Intent {
 			}
 		}
 		$cache = self::prune( self::cache(), $rules, $brand );
-		update_option( self::CACHE_OPTION, $cache, false );
-		$todo = self::pending( $queries, $rules, $brand, $cache );
+		$todo  = self::pending( $queries, $rules, $brand, $cache );
 		if ( [] === $todo ) {
-			$out['state'] = 'nothing_to_sort';
+			update_option( self::CACHE_OPTION, $cache, false );
+			$out['state'] = 'done';
 			update_option( self::DONE_OPTION, [ 'key' => $key ] + $out + [ 'at' => time() ], false );
 			return $out;
 		}
+		$batch = array_slice( $todo, 0, self::batch_size( $done ) );
 
-		$result = $client->generate_json( self::prompt( $todo ), self::schema(), 'intent' );
+		// The "started" marker goes in BEFORE the call (see above).
+		update_option(
+			self::DONE_OPTION,
+			[
+				'key'        => $key,
+				'state'      => 'working',
+				'started_at' => time(),
+			] + array_intersect_key( $done, [ 'tokens_per_item' => 1 ] ),
+			false
+		);
+		$result = $client->generate_json( self::prompt( $batch ), self::schema(), 'intent' );
 		if ( is_wp_error( $result ) ) {
 			$out['state'] = 'failed';
-			// Not marked done: the next scan finish tries again.
+			$out['cost']  = $client->get_last_cost();
+			// Not retried for this push when the call may have been billed (Spend counted it); a refused
+			// connection (nothing sent, nothing counted) is tried again at the next step.
+			update_option( self::DONE_OPTION, [ 'key' => $key ] + $out + [ 'at' => time() ] + ( $out['cost'] > 0 ? [] : [ 'state' => 'working' ] ), false );
 			return $out;
 		}
-		$sent = array_flip( $todo );
+		$sent = array_flip( $batch );
 		foreach ( (array) ( $result['items'] ?? [] ) as $item ) {
 			$q      = self::key( (string) ( $item['q'] ?? '' ) );
 			$intent = (string) ( $item['intent'] ?? '' );
@@ -342,13 +365,36 @@ class Intent {
 		if ( count( $cache ) > self::MAX_CACHE ) {
 			$cache = array_slice( $cache, -self::MAX_CACHE, null, true );
 		}
-		update_option( self::CACHE_OPTION, $cache, false );
-		$out['state'] = 'done';
-		$out['sent']  = count( $todo );
+		update_option( self::CACHE_OPTION, $cache, false ); // Kept batch by batch: a later failure loses nothing.
+		$usage        = $client->get_last_usage();
+		$per_item     = $out['sorted'] > 0 && ! empty( $usage['output_tokens'] ) ? (int) ceil( $usage['output_tokens'] / $out['sorted'] ) : (int) ( $done['tokens_per_item'] ?? 0 );
+		$more         = count( $todo ) > count( $batch );
+		$out['state'] = $more ? 'working' : 'done';
+		$out['sent']  = count( $batch );
 		$out['cost']  = $client->get_last_cost();
-		update_option( self::DONE_OPTION, [ 'key' => $key ] + $out + [ 'at' => time() ], false );
+		update_option(
+			self::DONE_OPTION,
+			[ 'key' => $key ] + $out + [
+				'at'              => time(),
+				'tokens_per_item' => $per_item,
+			],
+			false
+		);
 
 		return $out;
+	}
+
+	/**
+	 * How many searches one call may carry: at most 150, and few enough that the answer fits in 60% of the
+	 * intent task's max_tokens at the output measured per item last time (25 tokens until measured).
+	 *
+	 * @param array<string,mixed> $done DONE_OPTION.
+	 */
+	public static function batch_size( array $done ): int {
+		$per_item = max( 10, (int) ( $done['tokens_per_item'] ?? 25 ) );
+		$room     = (int) floor( 0.6 * (int) Claude_Client::TASKS['intent']['max_tokens'] / $per_item );
+
+		return max( 10, min( self::MAX_PER_PASS, $room ) );
 	}
 
 	/**

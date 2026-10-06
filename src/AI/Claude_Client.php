@@ -101,6 +101,22 @@ class Claude_Client {
 	protected $last_cost = 0.0;
 
 	/**
+	 * The most recent reply's usage (input_tokens, output_tokens…); [] before one arrives.
+	 *
+	 * @var array<string,int>
+	 */
+	protected $last_usage = [];
+
+	/**
+	 * Usage of the most recent reply (the intent pass sizes its batches from output tokens per item).
+	 *
+	 * @return array<string,int>
+	 */
+	public function get_last_usage(): array {
+		return $this->last_usage;
+	}
+
+	/**
 	 * Cost of the most recent reply in dollars.
 	 *
 	 * @return float
@@ -403,7 +419,8 @@ class Claude_Client {
 
 		// Every billed reply is counted, a refused or cut-off one included: Anthropic bills its tokens too.
 		if ( isset( $data['usage'] ) && is_array( $data['usage'] ) ) {
-			$this->last_cost = Spend::record( isset( $data['model'] ) ? (string) $data['model'] : $model, $data['usage'] );
+			$this->last_cost  = Spend::record( isset( $data['model'] ) ? (string) $data['model'] : $model, $data['usage'] );
+			$this->last_usage = array_map( 'intval', array_filter( $data['usage'], 'is_numeric' ) );
 		}
 
 		$stop_reason = $data['stop_reason'] ?? '';

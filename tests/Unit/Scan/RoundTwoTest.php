@@ -294,6 +294,117 @@ class RoundTwoTest extends TestCase {
 	}
 
 	/**
+	 * The intent pass: batches of at most 150 sized from the measured output per item; partial answers kept;
+	 * a batch whose request never came back (the "started" marker is still there) is not sent again.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_intent_pass_batches(): void {
+		$this->assertSame( 150, Intent::batch_size( [] ) );
+		$this->assertSame( 60, Intent::batch_size( [ 'tokens_per_item' => 80 ] ), '60% of 8,000 tokens at 80 a search' );
+
+		$this->options[ \AJR\SEOAssistant\Search\Page_Data::META_OPTION ] = [
+			'start'        => '2026-07-06',
+			'end'          => '2026-10-04',
+			'generated_at' => 1,
+			'count'        => 1,
+		];
+		$queries = [];
+		for ( $i = 0; $i < 200; $i++ ) {
+			$queries[] = [ 'query' => 'zzq' . $i, 'clicks' => 0, 'impressions' => 200 - $i ];
+		}
+		global $wpdb;
+		$wpdb = new class( $queries ) { // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test double.
+			/**
+			 * Prefix.
+			 *
+			 * @var string
+			 */
+			public $prefix = 'wp_';
+
+			/**
+			 * Page rows.
+			 *
+			 * @var array<int,array<string,string>>
+			 */
+			public $rows;
+
+			/**
+			 * Build.
+			 *
+			 * @param array<int,array<string,mixed>> $q Queries.
+			 */
+			public function __construct( $q ) {
+				$this->rows = [
+					[
+						'path' => '/a/',
+						'data' => json_encode( [ 'gsc' => [ 'queries' => $q ] ] ), // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- test double.
+					],
+				];
+			}
+
+			/**
+			 * Rows.
+			 */
+			public function get_results() {
+				return $this->rows;
+			}
+		};
+		\WP_Mock::userFunction( 'wp_json_encode' )->andReturnUsing( 'json_encode' );
+		\WP_Mock::userFunction( 'wp_timezone' )->andReturn( new \DateTimeZone( 'UTC' ) );
+		\WP_Mock::userFunction( 'wp_specialchars_decode' )->andReturnArg( 0 );
+		\WP_Mock::userFunction( 'get_bloginfo' )->andReturn( 'Example Realty' );
+		\WP_Mock::userFunction( 'home_url' )->andReturn( 'https://examplerealty.example' );
+		\WP_Mock::userFunction( 'wp_parse_url' )->andReturnUsing( fn( $u, $c = -1 ) => parse_url( $u, $c ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- test double.
+		\WP_Mock::userFunction( 'is_wp_error' )->andReturnUsing( fn( $v ) => $v instanceof \WP_Error );
+		$client = new class() extends \AJR\SEOAssistant\AI\Claude_Client {
+			/**
+			 * Batches seen.
+			 *
+			 * @var array<int,int>
+			 */
+			public $batches = [];
+
+			/**
+			 * Has a key.
+			 */
+			public function has_api_key() {
+				return true;
+			}
+
+			/**
+			 * Answer every search as informational.
+			 *
+			 * @param string              $prompt Prompt.
+			 * @param array<string,mixed> $schema Schema.
+			 * @param string              $task   Task.
+			 * @param array<int,mixed>    $images Images.
+			 */
+			public function generate_json( $prompt, array $schema, $task = 'metadata', array $images = [] ) {
+				preg_match_all( '/^zzq\d+$/m', $prompt, $m );
+				$this->batches[]  = count( $m[0] );
+				$this->last_usage = [ 'output_tokens' => 20 * count( $m[0] ) ];
+				return [ 'items' => array_map( static fn( $q ) => [ 'q' => $q, 'intent' => 'informational' ], $m[0] ) ];
+			}
+		};
+		$first = Intent::run_pass( $client );
+		$this->assertSame( 'working', $first['state'] );
+		$this->assertSame( 150, $first['sent'] );
+		$this->assertCount( 150, $this->options[ Intent::CACHE_OPTION ], 'the first batch is kept before the next is sent' );
+		$second = Intent::run_pass( $client );
+		$this->assertSame( 'done', $second['state'] );
+		$this->assertSame( [ 150, 50 ], $client->batches );
+		$this->assertSame( 'skipped', Intent::run_pass( $client )['state'], 'done for this push' );
+
+		// A batch that never came back: the marker is there; nothing is sent again for this push.
+		$this->options[ Intent::DONE_OPTION ]['started_at'] = time();
+		$this->options[ Intent::CACHE_OPTION ]              = [];
+		$this->assertSame( 'interrupted', Intent::run_pass( $client )['state'] );
+		$this->assertSame( [ 150, 50 ], $client->batches, 'not re-billed' );
+	}
+
+	/**
 	 * Golden set: 60 real estate-agent searches labelled by hand; rules first, then the cached Haiku
 	 * answers for what the rules leave, must agree on at least 90%.
 	 */

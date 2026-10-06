@@ -118,10 +118,36 @@ class Scheduler {
 		}
 
 		if ( [] === $queue['ids'] ) {
-			$result = $scanner->finalize();
+			// The site-wide pass once, then the intent pass in its own steps (one Claude batch per step, with
+			// the time limit raised for it), so neither shares a request with the other.
+			if ( empty( $queue['finalized'] ) ) {
+				$queue['result']    = $scanner->finalize();
+				$queue['finalized'] = true;
+				update_option( self::QUEUE, $queue, false );
+				delete_transient( self::LOCK );
+
+				return [
+					'state' => 'working',
+					'done'  => (int) $queue['done'],
+					'total' => (int) $queue['total'],
+				];
+			}
+			if ( function_exists( 'set_time_limit' ) ) {
+				@set_time_limit( 120 ); // phpcs:ignore WordPress.PHP.NoSilencedErrors.Discouraged -- some hosts disable it; the call's own timeout is 60 s.
+			}
+			$intent = Intent::run_pass();
+			if ( 'working' === $intent['state'] ) {
+				delete_transient( self::LOCK );
+
+				return [
+					'state' => 'working',
+					'done'  => (int) $queue['done'],
+					'total' => (int) $queue['total'],
+				];
+			}
+			$result           = (array) ( $queue['result'] ?? [] );
+			$result['intent'] = $intent;
 			delete_option( self::QUEUE );
-			// Once per push: sort the searches the intent rules leave (one cheap Claude call; skipped when capped).
-			$result['intent'] = Intent::run_pass();
 			Ranking::flush();
 			delete_transient( self::LOCK );
 
