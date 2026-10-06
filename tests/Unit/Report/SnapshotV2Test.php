@@ -177,12 +177,23 @@ class SnapshotV2Test extends TestCase {
 		$this->assertSame( 200, mb_strlen( $got[2]['why'] ) );
 		$this->assertSame( '', $got[2]['where'], 'unknown where dropped' );
 		$this->assertArrayHasKey( 'copy', $got[0] );
+		$this->assertLessThanOrEqual( 300, mb_strlen( $got[0]['copy'] ) );
 		$this->assertArrayNotHasKey( 'copy', $got[1] );
 
 		$week['business_profile_check']['suggestions'] = array_fill( 0, 30, $extra['suggestions'][0] );
 		$this->assertCount( 20, self::parse( $week, $errors )['listing']['suggestions'] );
 		unset( $week['business_profile_check']['suggestions'] );
 		$this->assertSame( [], self::parse( $week, $errors )['listing']['suggestions'], 'an older push: none' );
+
+		$row                                                     = $extra['suggestions'][1];
+		$row['reason']                                           = str_repeat( 'r', 250 );
+		$row['copy']                                             = str_repeat( 'c', 400 );
+		$week['business_profile_check']['suggestions_unchecked'] = array_fill( 0, 15, $row );
+		$un = self::parse( $week, $errors )['listing']['suggestions_unchecked'];
+		$this->assertCount( 10, $un );
+		$this->assertSame( 200, mb_strlen( $un[0]['reason'] ) );
+		$this->assertSame( 300, mb_strlen( $un[0]['copy'] ) );
+		$this->assertSame( '', $un[0]['current'], 'current may be null' );
 	}
 
 	/**

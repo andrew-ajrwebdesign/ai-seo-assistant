@@ -548,13 +548,13 @@ class Snapshot_V2 extends Snapshot {
 		$maps   = is_string( $raw['maps_url'] ?? null ) && preg_match( '#^https://(www\.)?google\.[a-z.]+/maps[^\s<>"\']{0,400}$|^https://maps\.google\.[a-z.]+/[^\s<>"\']{0,400}$#', $raw['maps_url'] ) ? $raw['maps_url'] : '';
 
 		return [
-			'reason'      => self::text( $raw['reason'] ?? null, 200 ),
-			'checked'     => true === ( $raw['checked'] ?? false ),
-			'checked_at'  => is_string( $raw['checked_at'] ?? null ) ? (int) strtotime( $raw['checked_at'] ) : 0,
-			'maps_url'    => $maps,
-			'page'        => is_string( $raw['page'] ?? null ) && preg_match( '#^https://[a-z0-9.-]+(/[^\s<>"\']{0,300})?$#i', $raw['page'] ) ? $raw['page'] : '',
-			'place_id'    => is_string( $raw['place_id'] ?? null ) && preg_match( '/^[A-Za-z0-9_-]{1,200}$/', $raw['place_id'] ) ? $raw['place_id'] : '',
-			'google'      => [
+			'reason'                => self::text( $raw['reason'] ?? null, 200 ),
+			'checked'               => true === ( $raw['checked'] ?? false ),
+			'checked_at'            => is_string( $raw['checked_at'] ?? null ) ? (int) strtotime( $raw['checked_at'] ) : 0,
+			'maps_url'              => $maps,
+			'page'                  => is_string( $raw['page'] ?? null ) && preg_match( '#^https://[a-z0-9.-]+(/[^\s<>"\']{0,300})?$#i', $raw['page'] ) ? $raw['page'] : '',
+			'place_id'              => is_string( $raw['place_id'] ?? null ) && preg_match( '/^[A-Za-z0-9_-]{1,200}$/', $raw['place_id'] ) ? $raw['place_id'] : '',
+			'google'                => [
 				'name'              => self::text( $google['name'] ?? null, 120 ),
 				'phone'             => self::text( $google['phone'] ?? null, 40 ),
 				'status'            => self::text( $google['status'] ?? null, 40 ),
@@ -563,21 +563,25 @@ class Snapshot_V2 extends Snapshot {
 				'review_count'      => is_int( $google['review_count'] ?? null ) && $google['review_count'] >= 0 ? $google['review_count'] : null,
 				'service_area_only' => true === ( $google['service_area_only'] ?? false ),
 			],
-			'fields'      => $fields,
-			'suggestions' => self::listing_suggestions( $raw['suggestions'] ?? null ),
-			'problems'    => count( array_filter( $fields, static fn( $f ) => in_array( $f['status'], [ 'mismatch', 'missing_on_site', 'missing_on_google' ], true ) && 'info' !== $f['severity'] ) ),
+			'fields'                => $fields,
+			'suggestions'           => self::listing_suggestions( $raw['suggestions'] ?? null, 20 ),
+			'suggestions_unchecked' => self::listing_suggestions( $raw['suggestions_unchecked'] ?? null, 10, true ),
+			'problems'              => count( array_filter( $fields, static fn( $f ) => in_array( $f['status'], [ 'mismatch', 'missing_on_site', 'missing_on_google' ], true ) && 'info' !== $f['severity'] ) ),
 		];
 	}
 
 	/**
-	 * The profile check's suggested edits to the Google listing (profile-check PR #145): at most 20, every
+	 * The profile check's suggested edits to the Google listing (profile-check PR #145): `suggestions` (at
+	 * most 20) and `suggestions_unchecked` (at most 10, each with the reason it could not be checked). Every
 	 * string capped and cleaned like the rest of the Google-sourced text; a row without an id, a known
-	 * priority, a field or a reason is dropped.
+	 * priority, a field or a why is dropped.
 	 *
-	 * @param mixed $raw Raw list.
+	 * @param mixed $raw       Raw list.
+	 * @param int   $max       Most rows kept.
+	 * @param bool  $unchecked The unchecked list (carries a reason).
 	 * @return array<int,array<string,string>>
 	 */
-	protected static function listing_suggestions( $raw ): array {
+	protected static function listing_suggestions( $raw, int $max, bool $unchecked = false ): array {
 		$out = [];
 		foreach ( self::rows( $raw, 40 ) as $s ) {
 			$id       = is_string( $s['id'] ?? null ) && preg_match( '/^[A-Za-z0-9_.:-]{1,60}$/', $s['id'] ) ? $s['id'] : '';
@@ -598,10 +602,13 @@ class Snapshot_V2 extends Snapshot {
 				'detail'    => self::text( $s['detail'] ?? null, 400 ),
 			];
 			if ( isset( $s['copy'] ) ) {
-				$row['copy'] = self::text( $s['copy'], 750 ); // Text to paste into the listing (a description is at most 750).
+				$row['copy'] = self::text( $s['copy'], 300 ); // Text to paste into the listing.
+			}
+			if ( $unchecked ) {
+				$row['reason'] = self::text( $s['reason'] ?? null, 200 );
 			}
 			$out[] = $row;
-			if ( count( $out ) >= 20 ) {
+			if ( count( $out ) >= $max ) {
 				break;
 			}
 		}
