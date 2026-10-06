@@ -354,6 +354,7 @@ class RoundTwoTest extends TestCase {
 		$before = \AJR\SEOAssistant\AI\Spend::current();
 		\AJR\SEOAssistant\AI\Spend::record( 'claude-haiku-4-5', [ 'input_tokens' => 1000000, 'output_tokens' => 0 ] );
 		$this->assertEqualsWithDelta( $before['usd'] + 1.0, \AJR\SEOAssistant\AI\Spend::current()['usd'], 1e-6, 'never silently uncounted' );
+		$this->assertArrayHasKey( \AJR\SEOAssistant\AI\Spend::TOTAL_PREFIX . $period, $this->options, 'seeded again and increased in SQL, not through the fallback' );
 
 		// Increments refused altogether: still counted, through the plain option write.
 		$GLOBALS['wpdb']->broken = true;
