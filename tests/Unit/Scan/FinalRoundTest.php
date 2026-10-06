@@ -229,6 +229,9 @@ class FinalRoundTest extends TestCase {
 		$this->assertFalse( Scheduler::acquire( 120 ), 'request B, racing: refused' );
 		Scheduler::release(); // B releases what it does not hold.
 		$this->assertSame( $a, $GLOBALS['wpdb']->rows[ Scheduler::LOCK ], 'A\'s lock is still there' );
+		$token->setValue( null, 'requestBBBBBBBBBBBBB|' . ( time() + 120 ) ); // B held a lock once (its own token).
+		Scheduler::release(); // A finally block in B, after its lock expired and A took it.
+		$this->assertSame( $a, $GLOBALS['wpdb']->rows[ Scheduler::LOCK ], 'B\'s finally never removes A\'s lock' );
 
 		$token->setValue( null, $a );
 		Scheduler::release();
