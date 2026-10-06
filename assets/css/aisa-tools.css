@@ -259,6 +259,12 @@
 	margin: 0;
 }
 
+/* The display above would otherwise beat the hidden attribute (the Rescan button while the bar runs). */
+.aisa-inline[hidden],
+.aisa-hero__note[hidden] {
+	display: none;
+}
+
 .aisa-push {
 	margin-inline-start: auto;
 }

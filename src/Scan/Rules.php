@@ -65,7 +65,7 @@ class Rules {
 			'links'       => __( 'Links', 'ai-seo-assistant' ),
 			'indexing'    => __( 'Indexing', 'ai-seo-assistant' ),
 			'schema'      => __( 'Schema', 'ai-seo-assistant' ),
-			'thin'        => __( 'Thin content', 'ai-seo-assistant' ),
+			'thin'        => __( 'Short pages', 'ai-seo-assistant' ),
 		];
 	}
 
