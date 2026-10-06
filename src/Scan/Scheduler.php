@@ -36,6 +36,9 @@ class Scheduler {
 	/** Option: the queue { ids[], total, done, mode, started }. Not autoloaded. */
 	public const QUEUE = 'ai_seo_assistant_scan_queue';
 
+	/** Option: the run Cancel stopped (its queue's 'run'), checked by step() before every queue write. */
+	public const CANCELLED = 'ai_seo_assistant_scan_cancelled';
+
 	/** Transient lock while a batch runs. */
 	public const LOCK = 'aisa_scan_lock';
 
@@ -57,6 +60,7 @@ class Scheduler {
 				'done'    => 0,
 				'mode'    => $mode,
 				'started' => time(),
+				'run'     => uniqid( 'scan', true ), // Cancel names the run it stops (CANCELLED).
 				// The issue count before this scan, for the finish line's "N fewer issues than before".
 				'before'  => isset( Scan_Store::meta()['issues'] ) ? (int) Scan_Store::meta()['issues'] : null,
 			],
@@ -123,20 +127,29 @@ class Scheduler {
 		$until   = microtime( true ) + $budget;
 		while ( [] !== $queue['ids'] && microtime( true ) < $until ) {
 			$queue['current'] = (int) array_shift( $queue['ids'] );
-			update_option( self::QUEUE, $queue, false ); // In flight: see above.
+			if ( ! self::write( $queue ) ) { // In flight: see above.
+				return self::stopped( $queue );
+			}
 			$scanner->scan_page( $queue['current'] );
 			unset( $queue['current'] );
 			++$queue['done'];
-			update_option( self::QUEUE, $queue, false ); // Progress survives a fatal or a timeout.
+			if ( ! self::write( $queue ) ) { // Progress survives a fatal or a timeout.
+				return self::stopped( $queue );
+			}
 		}
 
 		if ( [] === $queue['ids'] ) {
 			// The site-wide pass once, then the intent pass in its own steps (one Claude batch per step, with
 			// the time limit raised for it), so neither shares a request with the other.
 			if ( empty( $queue['finalized'] ) ) {
+				if ( self::cancelled( $queue ) ) {
+					return self::stopped( $queue );
+				}
 				$queue['result']    = $scanner->finalize();
 				$queue['finalized'] = true;
-				update_option( self::QUEUE, $queue, false );
+				if ( ! self::write( $queue ) ) {
+					return self::stopped( $queue );
+				}
 				delete_transient( self::LOCK );
 
 				return [
@@ -276,10 +289,60 @@ class Scheduler {
 				'total' => 0,
 			];
 		}
+		// The flag first: a step running in another request checks it before each queue write, so it cannot
+		// put the queue back after it is deleted here.
+		update_option( self::CANCELLED, (string) ( $queue['run'] ?? $queue['started'] ?? '' ), false );
 		delete_option( self::QUEUE );
 		wp_clear_scheduled_hook( self::RUN_HOOK );
 		( new Scanner() )->finalize( false );
 		Ranking::flush();
+
+		return [
+			'state' => 'cancelled',
+			'done'  => (int) $queue['done'],
+			'total' => (int) $queue['total'],
+		];
+	}
+
+	/**
+	 * Write the queue, unless this run was cancelled meanwhile.
+	 *
+	 * @param array<string,mixed> $queue Queue.
+	 * @return bool False when cancelled (nothing written).
+	 */
+	protected static function write( array $queue ): bool {
+		if ( self::cancelled( $queue ) ) {
+			return false;
+		}
+		update_option( self::QUEUE, $queue, false );
+
+		return true;
+	}
+
+	/**
+	 * Whether Cancel stopped this run. Read from the database itself: the option cache of a request that
+	 * started before the Cancel would still say no.
+	 *
+	 * @param array<string,mixed> $queue Queue.
+	 */
+	protected static function cancelled( array $queue ): bool {
+		global $wpdb;
+		$run = (string) ( $queue['run'] ?? $queue['started'] ?? '' );
+		if ( '' === $run || ! isset( $wpdb ) ) {
+			return false;
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- past the cache on purpose (see above).
+		return $run === (string) $wpdb->get_var( $wpdb->prepare( "SELECT option_value FROM {$wpdb->options} WHERE option_name = %s", self::CANCELLED ) );
+	}
+
+	/**
+	 * The answer for a step that found its run cancelled (the lock released, nothing written).
+	 *
+	 * @param array<string,mixed> $queue Queue.
+	 * @return array{state:string,done:int,total:int}
+	 */
+	protected static function stopped( array $queue ): array {
+		delete_transient( self::LOCK );
 
 		return [
 			'state' => 'cancelled',

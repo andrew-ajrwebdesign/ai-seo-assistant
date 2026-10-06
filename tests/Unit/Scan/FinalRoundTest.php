@@ -122,6 +122,37 @@ class FinalRoundTest extends TestCase {
 	}
 
 	/**
+	 * Last round A8: a step that finds its run cancelled (by another request, after this one read the
+	 * queue) writes nothing back and says "cancelled".
+	 */
+	public function test_cancelled_run_is_never_written_back(): void {
+		\WP_Mock::userFunction( 'delete_transient' )->andReturn( true );
+		$queue                             = [ 'ids' => [ 5, 6 ], 'total' => 2, 'done' => 0, 'mode' => 'full', 'started' => 1, 'run' => 'scan-abc' ];
+		$this->options[ Scheduler::QUEUE ] = $queue;
+		$GLOBALS['wpdb'] = new class() { // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test double.
+			/** @var string */
+			public $options = 'wp_options';
+			/** @var string */
+			public $flag = 'scan-abc';
+			public function prepare( $q, ...$a ) {
+				return $q;
+			}
+			public function get_var( $q ) {
+				return $this->flag; // Cancel wrote this run's id after this request read the queue.
+			}
+		};
+		$r = Scheduler::step( 30 );
+		$this->assertSame( 'cancelled', $r['state'] );
+		$this->assertSame( $queue, $this->options[ Scheduler::QUEUE ], 'the queue is not written back (no page taken, nothing in flight)' );
+
+		$GLOBALS['wpdb']->flag = 'scan-other'; // An earlier run's cancel does not stop this one.
+		$write                 = new \ReflectionMethod( Scheduler::class, 'write' );
+		$write->setAccessible( true );
+		$this->assertTrue( $write->invoke( null, [ 'done' => 1 ] + $queue ) );
+		$this->assertSame( 1, $this->options[ Scheduler::QUEUE ]['done'] );
+	}
+
+	/**
 	 * Item 11: own-site fetches never follow a redirect (a 301 is reported as itself, not followed off-site).
 	 */
 	public function test_own_fetch_never_follows_redirects(): void {

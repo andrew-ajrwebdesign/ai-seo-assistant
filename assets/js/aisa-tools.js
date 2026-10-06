@@ -174,6 +174,11 @@
 			await finishScan( fmt( t.finished, lastTotal ) );
 			return;
 		}
+		if ( state && state.success && 'cancelled' === state.data.state ) {
+			// Cancelled on another screen: say so, keep what was scanned.
+			await finishScan( fmt( t.stopped, state.data.done, state.data.total ) );
+			return;
+		}
 		progress.querySelector( '[data-aisa-progress-text]' ).textContent = t.failed;
 		progress.querySelector( '[data-aisa-cancel]' ).hidden = true;
 		scanForm.hidden = false;

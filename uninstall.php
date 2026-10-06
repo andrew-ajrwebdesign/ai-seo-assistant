@@ -63,6 +63,7 @@ $ai_seo_assistant_options = [
 	'ai_seo_assistant_db_version',
 	'ai_seo_assistant_scan_meta',
 	'ai_seo_assistant_scan_queue',
+	'ai_seo_assistant_scan_cancelled', // Scan/Scheduler::CANCELLED.
 	'ai_seo_assistant_pages_meta',
 	'ai_seo_assistant_ctr_curve', // Scan/Ranking::CURVE_OPTION (the site's own click curve).
 	'ai_seo_assistant_intent_cache', // Scan/Intent::CACHE_OPTION (Claude's intent per search).
