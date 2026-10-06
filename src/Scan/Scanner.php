@@ -293,6 +293,7 @@ class Scanner {
 		$discourage = '0' === (string) get_option( 'blog_public', '1' );
 		$popular    = self::popular_paths( $data );
 		$topics     = self::topics( $rows );
+		$template   = Rules::template_images( $rows );
 		$common     = self::common_words( $rows );
 		$has_types  = Page_Role::core();
 		$type_names = $has_types ? array_map( static fn( $t ) => $t['label'], Page_Role::types() ) : [];
@@ -343,6 +344,7 @@ class Scanner {
 				'type_labels'      => $type_names,
 				'discouraged'      => $discourage,
 				'heavy'            => [],
+				'template_files'   => array_keys( $template ),
 			];
 			foreach ( array_unique( array_column( (array) ( $f['links'] ?? [] ), 'p' ) ) as $target ) {
 				$norm = self::norm_path( (string) $target );
@@ -366,7 +368,11 @@ class Scanner {
 
 		// A finding on most pages belongs to the template (the author box, the theme's heading order): it is
 		// reported once for the site and taken off the pages.
-		$site  = Rules::site_wide( $all );
+		$site = Rules::site_wide( $all );
+		$tpl  = Rules::template_alt_issue( $template );
+		if ( null !== $tpl ) {
+			$site['template_alt'] = $tpl; // Never on a page: it is reported here only.
+		}
 		$total = 0;
 		foreach ( $all as $id => $issues ) {
 			$issues = array_values( array_filter( $issues, static fn( $i ) => ! isset( $site[ $i['code'] ] ) ) );

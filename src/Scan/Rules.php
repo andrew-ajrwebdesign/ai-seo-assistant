@@ -284,7 +284,10 @@ class Rules {
 	 * @return array<int,array<string,mixed>>
 	 */
 	protected static function images( array $facts, array $ctx ): array {
-		$images    = array_values( array_filter( (array) ( $facts['images'] ?? [] ), static fn( $i ) => empty( $i['decorative'] ) ) );
+		// Decoration owes no alt; an image on most pages (the logo, a header photo) is the template's, reported
+		// once for the site (template_images()), never on each page.
+		$template  = array_flip( (array) ( $ctx['template_files'] ?? [] ) );
+		$images    = array_values( array_filter( (array) ( $facts['images'] ?? [] ), static fn( $i ) => empty( $i['decorative'] ) && ! isset( $template[ (string) ( $i['file'] ?? '' ) ] ) ) );
 		$missing   = 0;
 		$empty     = 0;
 		$weak      = [];
@@ -527,6 +530,82 @@ class Rules {
 
 		/* translators: %d: number of words. */
 		return [ self::issue( 'thin', 'thin', sprintf( _n( 'Short page: %d word', 'Short page: %d words', $words, 'ai-seo-assistant' ), $words ), __( 'If this page should rank, more of what visitors ask about its subject usually helps.', 'ai-seo-assistant' ), __( 'Fix (if it should rank): answer the questions people search for, in your own words.', 'ai-seo-assistant' ), 'editor', [ 'words' => $words ] ) ];
+	}
+
+	/**
+	 * Images that appear on more than half the pages (at least 6 scanned): the theme's or a builder
+	 * template's (a logo, a profile photo in the header or footer), whatever their alt.
+	 *
+	 * @param array<int,array<string,mixed>> $rows Facts rows (all_facts()).
+	 * @return array<string,array{pages:int,alt:?string,stored:string}> file => pages it is on, its alt.
+	 */
+	public static function template_images( array $rows ): array {
+		$pages = count( $rows );
+		if ( $pages < 6 ) {
+			return [];
+		}
+		$seen = [];
+		foreach ( $rows as $row ) {
+			$files = [];
+			foreach ( (array) ( $row['facts']['images'] ?? [] ) as $img ) {
+				$file = (string) ( $img['file'] ?? '' );
+				if ( '' === $file || isset( $files[ $file ] ) ) {
+					continue;
+				}
+				$files[ $file ] = true;
+				if ( ! isset( $seen[ $file ] ) ) {
+					$seen[ $file ] = [
+						'pages'  => 0,
+						'alt'    => $img['alt'] ?? null,
+						'stored' => (string) ( $img['stored_alt'] ?? '' ),
+						'deco'   => ! empty( $img['decorative'] ),
+					];
+				}
+				++$seen[ $file ]['pages'];
+			}
+		}
+
+		return array_filter( $seen, static fn( $s ) => $s['pages'] * 2 > $pages );
+	}
+
+	/**
+	 * The one finding for template images whose alt is missing or weak (null when none is): set it once, in
+	 * the template.
+	 *
+	 * @param array<string,array<string,mixed>> $template template_images().
+	 * @return array<string,mixed>|null An issue (site-wide), or null.
+	 */
+	public static function template_alt_issue( array $template ): ?array {
+		$poor = [];
+		$max  = 0;
+		foreach ( $template as $file => $t ) {
+			$alt = $t['alt'];
+			if ( ! empty( $t['deco'] ) ) {
+				continue;
+			}
+			if ( null === $alt || '' === trim( (string) $alt ) || self::weak_alt( (string) $alt, (string) $file ) ) {
+				$poor[] = (string) $file;
+				$max    = max( $max, (int) $t['pages'] );
+			}
+		}
+		if ( [] === $poor ) {
+			return null;
+		}
+		$issue = self::issue(
+			'alt',
+			'template_alt',
+			/* translators: %d: number of images. */
+			sprintf( _n( '%d image on almost every page has no useful alt text', '%d images on almost every page have no useful alt text', count( $poor ), 'ai-seo-assistant' ), count( $poor ) ),
+			/* translators: %s: file names. */
+			sprintf( __( '%s sits in the header, footer or a builder template, so the same missing alt repeats on every page.', 'ai-seo-assistant' ), implode( ', ', array_slice( $poor, 0, 3 ) ) ),
+			__( 'Fix: set the alt once, in the Theme Builder template, header or footer (a logo’s alt is the business name).', 'ai-seo-assistant' ),
+			'editor',
+			[ 'files' => $poor ]
+		);
+		return [
+			'issue' => $issue,
+			'pages' => $max,
+		];
 	}
 
 	/**

@@ -418,6 +418,36 @@ class FinalRoundTest extends TestCase {
 	}
 
 	/**
+	 * Last round A4: an image on most pages (a header photo, the logo) is the template's: never a page
+	 * finding, one site-wide finding when its alt is missing or weak.
+	 */
+	public function test_template_images_reported_once(): void {
+		$rows = [];
+		foreach ( range( 1, 10 ) as $id ) {
+			$images = [ [ 'file' => 'site-logo.png', 'alt' => '' ] ];
+			if ( $id <= 7 ) {
+				$images[] = [ 'file' => 'owner-profile.png', 'alt' => null ];
+			}
+			$images[]    = [ 'file' => 'page-' . $id . '.jpg', 'alt' => null ];
+			$rows[ $id ] = [ 'facts' => [ 'images' => $images ] ];
+		}
+		$tpl = \AJR\SEOAssistant\Scan\Rules::template_images( $rows );
+		$this->assertSame( [ 'site-logo.png', 'owner-profile.png' ], array_keys( $tpl ) );
+		$this->assertSame( 7, $tpl['owner-profile.png']['pages'] );
+		$issue = \AJR\SEOAssistant\Scan\Rules::template_alt_issue( $tpl );
+		$this->assertSame( 'template_alt', $issue['issue']['code'] );
+		$this->assertSame( 10, $issue['pages'] );
+		$this->assertStringContainsString( 'Theme Builder template', $issue['issue']['fix'] );
+
+		$page  = [ 'images' => $rows[1]['facts']['images'], 'og_image' => 'x', 'words' => 400, 'links' => [ [ 'p' => '/a/' ], [ 'p' => '/b/' ] ], 'title' => 'T', 'description' => str_repeat( 'd ', 50 ), 'h1' => [ 'T' ], 'headings' => [] ];
+		$found = \AJR\SEOAssistant\Scan\Rules::evaluate( $page, [ 'inbound' => 3, 'template_files' => array_keys( $tpl ) ] );
+		$alt   = array_values( array_filter( $found, static fn( $i ) => 'alt' === $i['code'] ) );
+		$this->assertSame( 1, $alt[0]['data']['missing'], 'only the page\'s own photo, not the logo or profile' );
+		$this->assertSame( [], \AJR\SEOAssistant\Scan\Rules::template_images( array_slice( $rows, 0, 5, true ) ), 'too few pages to tell' );
+		$this->assertNull( \AJR\SEOAssistant\Scan\Rules::template_alt_issue( [ 'logo.png' => [ 'pages' => 9, 'alt' => 'Northfield Plumbing', 'stored' => '', 'deco' => false ] ] ), 'a good alt: nothing to fix' );
+	}
+
+	/**
 	 * Item 18: link suggestions come from related pages (the town every title shares does not count), and
 	 * none when nothing is related.
 	 */
