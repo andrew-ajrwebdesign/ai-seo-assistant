@@ -41,6 +41,36 @@ The product cut (decision 2026-10-06, `work/coding-projects/ai-seo-assistant/dec
 - **Alt text rows** show "shown on the page", "Media Library" and "suggested" on separate lines.
 - **phpcs** now also covers src/Scan, src/Review, src/Changes, src/Search and src/Admin.
 
+### Final review round (same day)
+- **Page types set automatically** when AJR Core 0.22 is sure (`suggest_with_confidence()` high): logged in Changes as "Automatic" with Undo. "Page type not set" is an issue only for an unsure (medium) guess; a page nothing points to is "other". A ticked "Review and apply all" list applies the medium guesses as one batch. Any manual change or Undo makes the page manual, and auto-apply never touches it again. Settings toggle, on by default. The list shows an "auto" marker; the review shows "Set automatically" and "Change".
+- A page type set outside the plugin clears a stale "Page type not set" at once (render-time check and `ajr_core_page_type_changed`).
+- **Progress bar** in the scan header: pages done of total, time left, Cancel (keeps what was scanned), resume from the stored position, and an in-place refresh with "N fewer issues than before".
+- **Less noise:** a template finding on more than half the pages is reported once, "Across the site". Only the entry content is judged (no sidebar, author box, related posts). Menu and footer links count as links in. `alt=""` is its own softer finding, and decorative images (`role="presentation"`, `aria-hidden`) owe no alt. Link suggestions must be on a related topic. "Short page" (was "Thin content") skips contact, team, other, form and calculator pages.
+- **Review prompt:** title width and description length are checked on the server, with one text-only retry. The SEO plugin's appended site name is told to Claude. The agency's phrases and brand rule are carried, and sibling pages are named for duplicates. New alt rules: logos are transcribed, card images get `alt=""`, landmarks are named only when certain.
+- **Google listing:** the profile check's `suggestions[]` and `suggestions_unchecked[]` are validated and passed to AJR Core; the scan shows one line, "N suggested edits".
+- **Safety:**
+  - Alt text is matched by uploads path and never written into another attachment's module.
+  - Own-site fetches never follow redirects.
+  - Password-protected pages are never scanned or sent to Claude.
+  - Each tools AJAX action has its own nonce.
+  - The push size is checked before WordPress decodes the JSON.
+  - A failed Google revoke shows a one-time notice.
+  - A persistent notice appears when every Administrator has the tools.
+- **Data:**
+  - Pushed page data is replaced all-or-nothing in a transaction, keyed lower-case.
+  - A failed child sitemap is "not checked", never "not in the sitemap".
+  - The link cache is not refreshed on reads.
+  - Schema 3 adds `scan.flags`.
+  - Uninstall removes every option.
+- **Speed:**
+  - Saves join one queued run.
+  - Inline rescans make no network calls.
+  - Unchanged issues are not rewritten.
+  - Caches are primed in one query.
+  - admin-ajax builds the admin stack only for this plugin's actions.
+  - A page that crashes a step is skipped.
+- **Fix:** the bulk bar's "Generate for selected (3)" label is no longer written into the button's icon span.
+
 ### Removed
 - Markdown for AI, Redirects, the `core_owns_*` hand-over filters, the Metadata report, Indexing Tools, the Google Search Console OAuth screen and client, and the runtime Composer dependency (no `vendor/` in the zip).
 

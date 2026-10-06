@@ -84,7 +84,8 @@ The SEO scan lists pages by **opportunity**: the extra visits a year a better Go
 ## What Google reads, and the Google listing (agency only)
 
 - **Schema is never an editor job.** AJR Core prints the structured data from each page's type and the business details. Google's Business Profile is the source of truth for those details.
-- **What the scan reports.** The scan's only page-level schema finding is "Page type not set" (one click). Claude is never asked for schema advice.
+- **What the scan reports.** The scan's only page-level schema finding is "Page type not set" (one click), and only when AJR Core is unsure of the type. Obvious types are set automatically, logged in Changes with Undo, and a person's choice (or Undo) always wins: auto-apply never touches that page again. A page nothing points to is "other", which is not a problem. Claude is never asked for schema advice.
+- **Noise is a cost.** A finding on most pages is the template's, reported once for the site; only the page's own content is judged.
 - **"What Google reads on this page"** is a panel in the page review. It shows:
   - the page type, with AJR Core's suggestion and a one-click "Set as …";
   - whether the page names the business, and whether the business matches Google;

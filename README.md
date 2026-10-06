@@ -31,31 +31,34 @@ Upgrading from 4.x **revokes the stored Google token** at Google and deletes it.
 
 ## SEO scan
 
-The scan fetches each published page from the site itself, reads the rendered HTML and checks:
+The scan fetches each published page from the site itself (never following a redirect off it), reads the rendered HTML and checks only the page's own content: the entry content when the theme marks it, without the sidebar, author box, related posts or comments. Password-protected pages are never scanned or sent to Claude. It checks:
 
 * **Title:** width in pixels (580 px), duplicates.
 * **Meta description:** length and duplicates.
 * **Headings:** one H1, no skipped levels.
 * **Images:**
   * missing or weak alt text, and the same alt text shared across images;
+  * `alt=""`, reported apart (right for decoration); images marked `role="presentation"` or `aria-hidden` owe no alt;
   * alt text the page does not print: a Divi module or a block with its own alt;
-  * the printed alt disagreeing with the Media Library's;
+  * a copied alt printed over a good Media Library alt;
   * heavy images.
 * **Links:**
-  * pages nothing links to, and too few links in or out;
+  * pages nothing links to, and too few links in or out (menu and footer links count as links in; suggested pages to link from must be on a related topic);
   * broken links, and links that go through a redirect.
 * **Indexing:** noindex pages listed in the sitemap, pages missing from the sitemap, and canonicals pointing elsewhere. These checks are skipped while search engines are discouraged.
-* **Schema and content:** schema type, sharing image and thin content. The "add Service schema" advice is given only while AJR Core's `custom_schema` module is on.
+* **Page type, sharing image and short pages** (not for contact, team member, "other", form or calculator pages).
+
+A finding on more than half the pages (six or more scanned) comes from the theme or a template: it is shown once, under "Across the site", and not on each page.
 
 Results go in the custom table `{prefix}aisa_scan`.
 
 The scan runs:
 
 * after each push;
-* when a page is saved, as a deferred event for that page;
-* when you press **Rescan now**. This runs in AJAX steps from the browser, so it works where WP-Cron is off.
+* when a page is saved: any number of saves join one queued run;
+* when you press **Rescan now**. This runs in AJAX steps from the browser, so it works where WP-Cron is off. The header shows a progress bar (pages done, time left, Cancel). A scan already running shows at its stored position; leaving the screen is safe, as the queue carries on in WP-Cron. At the end the list refreshes in place and says how many issues more or fewer there are.
 
-Opening a page review also rescans that page if it was edited since its last scan. Apply and Undo rescan the page in the same request.
+Opening a page review also rescans that page if it was edited since its last scan. Apply, Undo and a page type change rescan the page in the same request, without network calls (link checks and the sitemap are left to the next queued run).
 
 ### Opportunity
 
@@ -82,13 +85,14 @@ mode               = "Quick wins" (rank by the quick win; default) or "Biggest p
 ### What Google reads and the Google listing
 
 - **Schema is never an editor job.** AJR Core prints the structured data from the page type and the business details. The scan's only page-level schema finding is "Page type not set" (one click), and Claude never writes schema advice.
+- **Page types are set automatically when AJR Core is sure** (0.22: the booking page, a blog post, a title that is one of the services…). Each is logged in Changes as "Automatic" with Undo. "Page type not set" is an issue only when AJR Core is unsure; such pages are in the scan's "Review and apply all" list. A page with nothing pointing anywhere counts as "other". Any manual change or Undo makes the page manual, and auto-apply never touches it again. Settings → "Set obvious page types automatically" (on by default) turns it off. A type set outside the plugin clears "Page type not set" at once.
 - **The review's "What Google reads on this page" panel** shows:
   - the page type, with AJR Core's suggestion;
   - the link to the business;
   - the structured data on the rendered page, in plain words;
   - a link to the Rich Results Test.
 - **The SEO scan's "Google listing" group** lists the pushed `business_profile_check`. Differences pinned in the Business details row of AJR Core → Your essentials are "Kept on purpose" and not counted.
-- **Hand-over to AJR Core:** the plugin returns the stored check on `ajr_core_business_profile_check`.
+- **Hand-over to AJR Core:** the plugin returns the stored check on `ajr_core_business_profile_check`, with the profile check's `suggestions` and `suggestions_unchecked`. AJR Core lists them; the scan shows one line, "N suggested edits for your Google listing".
 
 ### Page review
 
@@ -132,6 +136,9 @@ Secrets saved on the settings screens (the Claude key and the report push key) a
 * **Upgrading from 4.x keeps your redirects.** Enabled redirect rules are never deleted. The old table stays until **Settings** confirms that every enabled rule is in AJR Core's redirect map.
 
 ## Development
+
+Tests: `vendor/bin/phpunit` and `node --test tests/js/*.test.mjs` (no dependencies). Both run in CI with phpcs.
+
 
 ```bash
 composer install            # dev tools only (PHPUnit, WP_Mock, PHPCS)
