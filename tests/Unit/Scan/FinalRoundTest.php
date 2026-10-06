@@ -343,6 +343,23 @@ class FinalRoundTest extends TestCase {
 		$this->assertEqualsWithDelta( $by['boise idaho weather']['missed'] * 0.1 + $by['moving to boise']['missed'], $b['winnable'], 0.001 );
 		$this->assertEqualsWithDelta( $by['boise idaho weather']['missed'] * 0.1, $by['boise idaho weather']['winnable'], 0.001 );
 		$this->assertSame( 0.8, $b['zero_share'], '20,000 of 25,000 impressions' );
+
+		// The unnamed remainder takes the named searches' zero-click share: 80% of it counts at a tenth.
+		$with_rest = $o::breakdown(
+			[
+				'impressions' => 35000,
+				'clicks'      => 520,
+				'position'    => 3.0,
+				'queries'     => [
+					[ 'query' => 'boise idaho weather', 'impressions' => 20000, 'clicks' => 20, 'position' => 2.3 ],
+					[ 'query' => 'moving to boise', 'impressions' => 5000, 'clicks' => 500, 'position' => 3.5 ],
+				],
+			],
+			static fn( $q ) => 'informational'
+		);
+		$rest = array_values( array_filter( $with_rest['rows'], static fn( $r ) => $r['remain'] ) )[0];
+		$this->assertEqualsWithDelta( $rest['missed'] * ( 0.2 + 0.8 * 0.1 ), $rest['winnable'], 0.001 );
+		$this->assertSame( 0.8, $with_rest['zero_share'], 'judged on the named searches only' );
 	}
 
 	/**

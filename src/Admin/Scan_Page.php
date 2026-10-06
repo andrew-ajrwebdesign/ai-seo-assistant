@@ -824,7 +824,7 @@ class Scan_Page {
 				. ( '' !== $enq ? '<br><span class="aisa-small">' . esc_html( sprintf( __( 'At this page’s enquiry rate: quick win %1$s, top-3 prize %2$s.', 'ai-seo-assistant' ), $enq, $prize ) ) . '</span>' : '' ) . '</p>';
 			if ( (float) ( $r['zero_share'] ?? 0 ) > 0.5 ) {
 				/* translators: %d: percentage of the page's impressions. */
-				echo '<p class="aisa-small aisa-tone--warn">' . esc_html( sprintf( __( 'Most of its searches are answered by Google itself: %d%% of its impressions are for searches Google answers on the results page (marked below), so few of those clicks can be won. The figures above count them at a tenth.', 'ai-seo-assistant' ), (int) round( 100 * (float) $r['zero_share'] ) ) ) . '</p>';
+				echo '<p class="aisa-small aisa-tone--warn">' . esc_html( sprintf( __( 'Most of its searches are answered by Google itself: %d%% of the impressions of its named searches are for searches Google answers on the results page (marked below), so few of those clicks can be won. The figures above count them, and the same share of the unnamed searches, at a tenth.', 'ai-seo-assistant' ), (int) round( 100 * (float) $r['zero_share'] ) ) ) . '</p>';
 			}
 			echo '<p class="aisa-small">' . esc_html__( 'Estimates, extra visits a year. Quick win = impressions × (expected CTR at today’s position − actual CTR): what a better title and description could bring; searches past position 20 add almost nothing. Top 3 = the same if each search reached position 3. Ranking also weighs each search by its intent (the tag under it).', 'ai-seo-assistant' ) . '</p>';
 		}

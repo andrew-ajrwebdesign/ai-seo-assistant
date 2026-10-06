@@ -531,7 +531,11 @@ class Opportunity {
 				$weight         = min( $mix_weight, Intent::WEIGHTS['commercial'] ) * self::unnamed_weight();
 				$rest           = self::row( '', $rest_shown, max( 0, min( $rest_shown, $clicks - $q_clicks ) ), $pos, 'unnamed', true );
 				$rest['weight'] = $weight;
-				$rows[]         = $rest + [ 'remain' => true ];
+				// The searches Google does not name are most likely of the same kind as those it does: their
+				// zero-click share (by impressions) carries over to what the remainder can win.
+				$zero_named        = array_sum( array_map( static fn( $r ) => ! empty( $r['zero_click'] ) ? $r['impressions'] : 0, $rows ) );
+				$rest['zero_part'] = $shown_named > 0 ? $zero_named / $shown_named : 0.0;
+				$rows[]            = $rest + [ 'remain' => true ];
 			}
 		}
 
@@ -545,17 +549,21 @@ class Opportunity {
 			];
 			// What can actually be won: a search Google answers itself counts at the zero-click weight, the
 			// same as in the ranking, so the figure shown never promises its unwinnable clicks.
-			$keep                         = empty( $row['zero_click'] ) ? 1.0 : self::zero_click_weight();
+			$part                         = ! empty( $row['zero_click'] ) ? 1.0 : (float) ( $row['zero_part'] ?? 0.0 );
+			$keep                         = 1.0 - $part + $part * self::zero_click_weight();
 			$rows[ $i ]['winnable']       = $row['missed'] * $keep;
 			$rows[ $i ]['winnable_prize'] = $row['prize'] * $keep;
 			$out['winnable']             += $row['missed'] * $keep;
 			$out['winnable_prize']       += $row['prize'] * $keep;
-			$all_shown                   += (int) $row['impressions'];
-			$zero_shown                  += empty( $row['zero_click'] ) ? 0 : (int) $row['impressions'];
-			$out['missed']               += $row['missed'];
-			$out['prize']                += $row['prize'];
-			$out['weighted']             += $row['missed'] * $row['weight'];
-			$out['weighted_prize']       += $row['prize'] * $row['weight'];
+			if ( empty( $row['remain'] ) ) {
+				// The share is judged on the searches Google names (the only ones whose clicks can be read).
+				$all_shown  += (int) $row['impressions'];
+				$zero_shown += empty( $row['zero_click'] ) ? 0 : (int) $row['impressions'];
+			}
+			$out['missed']         += $row['missed'];
+			$out['prize']          += $row['prize'];
+			$out['weighted']       += $row['missed'] * $row['weight'];
+			$out['weighted_prize'] += $row['prize'] * $row['weight'];
 			if ( empty( $row['remain'] ) ) {
 				$mix[ $row['intent'] ] = ( $mix[ $row['intent'] ] ?? 0 ) + $row['impressions']; // The mix of the searches Google names.
 			}
