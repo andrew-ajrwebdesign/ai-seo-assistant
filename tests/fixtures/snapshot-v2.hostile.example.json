@@ -130,6 +130,7 @@
     "date": "2026-10-05"
   },
   "gsc": {
+    "country": "usa",
     "totals": {
       "clicks": {
         "value": 402,
@@ -262,6 +263,7 @@
     }
   },
   "pages": {
+    "queries_country": "usa",
     "range": {
       "start": "2026-07-06",
       "end": "2026-10-04"

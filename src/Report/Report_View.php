@@ -58,6 +58,47 @@ class Report_View {
 	}
 
 	/**
+	 * A source line with the searches' country added ("… · from the United States"), unchanged for all
+	 * countries.
+	 *
+	 * @param string      $source  Source line.
+	 * @param string|null $country Country code, or null.
+	 */
+	public static function with_country( string $source, ?string $country ): string {
+		$name = self::country_name( $country );
+
+		/* translators: 1: source line, 2: country name. */
+		return '' === $name ? $source : sprintf( __( '%1$s · from %2$s', 'ai-seo-assistant' ), $source, $name );
+	}
+
+	/**
+	 * A country's name from its ISO 3166-1 alpha-3 code ('' for none; the code in capitals when unknown).
+	 *
+	 * @param string|null $code Code.
+	 */
+	public static function country_name( ?string $code ): string {
+		if ( null === $code || '' === $code ) {
+			return '';
+		}
+		$names = [
+			'usa' => __( 'the United States', 'ai-seo-assistant' ),
+			'gbr' => __( 'the United Kingdom', 'ai-seo-assistant' ),
+			'can' => __( 'Canada', 'ai-seo-assistant' ),
+			'aus' => __( 'Australia', 'ai-seo-assistant' ),
+			'nzl' => __( 'New Zealand', 'ai-seo-assistant' ),
+			'irl' => __( 'Ireland', 'ai-seo-assistant' ),
+			'deu' => __( 'Germany', 'ai-seo-assistant' ),
+			'aut' => __( 'Austria', 'ai-seo-assistant' ),
+			'che' => __( 'Switzerland', 'ai-seo-assistant' ),
+			'fra' => __( 'France', 'ai-seo-assistant' ),
+			'esp' => __( 'Spain', 'ai-seo-assistant' ),
+			'nld' => __( 'the Netherlands', 'ai-seo-assistant' ),
+		];
+
+		return $names[ $code ] ?? strtoupper( $code );
+	}
+
+	/**
 	 * The header full width, then the body with AJR Core's "Need a hand?" card on the right (below on a
 	 * phone; never printed), as on AJR Core's own screens. Without the card the body is full width.
 	 *
@@ -384,7 +425,7 @@ class Report_View {
 		}
 
 		return '<section class="aisa-card" aria-labelledby="aisa-search">'
-			. self::card_head( 'aisa-search', 'search', __( 'How people found you on Google', 'ai-seo-assistant' ), __( 'Google Search Console · last 12 weeks', 'ai-seo-assistant' ) )
+			. self::card_head( 'aisa-search', 'search', __( 'How people found you on Google', 'ai-seo-assistant' ), self::with_country( __( 'Google Search Console · last 12 weeks', 'ai-seo-assistant' ), $gsc['country'] ?? null ) )
 			. '<div class="aisa-tiles aisa-tiles--search">' . $tiles . '</div>'
 			. ( '' !== $chart || '' !== $table ? '<div class="aisa-split aisa-split--chart">' . $chart . $table . '</div>' : '' )
 			. '</section>';

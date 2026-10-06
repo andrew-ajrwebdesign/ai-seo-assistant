@@ -159,6 +159,34 @@ class SnapshotV2Test extends TestCase {
 	}
 
 	/**
+	 * Country filter (PR #144 cb8aacf): site figures and per-page search lists carry the country; a bad code,
+	 * or a snapshot from before the field, means all countries. Labels name the country.
+	 */
+	public function test_country_filter(): void {
+		$errors = [];
+		$snap   = self::parse( self::fixture( 'snapshot-v2.week.example.json' ), $errors );
+		$this->assertSame( 'usa', $snap['gsc']['country'] );
+		$this->assertSame( 'usa', $snap['pages_range']['queries_country'] );
+
+		$week                             = self::fixture( 'snapshot-v2.week.example.json' );
+		$week['gsc']['country']           = 'USA<script>';
+		$week['pages']['queries_country'] = 'us';
+		$snap                             = self::parse( $week, $errors );
+		$this->assertNull( $snap['gsc']['country'], 'not three lower-case letters: all countries' );
+		$this->assertNull( $snap['pages_range']['queries_country'] );
+
+		$week = self::fixture( 'snapshot-v2.week.example.json' );
+		unset( $week['gsc']['country'], $week['pages']['queries_country'] );
+		$snap = self::parse( $week, $errors );
+		$this->assertNotNull( $snap, 'an older v2 snapshot without the fields still works' );
+		$this->assertNull( $snap['gsc']['country'] );
+
+		$this->assertSame( 'Google Search Console · last 12 weeks · from the United States', \AJR\SEOAssistant\Report\Report_View::with_country( 'Google Search Console · last 12 weeks', 'usa' ) );
+		$this->assertSame( 'Google Search Console · last 12 weeks', \AJR\SEOAssistant\Report\Report_View::with_country( 'Google Search Console · last 12 weeks', null ) );
+		$this->assertSame( 'BRA', \AJR\SEOAssistant\Report\Report_View::country_name( 'bra' ) );
+	}
+
+	/**
 	 * The hostile fixture leaves exactly the schema doc's survivors, with no "<" or ">" anywhere.
 	 */
 	public function test_hostile_fixture_survivors(): void {

@@ -265,7 +265,7 @@ class Month_View extends Report_View {
 
 		return '<section class="aisa-card aisa-print-page" aria-labelledby="aisa-search">'
 			/* translators: %s: short period. */
-			. self::card_head( 'aisa-search', 'search', __( 'How people found you on Google', 'ai-seo-assistant' ), sprintf( __( 'Google Search Console · %s', 'ai-seo-assistant' ), self::range_short( $snap['month'] ) ) )
+			. self::card_head( 'aisa-search', 'search', __( 'How people found you on Google', 'ai-seo-assistant' ), self::with_country( sprintf( __( 'Google Search Console · %s', 'ai-seo-assistant' ), self::range_short( $snap['month'] ) ), $snap['gsc']['country'] ?? null ) )
 			. '<div class="aisa-tiles aisa-tiles--search aisa-tiles--feature">' . $tiles . '</div>'
 			. ( '' !== $chart || '' !== $table ? '<div class="aisa-split aisa-split--chart">' . $chart . $table . '</div>' : '' )
 			. '</section>';

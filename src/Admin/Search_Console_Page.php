@@ -77,7 +77,7 @@ class Search_Console_Page {
 			return;
 		}
 		/* translators: %s: the week. */
-		echo Ui::card_head( 'aisa-site', 'search', __( 'Whole site', 'ai-seo-assistant' ), sprintf( __( 'Google Search Console · week of %s · change on the week before', 'ai-seo-assistant' ), Report_View::range( $snap['week'], false ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+		echo Ui::card_head( 'aisa-site', 'search', __( 'Whole site', 'ai-seo-assistant' ), Report_View::with_country( sprintf( __( 'Google Search Console · week of %s · change on the week before', 'ai-seo-assistant' ), Report_View::range( $snap['week'], false ) ), $snap['gsc']['country'] ?? null ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		$w = $gsc['week'];
 		echo '<div class="aisa-tiles aisa-tiles--search">';
 		foreach ( [
@@ -157,7 +157,7 @@ class Search_Console_Page {
 		$rows  = array_slice( $rows, ( $paged - 1 ) * self::PER_PAGE, self::PER_PAGE );
 
 		/* translators: 1: page count, 2: date. */
-		echo Ui::card_head( 'aisa-pagelist', 'media-document', __( 'Pages', 'ai-seo-assistant' ), sprintf( __( '%1$d pages · 90 days to %2$s · change is on the 90 days before', 'ai-seo-assistant' ), $total, Ui::day( $meta['end'] ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+		echo Ui::card_head( 'aisa-pagelist', 'media-document', __( 'Pages', 'ai-seo-assistant' ), sprintf( __( '%1$d pages · all searches · 90 days to %2$s · change is on the 90 days before', 'ai-seo-assistant' ), $total, Ui::day( $meta['end'] ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		echo '<form method="get" class="aisa-filters" role="search"><input type="hidden" name="page" value="' . esc_attr( self::SLUG ) . '">';
 		echo '<label class="aisa-field aisa-field--search"><span class="screen-reader-text">' . esc_html__( 'Filter pages by title or address', 'ai-seo-assistant' ) . '</span>' . Ui::icon( 'search' ) . '<input type="search" name="q" value="' . esc_attr( $q ) . '" placeholder="' . esc_attr__( 'Filter pages by title or address', 'ai-seo-assistant' ) . '"></label>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		echo '<label class="aisa-field"><span class="screen-reader-text">' . esc_html__( 'Sort', 'ai-seo-assistant' ) . '</span><select name="sort">';
@@ -237,8 +237,11 @@ class Search_Console_Page {
 		echo '</tbody></table></div>';
 		$total = (int) ( $r['g']['queries_total'] ?? 0 );
 		if ( $total > count( $queries ) ) {
+			$from = Report_View::country_name( Page_Data::meta()['country'] );
 			/* translators: 1: shown, 2: total. */
-			echo '<p class="aisa-small">' . esc_html( sprintf( __( 'Top %1$d of %2$d searches, 90 days. Change is in clicks on the 90 days before.', 'ai-seo-assistant' ), count( $queries ), $total ) ) . '</p>';
+			$line = sprintf( __( 'Top %1$d of %2$d searches, 90 days. Change is in clicks on the 90 days before.', 'ai-seo-assistant' ), count( $queries ), $total );
+			/* translators: 1: the line above, 2: country name. */
+			echo '<p class="aisa-small">' . esc_html( '' === $from ? $line : sprintf( __( '%1$s Searches from %2$s; the page figures above count all searches.', 'ai-seo-assistant' ), $line, $from ) ) . '</p>';
 		}
 		echo '</div>';
 	}

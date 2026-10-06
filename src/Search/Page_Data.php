@@ -73,6 +73,7 @@ class Page_Data {
 				'end'          => (string) ( $range['end'] ?? '' ),
 				'generated_at' => $generated_at,
 				'count'        => count( $pages ),
+				'country'      => is_string( $range['queries_country'] ?? null ) ? (string) $range['queries_country'] : '',
 			],
 			false
 		);
@@ -93,6 +94,7 @@ class Page_Data {
 			'end'          => (string) ( $meta['end'] ?? '' ),
 			'generated_at' => (int) ( $meta['generated_at'] ?? 0 ),
 			'count'        => (int) ( $meta['count'] ?? 0 ),
+			'country'      => (string) ( $meta['country'] ?? '' ), // The search lists' country ('' = all countries).
 		];
 	}
 

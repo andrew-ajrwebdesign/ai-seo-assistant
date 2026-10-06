@@ -740,7 +740,7 @@ class Scan_Page {
 		$meta = Page_Data::meta();
 		echo '<section class="aisa-card" aria-labelledby="aisa-searches">';
 		/* translators: %s: date. */
-		echo Ui::card_head( 'aisa-searches', 'search', __( 'What people search for', 'ai-seo-assistant' ), '' !== $meta['end'] ? sprintf( __( 'Search Console · 90 days to %s', 'ai-seo-assistant' ), Ui::day( $meta['end'] ) ) : '' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+		echo Ui::card_head( 'aisa-searches', 'search', __( 'What people search for', 'ai-seo-assistant' ), '' !== $meta['end'] ? self::searches_from( sprintf( __( 'Search Console · 90 days to %s', 'ai-seo-assistant' ), Ui::day( $meta['end'] ) ), $meta['country'] ) : '' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		$queries = (array) ( $page['gsc']['queries'] ?? [] );
 		if ( [] === $queries ) {
 			echo '<p class="aisa-pending">' . esc_html( null === $page ? __( 'No search data for this page yet. It arrives with the weekly push; until then Claude writes from the page content alone.', 'ai-seo-assistant' ) : __( 'Google showed this page for no searches in the last 90 days.', 'ai-seo-assistant' ) ) . '</p></section>';
@@ -792,6 +792,19 @@ class Scan_Page {
 	}
 
 	/**
+	 * A search list's source line with its country ("… · searches from the United States").
+	 *
+	 * @param string $source  Source line.
+	 * @param string $country Country code ('' = all countries).
+	 */
+	protected static function searches_from( string $source, string $country ): string {
+		$name = \AJR\SEOAssistant\Report\Report_View::country_name( $country );
+
+		/* translators: 1: source line, 2: country name. */
+		return '' === $name ? $source : sprintf( __( '%1$s · searches from %2$s', 'ai-seo-assistant' ), $source, $name );
+	}
+
+	/**
 	 * A search intent as a small tag.
 	 *
 	 * @param string $intent Intent.
@@ -831,7 +844,7 @@ class Scan_Page {
 
 		echo '<section class="aisa-card" aria-labelledby="aisa-doing">';
 		/* translators: %s: date. */
-		echo Ui::card_head( 'aisa-doing', 'chart-line', __( 'How this page is doing', 'ai-seo-assistant' ), sprintf( __( '90 days to %s', 'ai-seo-assistant' ), Ui::day( $meta['end'] ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+		echo Ui::card_head( 'aisa-doing', 'chart-line', __( 'How this page is doing', 'ai-seo-assistant' ), sprintf( __( 'All searches · 90 days to %s', 'ai-seo-assistant' ), Ui::day( $meta['end'] ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		echo '<div class="aisa-tiles aisa-tiles--search">' . $tiles . '</div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in tile().
 		$weeks = (array) $g['weeks'];
 		if ( count( $weeks ) >= 2 ) {

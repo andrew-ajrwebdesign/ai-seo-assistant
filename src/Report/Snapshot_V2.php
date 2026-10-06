@@ -275,6 +275,9 @@ class Snapshot_V2 extends Snapshot {
 				'ctr'         => self::metric( $totals['ctr'] ?? null, 100, true ),
 				'position'    => self::metric( $totals['position'] ?? null, 1000, true ),
 			],
+			// Whose searches the site figures count: ISO 3166-1 alpha-3, lower case; null = all countries (and
+			// any snapshot from before the field existed).
+			'country'     => self::country( $raw['country'] ?? null ),
 			'series_unit' => 'day' === ( $series['unit'] ?? '' ) ? 'day' : 'week',
 			'series_from' => self::date( $series['start'] ?? null ),
 			'top_queries' => $base['top_queries'],
@@ -284,6 +287,15 @@ class Snapshot_V2 extends Snapshot {
 		$out['impressions_12w'] = count( $shown ) === count( $clicks ) ? $shown : [];
 
 		return $out;
+	}
+
+	/**
+	 * A country code as the schema allows it (three lower-case letters), else null (all countries).
+	 *
+	 * @param mixed $raw Raw value.
+	 */
+	public static function country( $raw ): ?string {
+		return is_string( $raw ) && 1 === preg_match( '/\A[a-z]{3}\z/', $raw ) ? $raw : null;
 	}
 
 	/**
@@ -375,12 +387,14 @@ class Snapshot_V2 extends Snapshot {
 		return [
 			'items' => $out,
 			'range' => [
-				'start'          => self::date( $range['start'] ?? null ),
-				'end'            => self::date( $range['end'] ?? null ),
-				'previous_start' => self::date( $prev['start'] ?? null ),
-				'previous_end'   => self::date( $prev['end'] ?? null ),
-				'available'      => max( count( $out ), ( self::count( $raw['available'] ?? null ) ?? count( $out ) ) - $dropped ),
-				'truncated'      => true === ( $raw['truncated'] ?? false ),
+				// The per-page SEARCH LISTS are country-filtered; page totals and weekly series never are.
+				'queries_country' => self::country( $raw['queries_country'] ?? null ),
+				'start'           => self::date( $range['start'] ?? null ),
+				'end'             => self::date( $range['end'] ?? null ),
+				'previous_start'  => self::date( $prev['start'] ?? null ),
+				'previous_end'    => self::date( $prev['end'] ?? null ),
+				'available'       => max( count( $out ), ( self::count( $raw['available'] ?? null ) ?? count( $out ) ) - $dropped ),
+				'truncated'       => true === ( $raw['truncated'] ?? false ),
 			],
 		];
 	}
