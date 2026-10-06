@@ -391,7 +391,9 @@ class Scan_Page {
 		if ( 'checked' === $group['state'] && [] !== $group['issues'] ) {
 			$total += count( $group['issues'] ); // Pinned (kept on purpose) differences are not counted.
 			$chips .= '<li><a class="aisa-chip aisa-chip--listing" href="#aisa-listing">' . esc_html__( 'Google listing', 'ai-seo-assistant' ) . ' <span>' . esc_html( number_format_i18n( count( $group['issues'] ) ) ) . '</span></a></li>';
-			$chips  = (string) preg_replace( '#(All issues <span>)[^<]*#', '${1}' . esc_html( number_format_i18n( $total ) ), $chips, 1 );
+			$count  = esc_html( number_format_i18n( $total ) );
+			// A callback, not a replacement string: the count is data, never read as a backreference.
+			$chips = (string) preg_replace_callback( '#(All issues <span>)[^<]*#', static fn( $m ) => $m[1] . $count, $chips, 1 );
 		} elseif ( 'not_checked' === $group['state'] ) {
 			$chips .= '<li><a class="aisa-chip aisa-chip--listing" href="#aisa-listing">' . esc_html__( 'Google listing not checked', 'ai-seo-assistant' ) . '</a></li>';
 		}
