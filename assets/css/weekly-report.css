@@ -736,15 +736,6 @@
 	line-height: 1.3;
 }
 
-/* ---- Agency-only delivery panel (standard admin styling, kept below the report) ----------------- */
-
-.aisa-delivery {
-	max-inline-size: 1200px;
-	margin-block-start: 32px;
-	padding-block-start: 16px;
-	border-block-start: 1px solid var(--aisa-admin-divider);
-}
-
 /* ---- Wider screens ----------------------------------------------------------------------------- */
 
 @media (min-width: 700px) {
@@ -950,8 +941,7 @@
 	.update-nag,
 	.aisa-weeks,
 	.aisa-tabs,
-	.aisa-fresh,
-	.aisa-delivery {
+	.aisa-fresh {
 		display: none !important; /* Hide wp-admin's own chrome, which sets its own display. */
 	}
 

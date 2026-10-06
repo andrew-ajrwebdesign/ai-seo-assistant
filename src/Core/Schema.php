@@ -33,7 +33,7 @@ class Schema {
 	public const VERSION_OPTION = 'ai_seo_assistant_db_version';
 
 	/** Current table version. */
-	public const VERSION = '5.0.1'; // 5.0.1: the change log's before/after are longtext (a builder page's content is often over 64 KB).
+	public const VERSION = '2'; // The tables' own version, not the plugin's. 2: the change log's before/after are longtext (a builder page's content is often over 64 KB).
 
 	/**
 	 * A table's full name.

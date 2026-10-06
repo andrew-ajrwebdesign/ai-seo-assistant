@@ -13,8 +13,8 @@
 .ai-seo-assistant-status {
 	margin: 0 0 16px;
 	padding: 12px;
-	background: #f6f7f7;
-	border: 1px solid #dcdcde;
+	background: var(--aisa-box-surface);
+	border: 1px solid var(--aisa-box-border);
 	border-radius: 4px;
 }
 
@@ -36,7 +36,7 @@
 .ai-seo-assistant-count {
 	display: block;
 	margin-top: 4px;
-	color: #646970;
+	color: var(--aisa-box-ink-muted);
 	font-size: 12px;
 }
 
@@ -52,8 +52,8 @@
 	display: none;
 	margin-top: 12px;
 	padding: 12px;
-	background: #f6f7f7;
-	border: 1px solid #dcdcde;
+	background: var(--aisa-box-surface);
+	border: 1px solid var(--aisa-box-border);
 	border-radius: 4px;
 	max-height: 220px;
 	overflow: auto;
@@ -62,15 +62,15 @@
 
 .ai-seo-assistant-note {
 	margin-bottom: 0;
-	color: #646970;
+	color: var(--aisa-box-ink-muted);
 	font-size: 12px;
 }
 
 .ai-seo-assistant-log-summary {
 	margin: 0 0 16px;
 	padding: 12px;
-	background: #fff8e5;
-	border: 1px solid #f0c36d;
+	background: var(--aisa-box-warning-bg);
+	border: 1px solid var(--aisa-box-warning-edge);
 	border-radius: 4px;
 }
 
@@ -81,8 +81,8 @@
 
 .ai-seo-assistant-recommendations-card {
 	padding: 16px;
-	background: #fff;
-	border: 1px solid #dcdcde;
+	background: var(--aisa-box-bg);
+	border: 1px solid var(--aisa-box-border);
 	border-radius: 4px;
 }
 
@@ -98,8 +98,8 @@
 
 .ai-seo-assistant-recommendations-section {
 	padding: 12px;
-	background: #f6f7f7;
-	border: 1px solid #dcdcde;
+	background: var(--aisa-box-surface);
+	border: 1px solid var(--aisa-box-border);
 	border-radius: 4px;
 }
 
@@ -118,21 +118,16 @@
 
 .ai-seo-assistant-recommendations-empty {
 	margin: 0;
-	color: #646970;
+	color: var(--aisa-box-ink-muted);
 	font-style: italic;
-}
-
-.ai-seo-assistant-error-text {
-	color: #b32d2e;
-	font-weight: 600;
 }
 
 .ai-seo-assistant-focus-autofill {
 	margin-top: 18px;
 	padding: 14px;
-	border: 1px solid #dcdcde;
+	border: 1px solid var(--aisa-box-border);
 	border-radius: 6px;
-	background: #f6f7f7;
+	background: var(--aisa-box-surface);
 }
 
 .ai-seo-assistant-focus-autofill h4 {
@@ -153,8 +148,8 @@
 
 .ai-seo-focus-suggestion-card {
 	padding: 12px;
-	border-left: 4px solid #2271b1;
-	background: #fff;
+	border-left: 4px solid var(--aisa-box-accent);
+	background: var(--aisa-box-bg);
 }
 
 .ai-seo-focus-suggestion-card p {
@@ -173,9 +168,9 @@
 
 .ai-seo-content-insertion-item {
 	padding: 12px;
-	border: 1px solid #dcdcde;
-	border-left: 4px solid #dba617;
-	background: #fff;
+	border: 1px solid var(--aisa-box-border);
+	border-left: 4px solid var(--aisa-box-warning-accent);
+	background: var(--aisa-box-bg);
 }
 
 .ai-seo-content-insertion-item p {
@@ -189,7 +184,7 @@
 .ai-seo-content-insertion-item blockquote {
 	margin: 6px 0 10px;
 	padding: 10px 12px;
-	border-left: 3px solid #2271b1;
-	background: #f6f7f7;
+	border-left: 3px solid var(--aisa-box-accent);
+	background: var(--aisa-box-surface);
 	font-style: normal;
 }

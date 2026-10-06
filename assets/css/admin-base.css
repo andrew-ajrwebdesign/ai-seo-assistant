@@ -1,87 +1,23 @@
-.ai-seo-assistant-badge,
-.ai-seo-assistant-indexing-badge {
-	display: inline-block;
-	padding: 3px 9px;
-	border-radius: 999px;
-	font-size: 11px;
-	font-weight: 700;
-	line-height: 1.5;
-	text-transform: uppercase;
-	letter-spacing: 0.02em;
-	white-space: nowrap;
-}
+/**
+ * AI SEO Assistant — the editor box's tokens (wp-admin's own greys, so the box sits quietly in the editor).
+ *
+ * Declared once on the box; admin-metabox.css only reads them. 5.0 removed the 4.x audit, report and
+ * indexing badges these files also styled (their screens are gone).
+ */
 
-.ai-seo-assistant-badge.is-good,
-.ai-seo-assistant-indexing-badge.is-indexable {
-	background: #edfaef;
-	color: #007017;
-	border: 1px solid #8bd18f;
-}
-
-.ai-seo-assistant-badge.is-missing,
-.ai-seo-assistant-indexing-badge.is-noindex {
-	background: #fcf0f1;
-	color: #b32d2e;
-	border: 1px solid #e09a9d;
-}
-
-.ai-seo-assistant-badge.is-warning {
-	background: #fff8e5;
-	color: #8a5a00;
-	border: 1px solid #f0c36d;
-}
-
-.ai-seo-assistant-indexing-badge.is-not-public {
-	background: #f0f0f1;
-	color: #646970;
-	border: 1px solid #c3c4c7;
+.ai-seo-assistant-box {
+	--aisa-box-ink-muted: #646970;
+	--aisa-box-surface: #f6f7f7;
+	--aisa-box-border: #dcdcde;
+	--aisa-box-bg: #fff;
+	--aisa-box-bad: #b32d2e;
+	--aisa-box-warning-bg: #fff8e5;
+	--aisa-box-warning-edge: #f0c36d;
+	--aisa-box-warning-accent: #dba617;
+	--aisa-box-accent: var(--wp-admin-theme-color);
 }
 
 .ai-seo-assistant-status-message {
 	display: inline-block;
-	color: #646970;
-}
-
-.ai-seo-assistant-audit-small,
-.ai-seo-assistant-report-small {
-	margin-top: 5px;
-	color: #646970;
-	font-size: 12px;
-	line-height: 1.4;
-}
-
-.ai-seo-assistant-content-match-badge {
-	display: inline-block;
-	padding: 3px 9px;
-	border-radius: 999px;
-	font-size: 11px;
-	font-weight: 700;
-	line-height: 1.5;
-	text-transform: uppercase;
-	letter-spacing: 0.02em;
-	white-space: nowrap;
-}
-
-.ai-seo-assistant-content-match-badge.is-good {
-	background: #edfaef;
-	color: #007017;
-	border: 1px solid #8bd18f;
-}
-
-.ai-seo-assistant-content-match-badge.is-partial {
-	background: #fff8e5;
-	color: #8a5a00;
-	border: 1px solid #f0c36d;
-}
-
-.ai-seo-assistant-content-match-badge.is-missing {
-	background: #fcf0f1;
-	color: #b32d2e;
-	border: 1px solid #e09a9d;
-}
-
-.ai-seo-assistant-content-match-badge.is-not-set {
-	background: #f0f0f1;
-	color: #646970;
-	border: 1px solid #c3c4c7;
+	color: var(--aisa-box-ink-muted);
 }

@@ -903,10 +903,10 @@ class Metadata_Generator {
 		return 'low';
 	}
 
-	private function build_focus_page_notes( $source, $top_query, $service_focus, $location, $impressions, $position ) {
+	private function build_focus_page_notes( $source, $top_query, $service_focus, $place_name, $impressions, $position ) {
 		$top_query     = sanitize_text_field( (string) $top_query );
 		$service_focus = sanitize_text_field( (string) $service_focus );
-		$location      = sanitize_text_field( (string) $location );
+		$place_name    = sanitize_text_field( (string) $place_name ); // A place name ("Boise, Idaho"), not an address.
 		$impressions   = (float) $impressions;
 		$position      = (float) $position;
 
@@ -936,8 +936,8 @@ class Metadata_Generator {
 			$note .= ' Review whether this page clearly supports "' . $service_focus . '".';
 		}
 
-		if ( ! empty( $location ) ) {
-			$note .= ' Location detected: ' . $location . '.';
+		if ( ! empty( $place_name ) ) {
+			$note .= ' Location detected: ' . $place_name . '.';
 		}
 
 		return $note;

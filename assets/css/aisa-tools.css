@@ -1163,11 +1163,6 @@ a.aisa-pagecell__title:hover {
 	font-size: 12px;
 }
 
-.aisa-alt__now {
-	color: var(--aisa-ink);
-	font-weight: 600;
-}
-
 .aisa-alt--check {
 	padding: 10px;
 	border-radius: 8px;

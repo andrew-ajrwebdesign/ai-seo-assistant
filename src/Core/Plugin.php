@@ -21,7 +21,6 @@ use AJR\SEOAssistant\Admin\Ajax;
 use AJR\SEOAssistant\Admin\Menu;
 use AJR\SEOAssistant\Admin\Secret_Notices;
 use AJR\SEOAssistant\Admin\Tools_Actions;
-use AJR\SEOAssistant\Report;
 use AJR\SEOAssistant\Search\Page_Data;
 
 defined( 'ABSPATH' ) || exit;
@@ -69,10 +68,10 @@ class Plugin {
 	public function init() {
 		add_action( 'init', [ $this, 'load_textdomain' ] );
 
-		$report_store = new Report\Snapshot_Store();
-		( new Report\Access() )->register();
-		( new Report\Push_Endpoint( $report_store ) )->register();
-		( new Report\Stale_Alert( $report_store ) )->register();
+		$report_store = new \AJR\SEOAssistant\Report\Snapshot_Store();
+		( new \AJR\SEOAssistant\Report\Access() )->register();
+		( new \AJR\SEOAssistant\Report\Push_Endpoint( $report_store ) )->register();
+		( new \AJR\SEOAssistant\Report\Stale_Alert( $report_store ) )->register();
 
 		// Every write to a secret option, from any screen, plugin, cron job or REST call, is checked and
 		// sealed (4.4.0). On every request: a write that bypasses wp-admin must not bypass the guard.
@@ -114,13 +113,13 @@ class Plugin {
 		add_filter(
 			'ajr_core_business_profile_check',
 			static function ( $value ) {
-				$block = Report\Snapshot_Store::listing_block();
+				$block = \AJR\SEOAssistant\Report\Snapshot_Store::listing_block();
 
 				return null !== $block ? $block : $value;
 			}
 		);
 		add_action(
-			Report\Snapshot_Store::RECEIVED_ACTION,
+			\AJR\SEOAssistant\Report\Snapshot_Store::RECEIVED_ACTION,
 			static function (): void {
 				\AJR\SEOAssistant\Scan\Scheduler::after_push();
 			}
@@ -130,9 +129,9 @@ class Plugin {
 	/**
 	 * Build and register everything that only acts in wp-admin (screens, editor box, AJAX, admin-post).
 	 *
-	 * @param Report\Snapshot_Store $report_store Report storage.
+	 * @param \AJR\SEOAssistant\Report\Snapshot_Store $report_store Report storage.
 	 */
-	protected function init_admin( Report\Snapshot_Store $report_store ) {
+	protected function init_admin( \AJR\SEOAssistant\Report\Snapshot_Store $report_store ) {
 		$tsf      = new TSF_Adapter();
 		$resolver = new SEO_Adapter_Resolver( $tsf, new Yoast_Adapter(), new RankMath_Adapter() );
 		$adapter  = $resolver->get_adapter() ?? $tsf;
@@ -168,7 +167,7 @@ class Plugin {
 			static function (): void {
 				// The agency only (page types are theirs to set); a refused page keeps its old role and the
 				// next agency admin load tries again.
-				if ( ! current_user_can( Report\Access::TOOLS_CAP ) || ! \AJR\SEOAssistant\Scan\Page_Role::core() || get_option( 'ai_seo_assistant_roles_migrated' ) ) {
+				if ( ! current_user_can( \AJR\SEOAssistant\Report\Access::TOOLS_CAP ) || ! \AJR\SEOAssistant\Scan\Page_Role::core() || get_option( 'ai_seo_assistant_roles_migrated' ) ) {
 					return;
 				}
 				$out = \AJR\SEOAssistant\Scan\Page_Role::migrate();
