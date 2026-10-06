@@ -146,7 +146,7 @@ class Upgrade {
 			$attempt = self::attempt();
 			$results = Secret_Store::migrate_all();
 			add_option( Access::OPTION, [], '', true ); // No-op when it exists.
-			$redirects = isset( $attempt['redirects'] ) ? (string) $attempt['redirects'] : self::retire_redirects_table();
+			$redirects = is_string( $attempt['redirects'] ?? null ) ? $attempt['redirects'] : self::retire_redirects_table();
 
 			$failed = array_keys( array_filter( $results, static fn( $result ) => 'failed' === $result ) );
 			if ( [] !== $failed ) {

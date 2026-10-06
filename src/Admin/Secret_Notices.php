@@ -105,7 +105,7 @@ class Secret_Notices {
 	/**
 	 * Human labels for secret option names (unknown names are dropped, never printed raw).
 	 *
-	 * @param array<int,mixed> $options Option names.
+	 * @param array<mixed> $options Option names (as stored; anything else is skipped).
 	 * @return array<int,string>
 	 */
 	protected function labels( array $options ): array {
