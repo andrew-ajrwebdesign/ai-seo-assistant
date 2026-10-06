@@ -59,8 +59,16 @@ class Prompt_Builder {
 								'enum' => [ 'headings', 'links', 'content' ],
 							],
 							'advice' => [ 'type' => 'string' ],
+							// What the plugin checks on the page later (Review\Editor_Check): the new H1 or H2, the
+							// phrase to add, the words to link with (several: separated by "|").
+							'check'  => [
+								'type' => 'string',
+								'enum' => [ 'h1', 'h2', 'phrase', 'link', 'none' ],
+							],
+							'target' => [ 'type' => 'string' ],
+							'source' => [ 'type' => 'string' ],
 						],
-						'required'             => [ 'area', 'advice' ],
+						'required'             => [ 'area', 'advice', 'check', 'target', 'source' ],
 						'additionalProperties' => false,
 					],
 				],
@@ -120,6 +128,8 @@ class Prompt_Builder {
 		$p[] = '- Return one entry per attached image, using its image_id. A purely decorative image gets an empty alt and a why that says so.';
 		$p[] = 'Rules for editor advice:';
 		$p[] = '- Only what the scan findings or the page support; one specific sentence each (which heading to change to what, which page should link here and with what words). Skip an area with nothing useful to say.';
+		$p[] = '- Never suggest a change that is already in place: compare with the headings and the links to this page given below. If the page already does it, omit the item.';
+		$p[] = '- Give each item a check the plugin can verify later: "h1" or "h2" with target = the exact new heading; "phrase" with target = the exact words to add (several separated by "|"); "link" with target = the link words and source = the path of the page that should link here (several separated by "|"); "none" with target and source empty when nothing can be checked.';
 		$p[] = 'General:';
 		$p[] = '- Never invent services, prices, guarantees, awards, locations or claims. Write in the language of the page.';
 		$p[] = '- Each "why" is one short sentence a business owner understands, citing the search data when it drove the choice (e.g. "1,240 impressions at position 4.1").';
@@ -156,6 +166,9 @@ class Prompt_Builder {
 		$p[] = 'Now: title "' . ( $args['current']['title'] ?? '' ) . '"; description "' . ( $args['current']['description'] ?? '' ) . '"; focus keyphrase "' . ( $args['current']['keyphrase'] ?? '' ) . '".';
 		if ( ! empty( $args['headings'] ) ) {
 			$p[] = 'Headings now: ' . implode( ' / ', (array) $args['headings'] );
+		}
+		if ( ! empty( $args['inbound'] ) ) {
+			$p[] = 'Links to this page now (from page | link text): ' . implode( ' / ', (array) $args['inbound'] );
 		}
 		$p[] = '';
 		if ( ! empty( $args['totals'] ) ) {

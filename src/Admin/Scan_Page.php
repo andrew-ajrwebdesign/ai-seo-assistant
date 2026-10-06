@@ -680,15 +680,9 @@ class Scan_Page {
 		if ( false !== get_transient( Page_Review::RESCAN_FLAG . $post_id ) ) {
 			( new Page_Review( new Claude_Client() ) )->rescan_if_flagged( $post_id );
 		}
-		$row = ( new Scan_Store() )->get( $post_id );
 		// Edited since its last scan (the on-save cron event may not have run yet): rescan it now, one page.
-		$edited = get_post( $post_id );
-		if ( null !== $row && $edited instanceof \WP_Post && $edited->post_modified_gmt > (string) $row['scanned_at'] ) {
-			$scanner = new Scanner();
-			$scanner->scan_page( $post_id );
-			$scanner->finalize( false );
-			$row = ( new Scan_Store() )->get( $post_id );
-		}
+		Scanner::refresh_if_stale( $post_id );
+		$row  = ( new Scan_Store() )->get( $post_id );
 		$post = get_post( $post_id );
 		if ( null === $row || ! $post instanceof \WP_Post ) {
 			echo Ui::notice( 'warning', '<p>' . esc_html__( 'This page has not been scanned yet. Run a scan first.', 'ai-seo-assistant' ) . '</p><p><a href="' . esc_url( $this->url( [] ) ) . '">' . esc_html__( 'Back to SEO scan', 'ai-seo-assistant' ) . '</a></p>' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped piecewise.
@@ -1158,17 +1152,24 @@ class Scan_Page {
 		if ( [] === $items ) {
 			return;
 		}
-		$labels = [
+		// Each checked against the page as last scanned: what is already there shows as done.
+		$row     = ( new Scan_Store() )->get( $post_id );
+		$context = null === $row ? null : Page_Review::editor_context( $post_id, $row );
+		$when    = null === $row ? '' : wp_date( 'j M', (int) strtotime( (string) $row['scanned_at'] . ' UTC' ) );
+		$labels  = [
 			'headings' => __( 'Headings', 'ai-seo-assistant' ),
 			'links'    => __( 'Links', 'ai-seo-assistant' ),
 			'content'  => __( 'Content', 'ai-seo-assistant' ),
 		];
-		$edit   = (string) get_edit_post_link( $post_id, 'url' );
+		$edit    = (string) get_edit_post_link( $post_id, 'url' );
 		echo '<div class="aisa-editorbox"><p class="aisa-editorbox__head"><strong>' . Ui::icon( 'edit' ) . esc_html__( 'Do in the editor', 'ai-seo-assistant' ) . '</strong><span class="aisa-small">' . esc_html__( 'Not applied by the plugin', 'ai-seo-assistant' ) . '</span></p>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		echo '<p class="aisa-small">' . esc_html__( 'Headings, links and content are left to you: changing them automatically is too risky on builder pages.', 'ai-seo-assistant' ) . '</p><dl>';
 		foreach ( $items as $item ) {
-			echo '<dt>' . esc_html( $labels[ $item['area'] ] ?? $item['area'] ) . '</dt><dd><span>' . esc_html( (string) $item['advice'] ) . '</span>'
-				. ( '' !== $edit ? '<a href="' . esc_url( $edit ) . '">' . esc_html__( 'Open in editor', 'ai-seo-assistant' ) . '</a>' : '' ) . '</dd>';
+			$done = null !== $context && Page_Review::advice_in_place( $item, $context );
+			/* translators: %s: date of the scan. */
+			$found = sprintf( __( 'Done — found on the page %s', 'ai-seo-assistant' ), $when );
+			echo '<dt>' . esc_html( $labels[ $item['area'] ] ?? $item['area'] ) . '</dt><dd' . ( $done ? ' class="is-done"' : '' ) . '><span>' . esc_html( (string) $item['advice'] ) . '</span>'
+				. ( $done ? Ui::pill( $found, 'good' ) : ( '' !== $edit ? '<a href="' . esc_url( $edit ) . '">' . esc_html__( 'Open in editor', 'ai-seo-assistant' ) . '</a>' : '' ) ) . '</dd>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		}
 		echo '</dl></div>';
 	}

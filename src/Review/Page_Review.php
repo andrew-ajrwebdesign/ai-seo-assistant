@@ -212,8 +212,9 @@ class Page_Review {
 		if ( null !== $page ) {
 			Ranking::curve(); // The site's own expected CTR, as the scan uses.
 		}
-		$suffix = $this->title_suffix();
-		$prompt = ( new Prompt_Builder() )->build_review_prompt(
+		$suffix  = $this->title_suffix();
+		$context = self::editor_context( $post_id, $row );
+		$prompt  = ( new Prompt_Builder() )->build_review_prompt(
 			[
 				'post_title'          => wp_strip_all_tags( get_the_title( $post ) ),
 				'permalink'           => (string) get_permalink( $post ),
@@ -236,6 +237,7 @@ class Page_Review {
 				'business_node'       => self::business_node( $facts ),
 				'images'              => $images,
 				'headings'            => array_map( static fn( $h ) => 'H' . $h['l'] . ' ' . $h['t'], array_slice( (array) ( $facts['headings'] ?? [] ), 0, 20 ) ),
+				'inbound'             => array_map( static fn( $l ) => $l[0] . ' | ' . $l[1], array_slice( $context['inbound'], 0, 30 ) ),
 				'keyphrase_supported' => (bool) $this->adapter->supports_keyphrase(),
 				'seo_plugin'          => (string) $this->adapter->get_name(),
 				'title_suffix'        => $suffix,
@@ -288,17 +290,8 @@ class Page_Review {
 				'why'     => null === $s ? '' : sanitize_text_field( (string) $s['why'] ),
 			];
 		}
-		$editor = [];
-		foreach ( (array) ( $reply['editor'] ?? [] ) as $item ) {
-			// Never schema: AJR Core prints it from the page type (an older reply may still carry it).
-			if ( in_array( $item['area'] ?? '', [ 'headings', 'links', 'content' ], true ) && '' !== trim( (string) $item['advice'] ) ) {
-				$editor[] = [
-					'area'   => $item['area'],
-					'advice' => sanitize_text_field( (string) $item['advice'] ),
-				];
-			}
-		}
-		$field = static fn( string $key, string $now ) => [
+		$editor = self::fresh_advice( (array) ( $reply['editor'] ?? [] ), $context );
+		$field  = static fn( string $key, string $now ) => [
 			'now'   => $now,
 			'value' => sanitize_text_field( (string) ( $reply[ $key ]['value'] ?? '' ) ),
 			'why'   => sanitize_text_field( (string) ( $reply[ $key ]['why'] ?? '' ) ),
@@ -775,6 +768,75 @@ class Page_Review {
 		}
 
 		return $out;
+	}
+
+	/**
+	 * What the page is now, for checking editor advice: its latest facts, its text, and the links to it
+	 * from the other scanned pages ([ from path, link text ]).
+	 *
+	 * @param int                 $post_id Post ID.
+	 * @param array<string,mixed> $row     Its scan row.
+	 * @return array{facts:array<string,mixed>,text:string,inbound:array<int,array{0:string,1:string}>}
+	 */
+	public static function editor_context( int $post_id, array $row ): array {
+		$here    = Scanner::norm_path( (string) ( $row['path'] ?? '' ) );
+		$inbound = [];
+		foreach ( ( new Scan_Store() )->all_facts() as $id => $other ) {
+			if ( (int) $id === $post_id ) {
+				continue;
+			}
+			foreach ( (array) ( $other['facts']['links'] ?? [] ) as $link ) {
+				if ( Scanner::norm_path( (string) ( $link['p'] ?? '' ) ) === $here ) {
+					$inbound[] = [ (string) $other['path'], (string) ( $link['t'] ?? '' ) ];
+				}
+			}
+		}
+
+		return [
+			'facts'   => (array) ( $row['facts'] ?? [] ),
+			'text'    => (string) ( new Content_Extractor() )->get_content( $post_id ),
+			'inbound' => $inbound,
+		];
+	}
+
+	/**
+	 * The reply's editor advice to keep: headings, links and content only (never schema), cleaned, and
+	 * nothing that is already true on the page (Claude can suggest the H1 the page already has).
+	 *
+	 * @param array<int,mixed>    $items   The reply's editor items.
+	 * @param array<string,mixed> $context editor_context().
+	 * @return array<int,array<string,string>>
+	 */
+	public static function fresh_advice( array $items, array $context ): array {
+		$out = [];
+		foreach ( $items as $item ) {
+			if ( ! is_array( $item ) || ! in_array( $item['area'] ?? '', [ 'headings', 'links', 'content' ], true ) || '' === trim( (string) ( $item['advice'] ?? '' ) ) ) {
+				continue;
+			}
+			$advice = [
+				'area'   => (string) $item['area'],
+				'advice' => sanitize_text_field( (string) $item['advice'] ),
+				'check'  => in_array( $item['check'] ?? '', Editor_Check::CHECKS, true ) ? (string) $item['check'] : 'none',
+				'target' => sanitize_text_field( (string) ( $item['target'] ?? '' ) ),
+				'source' => sanitize_text_field( (string) ( $item['source'] ?? '' ) ),
+			];
+			if ( self::advice_in_place( $advice, $context ) ) {
+				continue; // Already true on the page: not shown.
+			}
+			$out[] = $advice;
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Whether one piece of editor advice is already in place (Editor_Check).
+	 *
+	 * @param array<string,mixed> $advice  { area, advice, check?, target?, source? }.
+	 * @param array<string,mixed> $context editor_context().
+	 */
+	public static function advice_in_place( array $advice, array $context ): bool {
+		return Editor_Check::in_place( Editor_Check::of( $advice ), (array) $context['facts'], (string) $context['text'], (array) $context['inbound'] );
 	}
 
 	/**

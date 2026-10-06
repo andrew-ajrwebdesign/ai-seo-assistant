@@ -422,6 +422,27 @@ class Scanner {
 	}
 
 	/**
+	 * Rescan one page now when it was edited after its last scan (the on-save queue may not have run: no
+	 * cron on a local copy, a busy site). The page is fetched; the site-wide pass makes no network calls.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return bool Whether it was rescanned.
+	 */
+	public static function refresh_if_stale( int $post_id ): bool {
+		$store = new Scan_Store();
+		$row   = $store->get( $post_id );
+		$post  = get_post( $post_id );
+		if ( null === $row || ! $post instanceof \WP_Post || $post->post_modified_gmt <= (string) $row['scanned_at'] ) {
+			return false;
+		}
+		$scanner = new self( $store );
+		$scanner->scan_page( $post_id );
+		$scanner->finalize( false );
+
+		return true;
+	}
+
+	/**
 	 * A path for comparison: lower case, one trailing slash.
 	 *
 	 * @param string $path Path.

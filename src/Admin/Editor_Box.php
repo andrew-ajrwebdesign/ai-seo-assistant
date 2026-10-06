@@ -124,12 +124,13 @@ class Editor_Box {
 			],
 			admin_url( 'admin.php' )
 		);
-		$row     = ( new Scan_Store() )->get( $post_id );
+		\AJR\SEOAssistant\Scan\Scanner::refresh_if_stale( $post_id ); // Edited since the last scan: look again now.
+		$row = ( new Scan_Store() )->get( $post_id );
 		if ( null === $row ) {
 			echo '<p class="aisa-todo__none">' . esc_html__( 'Not scanned yet. It is scanned after it is published or saved.', 'ai-seo-assistant' ) . '</p>';
 			return;
 		}
-		$items = self::items( $row, self::done( $post_id ) );
+		$items = self::items( $row, self::done( $post_id ), \AJR\SEOAssistant\Review\Page_Review::editor_context( $post_id, $row ) );
 		echo '<div class="aisa-todo" data-aisa-todo-box data-post="' . esc_attr( (string) $post_id ) . '">';
 		echo '<p class="aisa-todo__status"><span data-aisa-todo-line>' . esc_html( self::line( $post_id, $row, $items ) ) . '</span> <a href="' . esc_url( $review ) . '">' . esc_html__( 'Open full review →', 'ai-seo-assistant' ) . '</a></p>';
 
@@ -150,8 +151,12 @@ class Editor_Box {
 			echo '<li class="aisa-todo__item' . ( null !== $item['done'] ? ' is-done' : '' ) . '" data-key="' . esc_attr( $item['key'] ) . '">';
 			echo '<span class="aisa-todo__area">' . esc_html( $item['area'] ) . '</span> ';
 			if ( null !== $item['done'] ) {
-				/* translators: %s: date. */
-				echo '<span class="aisa-todo__text">' . esc_html( $item['text'] ) . '</span> <span class="aisa-todo__when">' . esc_html( sprintf( __( 'Done %s', 'ai-seo-assistant' ), wp_date( 'j M', $item['done'] ) ) ) . '</span>';
+				$label = ! empty( $item['found'] )
+					/* translators: %s: date of the scan. */
+					? sprintf( __( 'Done — found on the page %s', 'ai-seo-assistant' ), wp_date( 'j M', $item['done'] ) )
+					/* translators: %s: date. */
+					: sprintf( __( 'Done %s', 'ai-seo-assistant' ), wp_date( 'j M', $item['done'] ) );
+				echo '<span class="aisa-todo__text">' . esc_html( $item['text'] ) . '</span> <span class="aisa-todo__when">' . esc_html( $label ) . '</span>';
 			} else {
 				echo '<span class="aisa-todo__text">' . esc_html( $item['text'] ) . '</span>';
 				if ( '' !== $item['detail'] ) {
@@ -178,11 +183,15 @@ class Editor_Box {
 	 * A done scan finding stays (collapsed, "Done <date>") until a rescan: gone when that scan no longer
 	 * finds it (it is not in the row), open again when a scan AFTER the tick still finds it.
 	 *
-	 * @param array<string,mixed> $row  Scan_Store::get() row.
-	 * @param array<string,int>   $done DONE_META.
-	 * @return array<int,array{key:string,area:string,text:string,detail:string,note:string,done:?int}>
+	 * Advice that is already in place on the page (Review\Editor_Check, against the latest scan) is done by
+	 * itself: "Done — found on the page <date>", never counted as a to-do.
+	 *
+	 * @param array<string,mixed>      $row     Scan_Store::get() row.
+	 * @param array<string,int>        $done    DONE_META.
+	 * @param array<string,mixed>|null $context Page_Review::editor_context() (null: no automatic check).
+	 * @return array<int,array{key:string,area:string,text:string,detail:string,note:string,done:?int,found?:bool}>
 	 */
-	public static function items( array $row, array $done ): array {
+	public static function items( array $row, array $done, ?array $context = null ): array {
 		$labels  = [
 			'headings' => __( 'Headings', 'ai-seo-assistant' ),
 			'links'    => __( 'Links', 'ai-seo-assistant' ),
@@ -196,10 +205,12 @@ class Editor_Box {
 		];
 		$scanned = (int) strtotime( (string) ( $row['scanned_at'] ?? '' ) . ' UTC' );
 		$advice  = [];
+		$raw     = [];
 		foreach ( (array) ( $row['suggestions']['editor'] ?? [] ) as $a ) {
 			$kind = $areas[ (string) ( $a['area'] ?? '' ) ] ?? '';
 			if ( '' !== $kind && '' !== trim( (string) ( $a['advice'] ?? '' ) ) ) {
 				$advice[ $kind ][] = (string) $a['advice'];
+				$raw[ $kind ][]    = (array) $a;
 			}
 		}
 		$out  = [];
@@ -233,15 +244,17 @@ class Editor_Box {
 			if ( isset( $used[ $kind ] ) ) {
 				continue; // Already shown with the finding it is about.
 			}
-			foreach ( $list as $text ) {
+			foreach ( $list as $i => $text ) {
 				$key   = 'advice:' . substr( md5( $kind . '|' . $text ), 0, 12 );
+				$found = null !== $context && \AJR\SEOAssistant\Review\Page_Review::advice_in_place( $raw[ $kind ][ $i ], $context );
 				$out[] = [
 					'key'    => $key,
 					'area'   => $labels[ $kind ],
 					'text'   => $text,
 					'detail' => '',
 					'note'   => '',
-					'done'   => isset( $done[ $key ] ) ? (int) $done[ $key ] : null,
+					'done'   => $found ? $scanned : ( isset( $done[ $key ] ) ? (int) $done[ $key ] : null ),
+					'found'  => $found,
 				];
 			}
 		}
