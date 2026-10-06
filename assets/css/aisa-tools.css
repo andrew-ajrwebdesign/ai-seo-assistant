@@ -384,6 +384,9 @@
 
 .aisa-field select,
 .aisa-field input[type="search"] {
+	/* A select is as wide as its longest option (a long page title): never wider than the screen. A
+	   percentage would resolve against the label, which is itself sized by the select. */
+	max-inline-size: min(25rem, calc(100vw - 48px));
 	min-block-size: 38px;
 	border-color: var(--aisa-border);
 	border-radius: 8px;
