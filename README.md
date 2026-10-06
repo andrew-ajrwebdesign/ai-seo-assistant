@@ -118,6 +118,16 @@ mode               = "Quick wins" (rank by the quick win; default) or "Biggest p
 
 Issues Claude cannot fix are shown as **N left · do in the editor**, with an **Applied** badge.
 
+### In the post editor: "SEO to-do for this page"
+
+Agency users see one small box in the editor sidebar (block and classic editor):
+
+* one line: the page's tier, the number of to-dos, when it was last scanned, and **Open full review →**;
+* the scan's findings for headings, links and content, each with the review's advice for it, plus any other editor advice from the latest review;
+* a **Done** tick on each. It marks the to-do done and queues the page for a rescan. A done finding shows "Done <date>" until the rescan, which either no longer finds it (it goes) or still does (it opens again).
+
+Nothing is generated or written from the editor, and the plugin does nothing when a post is saved. Titles, descriptions and alt text are written from the page review, with Apply and Undo. The page type is set in AJR Core's own box. Notes typed into the 4.x box's "Local SEO Focus" fields are no longer shown, but the review still reads them as context until someone clears them.
+
 ### Spend cap
 
 Claude calls are priced from their real token usage and counted against a cap per billing month: $10 by default, set in Settings. The month starts on the client's billing day, taken from the push or from Settings. Once the cap is reached, generating stops until the next billing month. Opus 5 is the default model: about 2–3¢ a page, about 6¢ with recommendations.
@@ -154,14 +164,14 @@ CI runs both on every pull request.
 src/
 ├── Core/       Plugin (wiring), Schema (custom tables), Upgrade, Secret_Store, Secret_Guard
 ├── Adapters/   Yoast, Rank Math, The SEO Framework
-├── AI/         Claude_Client, Prompt_Builder, Spend, Metadata_Generator (editor box)
+├── AI/         Claude_Client, Prompt_Builder (the review's prompt), Spend
 ├── Content/    Business (AJR Core facts), Content_Extractor
 ├── Report/     Snapshot (v1), Snapshot_V2, Snapshot_Store, Push_Endpoint, Report_Page, views, Access
 ├── Search/     Page_Data (per-page search data)
 ├── Scan/       Page_Fetcher, Html_Parser, Rules, Scanner, Scheduler, Opportunity, Page_Role, Ranking
 ├── Review/     Page_Review, Alt_Writer
 ├── Changes/    Change_Log
-└── Admin/      Menu, Ui, Scan_Page, Search_Console_Page, Changes_Page, Settings_Page, Tools_Actions
+└── Admin/      Menu, Ui, Scan_Page, Search_Console_Page, Changes_Page, Settings_Page, Tools_Actions, Editor_Box
 ```
 
 This repository is public: never commit a key. A real key that was ever committed must be rotated.

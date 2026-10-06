@@ -70,7 +70,7 @@ class Scanner {
 	}
 
 	/**
-	 * Post types the scan covers: the editor box's setting (default post + page).
+	 * Post types the scan covers: the 4.x setting (default post + page), filterable.
 	 *
 	 * @return array<int,string>
 	 */

@@ -10,7 +10,7 @@
  * HOW IT COUNTS. From the API's own `usage` on every reply (input, output, cache write, cache read tokens),
  * priced by the table below, so the figure is what Anthropic will bill, not a guess. Checked BEFORE every
  * call with a small reserve for the call about to happen, so a site at $9.99 cannot start a 6¢ request.
- * The editor box goes through the same Claude_Client, so it is capped too.
+ * Every call (the page review, the intent pass, the connection test) goes through Claude_Client, so all are capped.
  *
  * BILLING MONTH. The client's own month, anchored on the billing day (billing day 17 → 17 Sep–16 Oct),
  * because the retainer and its monthly report run on that cycle. The day comes from the push (retainer-scan

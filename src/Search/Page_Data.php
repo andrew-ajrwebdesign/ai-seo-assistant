@@ -211,35 +211,6 @@ class Page_Data {
 	}
 
 	/**
-	 * The shape the editor box's Metadata_Generator reads (it used to come from the on-site Search
-	 * Console connection, removed in 5.0): clicks, impressions, CTR as a fraction, position, queries.
-	 *
-	 * @param string $url Permalink.
-	 * @return array<string,mixed>
-	 */
-	public function get_page_data( $url ) {
-		$page = $this->get( (string) $url );
-		if ( null === $page || ! is_array( $page['gsc'] ?? null ) ) {
-			return [];
-		}
-		$gsc = $page['gsc'];
-
-		return [
-			'clicks'      => (int) $gsc['clicks'],
-			'impressions' => (int) $gsc['impressions'],
-			'ctr'         => null === $gsc['ctr'] ? 0.0 : (float) $gsc['ctr'] / 100,
-			'position'    => (float) ( $gsc['position'] ?? 0 ),
-			'queries'     => array_map(
-				static function ( array $q ): array {
-					$q['ctr'] = null === $q['ctr'] ? 0.0 : (float) $q['ctr'] / 100;
-					return $q;
-				},
-				(array) $gsc['queries']
-			),
-		];
-	}
-
-	/**
 	 * Delete everything (uninstall / tests).
 	 */
 	public static function forget(): void {

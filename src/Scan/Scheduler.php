@@ -224,18 +224,27 @@ class Scheduler {
 		if ( 'publish' === $new_status && 'publish' !== $old_status ) {
 			Auto_Types::on_publish( (int) $post->ID ); // A new page with an obvious type gets it now.
 		}
+		self::queue_page( (int) $post->ID );
+	}
+
+	/**
+	 * Queue one page for a rescan: it joins the queued run, or starts one (any number of saves, or "Done"
+	 * ticks in the editor, are one run, not one site-wide pass each).
+	 *
+	 * @param int $post_id Post ID.
+	 */
+	public static function queue_page( int $post_id ): void {
 		$queue = self::queue();
 		if ( null !== $queue ) {
-			if ( ! in_array( $post->ID, $queue['ids'], true ) ) {
-				$queue['ids'][] = (int) $post->ID;
+			if ( ! in_array( $post_id, $queue['ids'], true ) ) {
+				$queue['ids'][] = $post_id;
 				++$queue['total'];
 				unset( $queue['finalized'] ); // The site-wide pass runs again after the new page.
 				update_option( self::QUEUE, $queue, false );
 			}
 			return;
 		}
-		// One queued run for any number of saves (ten saves are not ten site-wide passes).
-		self::start( 'incremental', [ (int) $post->ID ] );
+		self::start( 'incremental', [ $post_id ] );
 	}
 
 	/**

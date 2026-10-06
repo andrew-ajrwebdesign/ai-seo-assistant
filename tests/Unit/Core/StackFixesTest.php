@@ -1,7 +1,7 @@
 <?php
 /**
- * Tests for the 4.4.0 stack-review behaviour outside the secrets: the metabox writes only what changed,
- * once per request; business facts fall back to AJR Core when this plugin's own are empty.
+ * Tests for the stack-review behaviour outside the secrets: nothing is written when a post is saved (5.0: the
+ * 4.x editor box and its save are gone); business facts fall back to AJR Core when this plugin's own are empty.
  *
  * @package AJR\SEOAssistant
  */
@@ -10,8 +10,6 @@ declare( strict_types=1 );
 
 namespace AJR\SEOAssistant\Tests\Unit\Core;
 
-use AJR\SEOAssistant\Admin\Admin;
-use AJR\SEOAssistant\AI\Claude_Client;
 use AJR\SEOAssistant\Content\Local_SEO_Context;
 use WP_Mock\Tools\TestCase;
 
@@ -43,69 +41,40 @@ class StackFixesTest extends TestCase {
 	}
 
 	/**
-	 * An Admin wired to recording fakes.
+	 * 5.0 (Andrew: "all we really need to see is the do this in editor"): the editor box writes nothing
+	 * when a post is saved. No save handler of this plugin is on the save hooks, and a save posting the 4.x
+	 * box's fields (title, description, local focus) leaves the SEO plugin's fields and the post meta alone.
 	 *
-	 * @param array<int,array<int,mixed>> $writes Receives [ field, post, value ] per adapter write.
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
 	 */
-	protected function admin( array &$writes ): Admin {
-		$adapter = new class( $writes ) {
-			/** @var array<int,array<int,mixed>> */
-			public array $writes;
-			public function __construct( array &$writes ) {
-				$this->writes = &$writes;
+	public function test_no_title_or_description_write_on_post_save(): void {
+		// No code of this plugin hooks a post save (the scan's transition_post_status only queues a rescan).
+		$root = dirname( __DIR__, 3 );
+		$it   = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $root . '/src' ) );
+		foreach ( $it as $file ) {
+			if ( '.php' !== substr( (string) $file, -4 ) ) {
+				continue;
 			}
-			public function save_title( $post_id, $value ) {
-				$this->writes[] = [ 'title', $post_id, $value ];
+			$src = (string) file_get_contents( (string) $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading source.
+			$this->assertSame( 0, preg_match( "/add_action\\(\\s*'(save_post[a-z_]*|wp_after_insert_post|edit_post|pre_post_update|wp_insert_post)'/", $src ), basename( (string) $file ) . ' hooks a post save' );
+			if ( 'Page_Review.php' !== basename( (string) $file ) ) { // The review's Apply is the one writer (logged, with Undo).
+				$this->assertStringNotContainsString( 'save_title(', str_replace( 'function save_title(', '', $src ), basename( (string) $file ) . ' writes an SEO title outside the page review' );
+				$this->assertStringNotContainsString( 'save_description(', str_replace( 'function save_description(', '', $src ), basename( (string) $file ) . ' writes an SEO description outside the page review' );
 			}
-			public function save_description( $post_id, $value ) {
-				$this->writes[] = [ 'description', $post_id, $value ];
-			}
-		};
-		$context = new class() {
-			public int $calls = 0;
-			public function save_page_context( $post_id, $data ) {
-				++$this->calls;
-			}
-		};
+		}
 
-		return new Admin( $adapter, null, $context, null, new Claude_Client() );
-	}
-
-	/**
-	 * A title still equal to what the box showed is not written (a Yoast-sidebar edit survives); a changed
-	 * description is; the second wp_after_insert_post pass for the same post writes nothing.
-	 */
-	public function test_metabox_writes_only_changes_once(): void {
-		$_POST = [
-			Admin::NONCE_NAME             => 'n',
-			'ai_seo_title'                => 'Shown at load',
-			'ai_seo_title_original'       => 'Shown at load',
-			'ai_seo_description'          => 'Generated description',
-			'ai_seo_description_original' => 'Old description',
-		];
-		$writes = [];
-		$admin  = $this->admin( $writes );
-
-		$admin->save_metadata_fields( 7 );
-		$admin->save_metadata_fields( 7 );
-
-		$this->assertSame( [ [ 'description', 7, 'Generated description' ] ], $writes );
-	}
-
-	/**
-	 * A form from before 4.4.0 (no *_original fields) keeps the old rule: write when non-empty; an empty
-	 * field never clears the SEO plugin's value.
-	 */
-	public function test_metabox_without_originals_keeps_old_rule(): void {
-		$_POST  = [
-			Admin::NONCE_NAME    => 'n',
-			'ai_seo_title'       => 'A title',
-			'ai_seo_description' => '   ',
-		];
-		$writes = [];
-		$this->admin( $writes )->save_metadata_fields( 8 );
-
-		$this->assertSame( [ [ 'title', 8, 'A title' ] ], $writes );
+		// The editor box registers its box, assets and the Done tick, nothing else.
+		if ( ! defined( 'AI_SEO_ASSISTANT_BASENAME' ) ) {
+			define( 'AI_SEO_ASSISTANT_BASENAME', 'ai-seo-assistant/ai-seo-assistant.php' );
+		}
+		$box = new \AJR\SEOAssistant\Admin\Editor_Box();
+		\WP_Mock::expectActionAdded( 'add_meta_boxes', [ $box, 'add_box' ] );
+		\WP_Mock::expectActionAdded( 'admin_enqueue_scripts', [ $box, 'enqueue' ] );
+		\WP_Mock::expectActionAdded( 'wp_ajax_aisa_todo_done', [ $box, 'ajax_done' ] );
+		$box->register();
+		$this->assertFalse( class_exists( 'AJR\SEOAssistant\Admin\Admin', true ), 'the 4.x box is gone' );
+		$this->assertFalse( method_exists( Local_SEO_Context::class, 'save_page_context' ), 'and its field save' );
 	}
 
 	/**

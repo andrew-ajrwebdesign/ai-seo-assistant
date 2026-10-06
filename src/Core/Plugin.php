@@ -7,21 +7,9 @@
 
 namespace AJR\SEOAssistant\Core;
 
-use AJR\SEOAssistant\Adapters\TSF_Adapter;
-use AJR\SEOAssistant\Adapters\Yoast_Adapter;
-use AJR\SEOAssistant\Adapters\RankMath_Adapter;
-use AJR\SEOAssistant\Adapters\SEO_Adapter_Resolver;
-use AJR\SEOAssistant\Content\Content_Extractor;
-use AJR\SEOAssistant\Content\Local_SEO_Context;
-use AJR\SEOAssistant\AI\Prompt_Builder;
-use AJR\SEOAssistant\AI\Claude_Client;
-use AJR\SEOAssistant\AI\Metadata_Generator;
-use AJR\SEOAssistant\Admin\Admin;
-use AJR\SEOAssistant\Admin\Ajax;
 use AJR\SEOAssistant\Admin\Menu;
 use AJR\SEOAssistant\Admin\Secret_Notices;
 use AJR\SEOAssistant\Admin\Tools_Actions;
-use AJR\SEOAssistant\Search\Page_Data;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -98,7 +86,7 @@ class Plugin {
 	}
 
 	/**
-	 * Whether this admin request needs the screens, editor box and handlers: every wp-admin screen and
+	 * Whether this admin request needs the screens, the editor's to-do box and handlers: every wp-admin screen and
 	 * admin-post.php, but on admin-ajax.php only this plugin's own actions (not the Heartbeat every
 	 * open editor sends each minute, nor another plugin's calls).
 	 */
@@ -165,31 +153,14 @@ class Plugin {
 	}
 
 	/**
-	 * Build and register everything that only acts in wp-admin (screens, editor box, AJAX, admin-post).
+	 * Build and register everything that only acts in wp-admin (screens, the editor's to-do box, AJAX, admin-post).
 	 *
 	 * @param \AJR\SEOAssistant\Report\Snapshot_Store $report_store Report storage.
 	 */
 	protected function init_admin( \AJR\SEOAssistant\Report\Snapshot_Store $report_store ) {
-		$tsf      = new TSF_Adapter();
-		$resolver = new SEO_Adapter_Resolver( $tsf, new Yoast_Adapter(), new RankMath_Adapter() );
-		$adapter  = $resolver->get_adapter() ?? $tsf;
-		$claude   = new Claude_Client();
-		$logger   = new Logger();
-		$context  = new Local_SEO_Context();
-
-		$generator = new Metadata_Generator(
-			$adapter,
-			new Content_Extractor(),
-			new Prompt_Builder(),
-			$claude,
-			$logger,
-			$context,
-			new Page_Data() // The page's pushed Search Console data (the on-site connection is gone).
-		);
-
-		// The editor box (agency only) and its AJAX actions.
-		( new Admin( $adapter, $logger, $context, $resolver, $claude ) )->init();
-		( new Ajax( $generator ) )->init();
+		// The editor's "SEO to-do for this page" (agency only). The 4.x box, its generate buttons and its
+		// save handler are gone: titles, descriptions and alt text are written from the page review only.
+		( new \AJR\SEOAssistant\Admin\Editor_Box() )->register();
 
 		// The menu and the screens: Report (everyone with manage_options), then the agency's tools.
 		( new Menu( $report_store ) )->register();

@@ -87,6 +87,7 @@ The product cut (decision 2026-10-06, `work/coding-projects/ai-seo-assistant/dec
   - Waiting types are set 100 at a time.
   - Upgrade steps run after an AJAX or WP-CLI update.
   - The progress bar pauses in a hidden tab.
+- **The post editor's box is now "SEO to-do for this page"** (Andrew: "all we really need to see is the do this in editor"). It shows the tier, the to-do count, the last scan date and a link to the full review, then the headings, links and content to-dos, each with a **Done** tick that queues a rescan. The 4.x box is gone: its title and description fields (Yoast's own box has them), the "Local SEO Focus" form with another client's example placeholders, the generate buttons, the live preview into Yoast, and the save handler. The plugin now writes nothing when a post is saved. Notes already typed there are still read by the review until cleared.
 - **Fix:** the bulk bar's "Generate for selected (3)" label is no longer written into the button's icon span.
 
 ### Removed

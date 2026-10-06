@@ -242,6 +242,7 @@ class Page_Review {
 				'include_brand'       => (string) get_option( 'ai_seo_assistant_include_brand', 'no' ),
 				'avoid_phrases'       => sanitize_text_field( (string) get_option( 'ai_seo_assistant_avoid_phrases', '' ) ),
 				'siblings'            => $this->siblings( $post_id, (array) $row['issues'], $facts ),
+				'page_notes'          => self::page_notes( $post_id ),
 			]
 		);
 
@@ -771,6 +772,34 @@ class Page_Review {
 			$out[] = sprintf( 'The description is %d characters; it must be at most %d.', $len, Rules::DESC_MAX );
 		} elseif ( $len > 0 && $len < Rules::DESC_MIN ) {
 			$out[] = sprintf( 'The description is %d characters; it must be at least %d.', $len, Rules::DESC_MIN );
+		}
+
+		return $out;
+	}
+
+	/**
+	 * The page's notes from the 4.x editor box ("Local SEO Focus": service, places, intent, notes), as
+	 * lines for the prompt. No longer shown or saved, but read until someone clears them: what a person
+	 * typed is never thrown away.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return array<int,string>
+	 */
+	public static function page_notes( int $post_id ): array {
+		$labels = [
+			\AJR\SEOAssistant\Content\Local_SEO_Context::META_SERVICE_FOCUS       => 'Service focus',
+			\AJR\SEOAssistant\Content\Local_SEO_Context::META_PRIMARY_LOCATION    => 'Main place',
+			\AJR\SEOAssistant\Content\Local_SEO_Context::META_SECONDARY_LOCATIONS => 'Other places',
+			\AJR\SEOAssistant\Content\Local_SEO_Context::META_SEARCH_INTENT       => 'Search intent',
+			\AJR\SEOAssistant\Content\Local_SEO_Context::META_PRIORITY            => 'Priority',
+			\AJR\SEOAssistant\Content\Local_SEO_Context::META_PAGE_NOTES          => 'Notes',
+		];
+		$out    = [];
+		foreach ( $labels as $key => $label ) {
+			$value = trim( sanitize_textarea_field( (string) get_post_meta( $post_id, $key, true ) ) );
+			if ( '' !== $value ) {
+				$out[] = $label . ': ' . mb_substr( preg_replace( '/\s+/u', ' ', $value ), 0, 300 );
+			}
 		}
 
 		return $out;

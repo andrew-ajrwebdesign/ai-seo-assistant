@@ -1,0 +1,70 @@
+/**
+ * AI SEO Assistant — the editor's "SEO to-do for this page" box (block and classic editor sidebars).
+ *
+ * WordPress admin's own text, link and button colours throughout; the only tone is a muted current
+ * colour, so the box follows the admin colour scheme and needs no colour of its own.
+ */
+
+.aisa-todo {
+	--aisa-todo-muted: color-mix(in srgb, currentColor 65%, transparent);
+	--aisa-todo-line: color-mix(in srgb, currentColor 15%, transparent);
+}
+
+.aisa-todo__status {
+	margin: 0 0 8px;
+}
+
+.aisa-todo__status a {
+	display: inline-block;
+	margin-block-start: 2px;
+}
+
+.aisa-todo__none {
+	margin: 0;
+	color: var(--aisa-todo-muted);
+}
+
+.aisa-todo__list {
+	margin: 0;
+	padding: 0;
+	list-style: none;
+}
+
+.aisa-todo__item {
+	display: grid;
+	gap: 4px;
+	margin: 0;
+	padding: 8px 0;
+	border-block-start: 1px solid var(--aisa-todo-line);
+}
+
+.aisa-todo__area {
+	color: var(--aisa-todo-muted);
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.02em;
+	text-transform: uppercase;
+}
+
+.aisa-todo__text {
+	font-weight: 600;
+}
+
+.aisa-todo__detail {
+	color: var(--aisa-todo-muted);
+}
+
+.aisa-todo__item .button {
+	justify-self: start;
+}
+
+.aisa-todo__item.is-done .aisa-todo__text {
+	color: var(--aisa-todo-muted);
+	font-weight: 400;
+	text-decoration: line-through;
+}
+
+.aisa-todo__when {
+	color: var(--aisa-todo-muted);
+	font-size: 12px;
+}

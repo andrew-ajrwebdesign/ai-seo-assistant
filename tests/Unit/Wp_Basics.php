@@ -30,7 +30,7 @@ trait Wp_Basics {
 		\WP_Mock::userFunction( 'esc_attr__' )->andReturnUsing( $esc );
 		\WP_Mock::userFunction( 'number_format_i18n' )->andReturnUsing( fn( $n, $d = 0 ) => number_format( (float) $n, (int) $d ) );
 		\WP_Mock::userFunction( 'wp_date' )->andReturnUsing(
-			fn( $format, $time, $tz = null ) => ( new \DateTimeImmutable( '@' . $time ) )->setTimezone( $tz ?? new \DateTimeZone( 'UTC' ) )->format( $format )
+			fn( $format, $time = null, $tz = null ) => ( new \DateTimeImmutable( '@' . ( $time ?? time() ) ) )->setTimezone( $tz ?? new \DateTimeZone( 'UTC' ) )->format( $format )
 		);
 		\WP_Mock::userFunction( 'trailingslashit' )->andReturnUsing( fn( $s ) => rtrim( (string) $s, '/' ) . '/' );
 		\WP_Mock::userFunction( 'untrailingslashit' )->andReturnUsing( fn( $s ) => rtrim( (string) $s, '/' ) );

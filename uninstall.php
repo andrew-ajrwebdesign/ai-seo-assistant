@@ -104,6 +104,8 @@ global $wpdb;
 $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s", $wpdb->esc_like( 'ai_seo_assistant_spend_usd_' ) . '%', $wpdb->esc_like( 'ai_seo_assistant_spend_calls_' ) . '%' ) );
 \AJR\SEOAssistant\Core\Schema::drop();
 delete_metadata( 'user', 0, 'aisa_rank_mode', '', true ); // Scan/Ranking::MODE_META (each agency user's list mode).
+delete_post_meta_by_key( '_aisa_todo_done' ); // Admin/Editor_Box::DONE_META (the editor's "Done" ticks).
+delete_post_meta_by_key( '_ai_seo_assistant_generation_log' ); // The 4.x editor box's generation log.
 delete_post_meta_by_key( '_aisa_page_role' ); // Scan/Page_Role::LEGACY_META (page types belong to AJR Core and stay).
 wp_clear_scheduled_hook( 'ai_seo_assistant_report_stale_check' );
 wp_clear_scheduled_hook( 'aisa_scan_run' );

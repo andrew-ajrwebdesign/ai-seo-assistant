@@ -182,7 +182,7 @@ class Settings_Page {
 		$used = sprintf( __( '%1$s used this billing month (%2$s) · %3$d calls · resets %4$s', 'ai-seo-assistant' ), Spend::money( $spend['usd'] ), $range, $spend['calls'], wp_date( 'j M', $spend['end']->getTimestamp(), $spend['end']->getTimezone() ) );
 		$capf = '<p class="aisa-money"><span aria-hidden="true">$</span><input type="number" id="aisa-cap" name="cap" min="0" max="1000" step="0.5" value="' . esc_attr( number_format( $cap, 2, '.', '' ) ) . '" class="small-text"> <span>' . esc_html__( 'per billing month', 'ai-seo-assistant' ) . '</span></p>'
 			. '<p class="aisa-usage"><span class="aisa-meter aisa-meter--spend" aria-hidden="true"><span class="aisa-meter__value" style="inline-size:' . esc_attr( (string) round( $pct, 1 ) ) . '%"></span></span><span class="aisa-small">' . esc_html( $used ) . '</span></p>'
-			. '<p class="aisa-small">' . esc_html__( 'At the cap the scan keeps running but stops writing suggestions, and says so. The editor box is capped too.', 'ai-seo-assistant' ) . '</p>';
+			. '<p class="aisa-small">' . esc_html__( 'At the cap the scan keeps running but stops writing suggestions, and says so.', 'ai-seo-assistant' ) . '</p>';
 		/* translators: %s: ordinal day, e.g. "17th". */
 		$cap_help = sprintf( __( 'For this site, per billing month (from the %s), on top of the Claude Console workspace limit.', 'ai-seo-assistant' ), self::ordinal_day( $day['day'] ) );
 

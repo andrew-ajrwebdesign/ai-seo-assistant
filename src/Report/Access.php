@@ -3,7 +3,7 @@
  * Access — the report is the owner's; the tools are the agency's.
  *
  * WHY (Andrew, 2026-09-29): the client — usually a WordPress Administrator — sees the Report and none of
- * the plugin's tool screens (5.0: SEO scan, Search Console, Changes, Settings, and the editor box). Every
+ * the plugin's tool screens (5.0: SEO scan, Search Console, Changes, Settings, and the editor's SEO to-do box). Every
  * one of them can spend the agency's Claude key or change the site's SEO fields. Administrators all hold
  * manage_options, so the tools sit behind their own capability, TOOLS_CAP, granted by this filter.
  *

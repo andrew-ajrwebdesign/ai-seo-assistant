@@ -56,12 +56,10 @@ class Claude_Client {
 	 * thinking as well as the answer, because a reply cut off at the limit is
 	 * unusable JSON.
 	 *
-	 * Every timeout sits well under the 120 s the editor's browser waits
-	 * (assets/js/admin.js). If the server gave up at the same moment as the
-	 * browser, the browser would show "timed out" while PHP carried on,
-	 * saved the result and billed the request, and the user would retry and
-	 * pay twice. With the server finishing first, its error or placeholder
-	 * fallback always reaches the screen.
+	 * Every timeout sits well under what the page review's browser waits, so the server's own answer (or
+	 * error) always reaches the screen: a browser that gave up while PHP carried on would invite a retry
+	 * that pays twice. 'metadata' and 'recommendations' were the 4.x editor box's tasks; 'metadata' stays
+	 * as the default shape for an unnamed task.
 	 */
 	const TASKS = [
 		'metadata'        => [
@@ -330,7 +328,7 @@ class Claude_Client {
 			return $limited;
 		}
 
-		// 5.0: the per-site billing-month cap, checked before every call (editor box included).
+		// 5.0: the per-site billing-month cap, checked before every call.
 		$capped = Spend::check( isset( self::TASKS[ $task ] ) ? $task : 'metadata' );
 
 		if ( is_wp_error( $capped ) ) {
