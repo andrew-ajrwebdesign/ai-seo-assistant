@@ -29,6 +29,9 @@ class Changes_Page {
 	/** Menu slug. */
 	public const SLUG = 'ai-seo-assistant-changes';
 
+	/** Rows per page of the change log. */
+	public const PER_PAGE = 50;
+
 	/** CSV export action. */
 	public const EXPORT = 'aisa_changes_csv';
 
@@ -162,6 +165,9 @@ class Changes_Page {
 			'undone'   => 0,
 		];
 		$pages  = [];
+		if ( function_exists( '_prime_post_caches' ) ) {
+			_prime_post_caches( array_values( array_unique( array_map( 'intval', array_column( $rows, 'post_id' ) ) ) ), false, false ); // Every title in one query.
+		}
 		foreach ( $rows as $row ) {
 			$s                        = $effects[ $row['id'] ]['state'];
 			$bucket                   = in_array( $s, [ 'measured', 'undone' ], true ) ? $s : ( 'not_measured' === $s ? 'none' : 'waiting' );
@@ -224,6 +230,11 @@ class Changes_Page {
 			return;
 		}
 		$shown = self::collapse_batches( $shown );
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only page number.
+		$paged   = isset( $_GET['paged'] ) ? max( 1, absint( $_GET['paged'] ) ) : 1;
+		$pages_n = max( 1, (int) ceil( count( $shown ) / self::PER_PAGE ) );
+		$paged   = min( $paged, $pages_n );
+		$shown   = array_slice( $shown, ( $paged - 1 ) * self::PER_PAGE, self::PER_PAGE, true );
 		echo '<div class="aisa-tablewrap"><table class="aisa-table aisa-table--log"><thead><tr><th scope="col">' . esc_html__( 'Date', 'ai-seo-assistant' ) . '</th><th scope="col">' . esc_html__( 'Page', 'ai-seo-assistant' ) . '</th><th scope="col">' . esc_html__( 'Field', 'ai-seo-assistant' ) . '</th><th scope="col">' . esc_html__( 'Before → after', 'ai-seo-assistant' ) . '</th><th scope="col">' . esc_html__( 'Effect', 'ai-seo-assistant' ) . '</th><td></td></tr></thead><tbody>';
 		foreach ( $shown as $row ) {
 			if ( isset( $row['batch_ids'] ) ) {
@@ -246,11 +257,24 @@ class Changes_Page {
 			echo '<tr><td class="aisa-col-date"><strong>' . esc_html( wp_date( 'D j M', (int) strtotime( $row['applied_at'] . ' UTC' ) ) ) . '</strong><br><span class="aisa-small">' . esc_html( $user ? $user->display_name : ( 0 === (int) $row['user_id'] ? __( 'Automatic', 'ai-seo-assistant' ) : '' ) ) . '</span></td>'
 				. '<td class="aisa-col-page"><a href="' . esc_url( $edit ) . '"><strong>' . esc_html( '' !== $title ? $title : $row['path'] ) . '</strong></a><br><span class="aisa-path">' . esc_html( $row['path'] ) . '</span></td>'
 				. '<td data-label="' . esc_attr__( 'Field', 'ai-seo-assistant' ) . '">' . esc_html( $labels[ $row['field'] ] ?? $row['field'] ) . '</td>'
-				. '<td>' . ( 'content' === $row['field'] ? '<p class="aisa-small">' . esc_html( self::content_row_summary( $log, (int) $row['id'] ) ) . '</p>' : '<dl class="aisa-ba"><dt>' . esc_html__( 'Before', 'ai-seo-assistant' ) . '</dt><dd class="aisa-before">' . esc_html( '' !== $row['before_value'] ? (string) $row['before_value'] : __( '(empty)', 'ai-seo-assistant' ) ) . '</dd><dt>' . esc_html__( 'After', 'ai-seo-assistant' ) . '</dt><dd>' . esc_html( (string) $row['after_value'] ) . '</dd></dl>' ) . '</td>'
+				. '<td>' . ( 'content' === $row['field'] ? '<p class="aisa-small">' . esc_html( self::content_row_summary( $log, (int) $row['id'], (string) ( $row['note'] ?? '' ) ) ) . '</p>' : '<dl class="aisa-ba"><dt>' . esc_html__( 'Before', 'ai-seo-assistant' ) . '</dt><dd class="aisa-before">' . esc_html( '' !== $row['before_value'] ? (string) $row['before_value'] : __( '(empty)', 'ai-seo-assistant' ) ) . '</dd><dt>' . esc_html__( 'After', 'ai-seo-assistant' ) . '</dt><dd>' . esc_html( (string) $row['after_value'] ) . '</dd></dl>' ) . '</td>'
 				. '<td data-label="' . esc_attr__( 'Effect', 'ai-seo-assistant' ) . '">' . Ui::pill( $pill, $tone ) . '<p class="aisa-small">' . esc_html( $text ) . '</p></td>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 				. '<td class="aisa-col-action">' . $undo . '</td></tr>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above.
 		}
 		echo '</tbody></table></div>';
+		if ( $pages_n > 1 ) {
+			$links = paginate_links(
+				[
+					'base'      => add_query_arg( 'paged', '%#%' ),
+					'format'    => '',
+					'current'   => $paged,
+					'total'     => $pages_n,
+					'prev_text' => __( 'Newer', 'ai-seo-assistant' ),
+					'next_text' => __( 'Older', 'ai-seo-assistant' ),
+				]
+			);
+			echo '<nav class="aisa-pager" aria-label="' . esc_attr__( 'Change log pages', 'ai-seo-assistant' ) . '">' . wp_kses_post( (string) $links ) . '</nav>';
+		}
 		echo '<p class="aisa-small">' . esc_html__( 'Effect = click-through rate in the 4 weeks after a change against the 4 weeks before, from the weekly push. Position is shown beside it so a ranking move is not mistaken for a better listing. “Better” or “worse” is always written, not only coloured.', 'ai-seo-assistant' ) . '</p></section>';
 	}
 
@@ -365,13 +389,23 @@ class Changes_Page {
 	 * The page-content change in words: which alt attributes changed (the whole content is kept in the log
 	 * for Undo, but never printed).
 	 *
-	 * @param Change_Log $log The change log.
-	 * @param int        $id  The content row's ID.
+	 * @param Change_Log $log  The change log.
+	 * @param int        $id   The content row's ID.
+	 * @param string     $note The summary stored with the row ('' for a row logged before schema 4).
 	 */
-	public static function content_row_summary( Change_Log $log, int $id ): string {
-		$row = $log->get( $id ); // The list reads content rows lean (Change_Log::find()); the summary needs them whole.
+	public static function content_row_summary( Change_Log $log, int $id, string $note = '' ): string {
+		if ( '' !== $note ) {
+			return $note; // Written when the change was logged: the page itself is not read.
+		}
+		// A row logged before schema 4: read it whole once, and keep its summary for every later view.
+		$row = $log->get( $id );
+		if ( null === $row ) {
+			return '';
+		}
+		$note = Change_Log::content_summary( (string) $row['before_value'], (string) $row['after_value'] );
+		$log->save_note( $id, $note );
 
-		return null === $row ? '' : self::content_summary( (string) $row['before_value'], (string) $row['after_value'] );
+		return $note;
 	}
 
 	/**
@@ -381,12 +415,7 @@ class Changes_Page {
 	 * @param string $after  Content after.
 	 */
 	public static function content_summary( string $before, string $after ): string {
-		preg_match_all( '/\b(?:alt|image_alt)="([^"]*)"/', $before, $b );
-		preg_match_all( '/\b(?:alt|image_alt)="([^"]*)"/', $after, $a );
-		$new = array_values( array_diff( $a[1], $b[1] ) );
-
-		/* translators: 1: count, 2: the new alt texts. */
-		return sprintf( _n( '%1$d alt attribute written into the page: %2$s', '%1$d alt attributes written into the page: %2$s', count( $new ), 'ai-seo-assistant' ), count( $new ), '“' . implode( '”, “', array_slice( $new, 0, 4 ) ) . '”' );
+		return Change_Log::content_summary( $before, $after );
 	}
 
 	/**

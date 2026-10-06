@@ -49,9 +49,10 @@ class Change_Log {
 	 * @param string $before    Value before.
 	 * @param string $after     Value after.
 	 * @param int    $user_id   Who applied it.
+	 * @param string $note      One-line summary (a content row: the alt texts it writes), shown in Changes.
 	 * @return int Row ID.
 	 */
-	public function log( string $batch, int $post_id, string $path, string $field, int $object_id, string $before, string $after, int $user_id ): int {
+	public function log( string $batch, int $post_id, string $path, string $field, int $object_id, string $before, string $after, int $user_id, string $note = '' ): int {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- the plugin's own table.
 		$ok = $wpdb->insert(
@@ -66,8 +67,9 @@ class Change_Log {
 				'after_value'  => $after,
 				'user_id'      => $user_id,
 				'applied_at'   => gmdate( 'Y-m-d H:i:s' ),
+				'note'         => mb_substr( $note, 0, 255 ),
 			],
-			[ '%s', '%d', '%s', '%s', '%d', '%s', '%s', '%d', '%s' ]
+			[ '%s', '%d', '%s', '%s', '%d', '%s', '%s', '%d', '%s', '%s' ]
 		);
 
 		// 0 when the row was not stored (too big for the column, a lost table): the caller must not make a
@@ -114,7 +116,7 @@ class Change_Log {
 		// as '' and only get(), Undo and the CSV export ('full') load it.
 		$cols = ! empty( $where['full'] )
 			? '*'
-			: "id, batch, post_id, path, field, object_id, user_id, applied_at, undone_at, undone_by, effect, IF( field = 'content', '', before_value ) AS before_value, IF( field = 'content', '', after_value ) AS after_value";
+			: "id, batch, post_id, path, field, object_id, user_id, applied_at, undone_at, undone_by, effect, note, IF( field = 'content', '', before_value ) AS before_value, IF( field = 'content', '', after_value ) AS after_value";
 		$sql  = "SELECT {$cols} FROM `{$table}` WHERE 1=1";
 		$args = [];
 		if ( ! empty( $where['post_id'] ) ) {
@@ -144,6 +146,33 @@ class Change_Log {
 		$rows = (array) $wpdb->get_results( $wpdb->prepare( $sql, $args ), ARRAY_A );
 
 		return array_map( [ self::class, 'decode' ], $rows );
+	}
+
+	/**
+	 * Store a row's one-line summary (a content row logged before schema 4 gets it on first display).
+	 *
+	 * @param int    $id   Row ID.
+	 * @param string $note Summary.
+	 */
+	public function save_note( int $id, string $note ): bool {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the plugin's own table.
+		return false !== $wpdb->update( Schema::table( 'changes' ), [ 'note' => mb_substr( $note, 0, 255 ) ], [ 'id' => $id ], [ '%s' ], [ '%d' ] );
+	}
+
+	/**
+	 * What a content row changed, in one line: the alt attributes written into the page.
+	 *
+	 * @param string $before Content before.
+	 * @param string $after  Content after.
+	 */
+	public static function content_summary( string $before, string $after ): string {
+		preg_match_all( '/\b(?:alt|image_alt)="([^"]*)"/', $before, $b );
+		preg_match_all( '/\b(?:alt|image_alt)="([^"]*)"/', $after, $a );
+		$new = array_values( array_diff( $a[1], $b[1] ) );
+
+		/* translators: 1: count, 2: the new alt texts. */
+		return sprintf( _n( '%1$d alt attribute written into the page: %2$s', '%1$d alt attributes written into the page: %2$s', count( $new ), 'ai-seo-assistant' ), count( $new ), '“' . implode( '”, “', array_slice( $new, 0, 4 ) ) . '”' );
 	}
 
 	/**

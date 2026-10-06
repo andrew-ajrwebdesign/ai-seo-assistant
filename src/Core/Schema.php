@@ -33,7 +33,7 @@ class Schema {
 	public const VERSION_OPTION = 'ai_seo_assistant_db_version';
 
 	/** Current table version. */
-	public const VERSION = '3'; // The tables' own version, not the plugin's. 2: the change log's before/after are longtext (a builder page's content is often over 64 KB). 3: scan.flags (listing / form, found at scan time).
+	public const VERSION = '4'; // The tables' own version, not the plugin's. 2: the change log's before/after are longtext (a builder page's content is often over 64 KB). 3: scan.flags (listing / form, found at scan time). 4: changes.note (a content row's one-line summary, written when logged).
 
 	/**
 	 * A table's full name.
@@ -109,6 +109,7 @@ applied_at datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
 undone_at datetime NULL DEFAULT NULL,
 undone_by bigint(20) unsigned NOT NULL DEFAULT 0,
 effect longtext NULL,
+note varchar(255) NOT NULL DEFAULT '',
 PRIMARY KEY  (id),
 KEY post_id (post_id),
 KEY applied_at (applied_at)

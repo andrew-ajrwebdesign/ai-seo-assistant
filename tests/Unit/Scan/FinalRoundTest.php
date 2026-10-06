@@ -153,6 +153,32 @@ class FinalRoundTest extends TestCase {
 	}
 
 	/**
+	 * Last round A13: a content row's summary is written when it is logged; the Changes screen reads the
+	 * whole page only for a row from before that, once, and keeps the summary.
+	 */
+	public function test_content_summary_without_reading_the_page(): void {
+		$log = new class() extends \AJR\SEOAssistant\Changes\Change_Log {
+			/** @var int */
+			public $gets = 0;
+			/** @var array<int,string> */
+			public $notes = [];
+			public function get( int $id ): ?array {
+				++$this->gets;
+				return [ 'before_value' => '<img alt="">', 'after_value' => '<img alt="A white kitchen">' ];
+			}
+			public function save_note( int $id, string $note ): bool {
+				$this->notes[ $id ] = $note;
+				return true;
+			}
+		};
+		$this->assertSame( 'kept note', \AJR\SEOAssistant\Admin\Changes_Page::content_row_summary( $log, 7, 'kept note' ) );
+		$this->assertSame( 0, $log->gets, 'the page is not read when the note is there' );
+		$this->assertSame( '1 alt attribute written into the page: “A white kitchen”', \AJR\SEOAssistant\Admin\Changes_Page::content_row_summary( $log, 8 ) );
+		$this->assertSame( 1, $log->gets );
+		$this->assertSame( [ 8 => '1 alt attribute written into the page: “A white kitchen”' ], $log->notes, 'kept for next time' );
+	}
+
+	/**
 	 * Item 11: own-site fetches never follow a redirect (a 301 is reported as itself, not followed off-site).
 	 */
 	public function test_own_fetch_never_follows_redirects(): void {

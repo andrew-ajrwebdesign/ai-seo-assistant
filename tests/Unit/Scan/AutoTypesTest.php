@@ -92,7 +92,7 @@ class AutoTypesTest extends TestCase {
 			public $refuse = false;
 			/** @var int */
 			public $next = 0;
-			public function log( string $batch, int $post_id, string $path, string $field, int $object_id, string $before, string $after, int $user_id ): int {
+			public function log( string $batch, int $post_id, string $path, string $field, int $object_id, string $before, string $after, int $user_id, string $note = '' ): int {
 				if ( $this->refuse ) {
 					return 0;
 				}
@@ -100,6 +100,7 @@ class AutoTypesTest extends TestCase {
 				$this->rows[ $id ] = compact( 'id', 'batch', 'post_id', 'path', 'field', 'object_id', 'user_id' ) + [
 					'before_value' => $before,
 					'after_value'  => $after,
+			'note'         => $note,
 					'undone_at'    => null,
 				];
 				return $id;

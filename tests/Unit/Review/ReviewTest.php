@@ -75,7 +75,7 @@ class Fake_Log extends Change_Log {
 	public $refuse = [];
 	/** @var int */
 	public $next = 0;
-	public function log( string $batch, int $post_id, string $path, string $field, int $object_id, string $before, string $after, int $user_id ): int {
+	public function log( string $batch, int $post_id, string $path, string $field, int $object_id, string $before, string $after, int $user_id, string $note = '' ): int {
 		if ( in_array( $field, $this->refuse, true ) ) {
 			return 0;
 		}
@@ -83,6 +83,7 @@ class Fake_Log extends Change_Log {
 		$this->rows[ $id ] = compact( 'id', 'batch', 'post_id', 'path', 'field', 'object_id', 'user_id' ) + [
 			'before_value' => $before,
 			'after_value'  => $after,
+			'note'         => $note,
 			'applied_at'   => '2026-10-06 10:00:00',
 			'undone_at'    => null,
 			'undone_by'    => 0,

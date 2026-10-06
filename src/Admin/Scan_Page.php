@@ -1627,6 +1627,16 @@ class Scan_Page {
 			echo '<p class="aisa-typebar">' . Ui::icon( 'admin-customizer' ) . '<strong>' . esc_html( $line ) . '</strong> <a class="aisa-btn aisa-btn--small" href="' . esc_url( $this->url( [ 'types' => 'review' ] ) . '#aisa-typereview' ) . '">' . esc_html__( 'Review and apply all', 'ai-seo-assistant' ) . '</a></p>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 			return;
 		}
+		// Fifty at a time: a site that just got AJR Core can have hundreds.
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only page number.
+		$at      = isset( $_GET['tpaged'] ) ? max( 1, absint( $_GET['tpaged'] ) ) : 1;
+		$total   = count( $waiting );
+		$last    = max( 1, (int) ceil( $total / 50 ) );
+		$at      = min( $at, $last );
+		$waiting = array_slice( $waiting, ( $at - 1 ) * 50, 50, true );
+		if ( function_exists( '_prime_post_caches' ) ) {
+			_prime_post_caches( array_map( 'intval', array_keys( $waiting ) ), false, false );
+		}
 		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="aisa-typereview" id="aisa-typereview">';
 		wp_nonce_field( Tools_Actions::TYPES );
 		echo '<input type="hidden" name="action" value="' . esc_attr( Tools_Actions::TYPES ) . '">';
@@ -1635,7 +1645,22 @@ class Scan_Page {
 			$field = 'aisa-type-' . (int) $id;
 			echo '<li><input type="checkbox" id="' . esc_attr( $field ) . '" name="ids[]" value="' . esc_attr( (string) $id ) . '" checked> <label for="' . esc_attr( $field ) . '"><strong>' . esc_html( wp_strip_all_tags( (string) get_the_title( (int) $id ) ) ) . '</strong> → ' . esc_html( (string) $types[ $s['type'] ]['label'] ) . ( '' !== (string) ( $s['reason'] ?? '' ) ? ' <span class="aisa-small">' . esc_html( (string) $s['reason'] ) . '</span>' : '' ) . '</label></li>';
 		}
-		echo '</ul></fieldset><p><button type="submit" class="aisa-btn aisa-btn--primary">' . esc_html__( 'Apply the ticked page types', 'ai-seo-assistant' ) . '</button> <a href="' . esc_url( $this->url( [] ) ) . '">' . esc_html__( 'Cancel', 'ai-seo-assistant' ) . '</a></p></form>';
+		echo '</ul></fieldset><p><button type="submit" class="aisa-btn aisa-btn--primary">' . esc_html__( 'Apply the ticked page types', 'ai-seo-assistant' ) . '</button> <a href="' . esc_url( $this->url( [] ) ) . '">' . esc_html__( 'Cancel', 'ai-seo-assistant' ) . '</a>';
+		if ( $last > 1 ) {
+			/* translators: 1: this page, 2: pages. */
+			echo ' <span class="aisa-small">' . esc_html( sprintf( __( 'Page %1$d of %2$d', 'ai-seo-assistant' ), $at, $last ) ) . '</span>';
+			if ( $at < $last ) {
+				echo ' <a href="' . esc_url(
+					$this->url(
+						[
+							'types'  => 'review',
+							'tpaged' => $at + 1,
+						]
+					) . '#aisa-typereview'
+				) . '">' . esc_html__( 'Next 50', 'ai-seo-assistant' ) . '</a>';
+			}
+		}
+		echo '</p></form>';
 	}
 
 	/**

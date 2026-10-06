@@ -488,7 +488,7 @@ class Page_Review {
 		$content_saved = null;
 		if ( $new !== $content ) {
 			// Log FIRST: a content change that could not be logged could not be undone, so it is not made.
-			$log_id        = $this->log->log( $batch, $post_id, $path, 'content', $post_id, $content, $new, $user_id );
+			$log_id        = $this->log->log( $batch, $post_id, $path, 'content', $post_id, $content, $new, $user_id, Change_Log::content_summary( $content, $new ) );
 			$content_saved = 0 === $log_id ? 'not-logged' : $this->write_content( $post_id, $content, $new );
 			if ( true === $content_saved ) {
 				$count += $page_only;
