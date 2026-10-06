@@ -26,12 +26,34 @@ class Ranking {
 	/** Option: the site's own CTR curve, keyed to the push it came from. Not autoloaded. */
 	public const CURVE_OPTION = 'ai_seo_assistant_ctr_curve';
 
+	/** User meta: the agency user's ranking mode on the SEO scan list (MODES). */
+	public const MODE_META = 'aisa_rank_mode';
+
 	/**
-	 * Per-request memo of rows().
+	 * Ranking modes: what pages are ranked and tiered by.
 	 *
-	 * @var array<int,array<string,mixed>>|null
+	 * The 'quick' mode ranks by the weighted quick win (a better listing at today's position; the default);
+	 * 'prize' by the weighted top-3 prize (pages worth content and link work).
+	 *
+	 * @var array<int,string>
 	 */
-	protected static ?array $rows = null;
+	public const MODES = [ 'quick', 'prize' ];
+
+	/**
+	 * Per-request memo of rows(), by mode.
+	 *
+	 * @var array<string,array<int,array<string,mixed>>>
+	 */
+	protected static array $rows = [];
+
+	/**
+	 * The current user's ranking mode ('quick' unless they chose 'prize').
+	 */
+	public static function mode(): string {
+		$mode = function_exists( 'get_user_meta' ) ? (string) get_user_meta( get_current_user_id(), self::MODE_META, true ) : '';
+
+		return in_array( $mode, self::MODES, true ) ? $mode : 'quick';
+	}
 
 	/**
 	 * The expected-CTR curve for the stored push, put in force for Opportunity. Calibrated from every page's
@@ -70,13 +92,16 @@ class Ranking {
 	}
 
 	/**
-	 * Every scanned page, ranked by opportunity value (weighted quick win a year), then impressions and issues.
+	 * Every scanned page, ranked by opportunity value a year (the weighted quick win, or the weighted top-3
+	 * prize in 'prize' mode), then impressions and issues; tiers scale with the site (Opportunity::tiers()).
 	 *
+	 * @param string $mode 'quick' | 'prize' ('' = the current user's mode()).
 	 * @return array<int,array<string,mixed>> Keyed by post ID, in rank order.
 	 */
-	public static function rows(): array {
-		if ( null !== self::$rows ) {
-			return self::$rows;
+	public static function rows( string $mode = '' ): array {
+		$mode = in_array( $mode, self::MODES, true ) ? $mode : self::mode();
+		if ( isset( self::$rows[ $mode ] ) ) {
+			return self::$rows[ $mode ];
 		}
 		$scan = ( new Scan_Store() )->summaries();
 		if ( [] === $scan ) {
@@ -114,6 +139,7 @@ class Ranking {
 			$bumped = Opportunity::earns_bump( $enq, $visits, $site_enq, $site_visits );
 			$value  = Opportunity::value( $role['role'], $bumped );
 			$worth  = Opportunity::value_of( $split['weighted'], $value, $enq );
+			$worth3 = Opportunity::value_of( $split['weighted_prize'], $value, $enq );
 			$quick  = Opportunity::yearly( $split['missed'] );
 			$prize  = Opportunity::yearly( $split['prize'] );
 
@@ -138,13 +164,19 @@ class Ranking {
 				'page_type'   => $role['type'],
 				'bumped'      => $bumped,
 				'value'       => $value,
-				'worth'       => $worth,
-				'tier'        => $shown > 0 ? Opportunity::tier( $worth ) : 'none',
+				'worth_quick' => $worth,
+				'worth_prize' => $worth3,
+				'worth'       => 'prize' === $mode ? $worth3 : $worth,
+				'mode'        => $mode,
 				'seen'        => $shown > 0,
 				'applied_at'  => $latest[ $id ] ?? '',
 			];
 		}
-		$scores = Opportunity::scores( array_map( static fn( $r ) => $r['worth'], $rows ) );
+		$values = array_map( static fn( $r ) => $r['seen'] ? (float) $r['worth'] : 0.0, $rows );
+		foreach ( Opportunity::tiers( $values ) as $id => $tier ) {
+			$rows[ $id ]['tier'] = $tier;
+		}
+		$scores = Opportunity::scores( $values );
 		foreach ( $scores as $id => $score ) {
 			$rows[ $id ]['score'] = $score;
 		}
@@ -153,7 +185,7 @@ class Ranking {
 		foreach ( $rows as $id => $row ) {
 			$rows[ $id ]['rank'] = ++$rank;
 		}
-		self::$rows = $rows;
+		self::$rows[ $mode ] = $rows;
 
 		return $rows;
 	}
@@ -162,7 +194,7 @@ class Ranking {
 	 * Forget the memo (after a role change in the same request).
 	 */
 	public static function flush(): void {
-		self::$rows = null;
+		self::$rows = [];
 	}
 
 	/**

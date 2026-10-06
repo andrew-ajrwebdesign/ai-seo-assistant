@@ -510,6 +510,47 @@ a.aisa-pagecell__title:hover {
 	white-space: nowrap;
 }
 
+.aisa-modes-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 14px;
+}
+
+.aisa-modes-row p {
+	margin: 0;
+}
+
+.aisa-modes {
+	display: inline-flex;
+	padding: 3px;
+	border-radius: 10px;
+	background-color: var(--aisa-surface);
+	box-shadow: inset 0 0 0 1px var(--aisa-border);
+}
+
+.aisa-modes__item {
+	padding: 6px 14px;
+	border-radius: 8px;
+	color: var(--aisa-muted);
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.aisa-modes__item:hover {
+	color: var(--aisa-ink);
+}
+
+.aisa-modes__item.is-current {
+	background-color: var(--aisa-dark);
+	color: var(--aisa-on-dark);
+}
+
+.aisa-modes__item:focus-visible {
+	outline: 2px solid var(--aisa-primary);
+	outline-offset: 1px;
+}
+
 .aisa-opp-sum {
 	margin: 0;
 }

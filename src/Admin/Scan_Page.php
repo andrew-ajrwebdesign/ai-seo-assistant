@@ -59,6 +59,7 @@ class Scan_Page {
 		}
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only choice of page.
 		$post_id = isset( $_GET['post'] ) ? absint( $_GET['post'] ) : 0;
+		$this->save_mode();
 		echo '<div class="wrap aisa-wrap"><hr class="wp-header-end"><div class="aisa-tool">';
 		if ( $post_id > 0 ) {
 			$this->review( $post_id );
@@ -66,6 +67,40 @@ class Scan_Page {
 			$this->overview();
 		}
 		echo Ui::layout_close() . '</div></div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui (the card is AJR Core's own).
+	}
+
+	/**
+	 * "Quick wins | Biggest prizes": the toggle's links carry a nonce; the choice is the user's own (user meta).
+	 */
+	protected function save_mode(): void {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- verified on the next line.
+		if ( ! isset( $_GET['mode'], $_GET['_aisa_mode'] ) || ! wp_verify_nonce( sanitize_key( wp_unslash( $_GET['_aisa_mode'] ) ), 'aisa_rank_mode' ) ) {
+			return;
+		}
+		$mode = sanitize_key( wp_unslash( $_GET['mode'] ) );
+		// phpcs:enable
+		if ( in_array( $mode, Ranking::MODES, true ) ) {
+			update_user_meta( get_current_user_id(), Ranking::MODE_META, $mode );
+		}
+	}
+
+	/**
+	 * The ranking toggle: Quick wins (default) or Biggest prizes.
+	 *
+	 * @param string $mode Current mode.
+	 */
+	protected function mode_toggle( string $mode ): string {
+		$labels = [
+			'quick' => __( 'Quick wins', 'ai-seo-assistant' ),
+			'prize' => __( 'Biggest prizes', 'ai-seo-assistant' ),
+		];
+		$out    = '<nav class="aisa-modes" aria-label="' . esc_attr__( 'Rank pages by', 'ai-seo-assistant' ) . '">';
+		foreach ( $labels as $key => $label ) {
+			$url  = wp_nonce_url( $this->url( [ 'mode' => $key ] ), 'aisa_rank_mode', '_aisa_mode' );
+			$out .= '<a class="aisa-modes__item' . ( $key === $mode ? ' is-current' : '' ) . '" href="' . esc_url( $url ) . '"' . ( $key === $mode ? ' aria-current="true"' : '' ) . '>' . esc_html( $label ) . '</a>';
+		}
+
+		return $out . '</nav>';
 	}
 
 	/* ==== The list (B1–B3) ======================================================================== */
@@ -425,6 +460,8 @@ class Scan_Page {
 		echo '<section class="aisa-card" aria-labelledby="aisa-ranked">';
 		/* translators: %s: last day of the 90-day window. */
 		echo Ui::card_head( 'aisa-ranked', 'list-view', __( 'Pages ranked by opportunity', 'ai-seo-assistant' ), sprintf( __( 'Search Console + Google Analytics · 90 days to %s', 'ai-seo-assistant' ), Ui::day( $meta['end'] ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+		$mode = Ranking::mode();
+		echo '<div class="aisa-modes-row">' . $this->mode_toggle( $mode ) . '<p class="aisa-small">' . esc_html( 'prize' === $mode ? __( 'Ranked by the top-3 prize: pages worth content and link work.', 'ai-seo-assistant' ) : __( 'Ranked by the quick win: what a better title and description bring at today’s position.', 'ai-seo-assistant' ) ) . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in mode_toggle().
 		$this->filters( $q, $issue, $type, $status, $hide );
 
 		// Bulk bar: the JS enables it; without JS each page's Review screen generates one at a time.
@@ -489,9 +526,8 @@ class Scan_Page {
 			/* translators: %s: number of searches (impressions). */
 			? sprintf( __( 'click curve: this site’s own (from %s searches)', 'ai-seo-assistant' ), number_format_i18n( $curve['searches'] ) )
 			: __( 'click curve: standard', 'ai-seo-assistant' );
-		$t = Opportunity::tier_thresholds();
-		/* translators: 1: which click curve, 2: High threshold, 3: Medium threshold, 4: pages shown, 5: pages in all. */
-		echo '<p class="aisa-small">' . esc_html( sprintf( __( 'Estimates, a year. Quick win = the extra visits a better title and description could bring at today’s position: for each search, impressions × (expected CTR at that position − actual CTR); searches past position 20 add almost nothing. Top-3 prize = the extra visits if each search reached position 3. Each search is weighted by intent (ready to enquire ×3, comparing ×2, learning ×1, looking for you by name ×0.5) and the page by its type (service and contact ×1.5, area ×1.2, articles ×0.6). High from %2$s weighted visits a year, Medium from %3$s. %1$s. Showing %4$d of %5$d pages.', 'ai-seo-assistant' ), ucfirst( $used ), number_format_i18n( $t['high'] ), number_format_i18n( $t['medium'] ), count( $shown ), $all ) ) . '</p>';
+		/* translators: 1: which click curve, 2: pages shown, 3: pages in all. */
+		echo '<p class="aisa-small">' . esc_html( sprintf( __( 'Tiers scale with this site: High is the few top pages that together hold half of its opportunity, Medium the pages holding the next quarter, Low the rest. Estimates, a year. Quick win = the extra visits a better title and description could bring at today’s position: for each search, impressions × (expected CTR at that position − actual CTR); searches past position 20 add almost nothing. Top-3 prize = the extra visits if each search reached position 3. Each search is weighted by intent (ready to enquire ×3, comparing ×2, learning ×1, looking for you by name ×0.5) and the page by its type (service and contact ×1.5, area ×1.2, articles ×0.6). %1$s. Showing %2$d of %3$d pages.', 'ai-seo-assistant' ), ucfirst( $used ), count( $shown ), $all ) ) . '</p>';
 		echo '</section>';
 	}
 
@@ -621,7 +657,7 @@ class Scan_Page {
 		if ( null !== $r && Page_Data::has_data() ) {
 			$tiers = self::tiers();
 			/* translators: 1: tier (High, Medium, Low), 2: rank (ordinal number), 3: page count. */
-			$sub[] = sprintf( __( '%1$s opportunity, %2$s of %3$d pages', 'ai-seo-assistant' ), $tiers[ $r['tier'] ] ?? '', self::ordinal( (int) $r['rank'] ), count( $ranked ) );
+			$sub[] = sprintf( 'prize' === $r['mode'] ? __( '%1$s top-3 prize, %2$s of %3$d pages', 'ai-seo-assistant' ) : __( '%1$s quick win, %2$s of %3$d pages', 'ai-seo-assistant' ), $tiers[ $r['tier'] ] ?? '', self::ordinal( (int) $r['rank'] ), count( $ranked ) );
 			if ( $r['seen'] ) {
 				/* translators: %s: "≈ 390 visits a year". */
 				$sub[] = sprintf( __( 'quick win %s', 'ai-seo-assistant' ), self::visits_year( (float) $r['quick_win'] ) );
@@ -1455,14 +1491,17 @@ class Scan_Page {
 		}
 		$tiers = self::tiers();
 		$enq   = self::enquiries_year( $r['quick_enq'] );
+		$enq3  = self::enquiries_year( $r['prize_enq'] );
+		/* translators: %s: "≈ 390 visits a year". */
+		$quick = esc_html( sprintf( __( 'Quick win %s', 'ai-seo-assistant' ), self::visits_year( (float) $r['quick_win'] ) ) ) . ( '' !== $enq ? ' · ' . esc_html( $enq ) : '' );
+		/* translators: %s: "≈ 1,200 visits a year". */
+		$prize = esc_html( sprintf( __( 'Top-3 prize %s', 'ai-seo-assistant' ), self::visits_year( (float) $r['prize'] ) ) ) . ( '' !== $enq3 ? ' · ' . esc_html( $enq3 ) : '' );
+		// The figure the list is ranked by comes first; the other underneath, smaller.
+		$lines = 'prize' === $r['mode']
+			? '<span class="aisa-opp__line">' . $prize . '</span><span class="aisa-opp__line aisa-small">' . $quick . '</span>'
+			: '<span class="aisa-opp__line">' . $quick . '</span>' . ( (float) $r['prize'] >= 5 ? '<span class="aisa-opp__line aisa-small">' . $prize . '</span>' : '' );
 
-		return '<span class="aisa-opp">'
-			. '<span class="aisa-tier aisa-tier--' . esc_attr( (string) $r['tier'] ) . '">' . esc_html( $tiers[ $r['tier'] ] ?? '' ) . '</span>'
-			/* translators: %s: "≈ 390 visits a year". */
-			. '<span class="aisa-opp__line">' . esc_html( sprintf( __( 'Quick win %s', 'ai-seo-assistant' ), self::visits_year( (float) $r['quick_win'] ) ) ) . ( '' !== $enq ? ' · ' . esc_html( $enq ) : '' ) . '</span>'
-			/* translators: %s: "≈ 1,200 visits a year". */
-			. ( (float) $r['prize'] >= 5 ? '<span class="aisa-opp__line aisa-small">' . esc_html( sprintf( __( 'Top-3 prize %s', 'ai-seo-assistant' ), self::visits_year( (float) $r['prize'] ) ) ) . '</span>' : '' )
-			. '</span>';
+		return '<span class="aisa-opp"><span class="aisa-tier aisa-tier--' . esc_attr( (string) $r['tier'] ) . '">' . esc_html( $tiers[ $r['tier'] ] ?? '' ) . '</span>' . $lines . '</span>';
 	}
 
 	/**

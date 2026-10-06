@@ -130,22 +130,93 @@ class RoundTwoTest extends TestCase {
 	}
 
 	/**
-	 * Tiers by absolute thresholds, filterable.
+	 * Tiers scale with the site: High = the fewest top pages holding half the total, Medium = the next
+	 * quarter, Low = the rest with a value, None = no value; floors keep a trivial gain from reading High.
 	 */
-	public function test_tiers(): void {
-		$this->assertSame( 'high', Opportunity::tier( 300.0 ) );
-		$this->assertSame( 'medium', Opportunity::tier( 60.0 ) );
-		$this->assertSame( 'low', Opportunity::tier( 59.0 ) );
-		$this->assertSame( 'none', Opportunity::tier( 0.4 ) );
-		\WP_Mock::onFilter( 'ai_seo_assistant_opportunity_tiers' )->with( Opportunity::TIERS )->reply(
+	public function test_tiers_scale_with_the_site(): void {
+		$values = [
+			'a' => 400.0,
+			'b' => 100.0,
+			'c' => 100.0,
+			'd' => 100.0,
+			'e' => 50.0,
+			'f' => 50.0,
+			'g' => 0.0,
+		];
+		// Total 800: 'a' alone reaches half; b and c (to 600 = 75%) are the next quarter; the rest are Low.
+		$this->assertSame(
 			[
-				'high'   => 1000,
-				'medium' => 100,
+				'a' => 'high',
+				'b' => 'medium',
+				'c' => 'medium',
+				'd' => 'low',
+				'e' => 'low',
+				'f' => 'low',
+				'g' => 'none',
+			],
+			Opportunity::tiers( $values )
+		);
+
+		// Many small pages: the top set still holds half, but floors stop "High" for a few visits a year.
+		$small = [
+			'p' => 20.0,
+			'q' => 10.0,
+			'r' => 6.0,
+			's' => 4.0,
+		];
+		$this->assertSame(
+			[
+				'p' => 'medium',
+				'q' => 'medium',
+				'r' => 'low',
+				's' => 'low',
+			],
+			Opportunity::tiers( $small ),
+			'p is in the top half but under 24: Medium; r would be Medium but is under 8: Low'
+		);
+
+		\WP_Mock::onFilter( 'ai_seo_assistant_opportunity_floors' )->with( Opportunity::FLOORS )->reply(
+			[
+				'high'   => 1,
+				'medium' => 1,
 			]
 		);
-		$this->assertSame( 'medium', Opportunity::tier( 300.0 ) );
-		$value = Opportunity::value_of( 90.0, 1.5, 0 );
-		$this->assertEqualsWithDelta( 365.0 * 1.5, $value, 0.001, 'a year × the page type’s value' );
+		$this->assertSame( 'high', Opportunity::tiers( $small )['p'], 'floors are filterable' );
+		$this->assertSame( [ 'x' => 'none' ], Opportunity::tiers( [ 'x' => 0.0 ] ) );
+		$this->assertEqualsWithDelta( 365.0 * 1.5, Opportunity::value_of( 90.0, 1.5, 0 ), 0.001, 'a year × the page type’s value' );
+	}
+
+	/**
+	 * The agency user's ranking mode: their saved choice, else Quick wins.
+	 */
+	public function test_ranking_mode(): void {
+		\WP_Mock::userFunction( 'get_current_user_id' )->andReturn( 3 );
+		$meta = 'prize';
+		\WP_Mock::userFunction( 'get_user_meta' )->andReturnUsing(
+			function ( $id, $key ) use ( &$meta ) {
+				return 3 === $id && \AJR\SEOAssistant\Scan\Ranking::MODE_META === $key ? $meta : '';
+			}
+		);
+		$this->assertSame( 'prize', \AJR\SEOAssistant\Scan\Ranking::mode() );
+		$meta = 'everything';
+		$this->assertSame( 'quick', \AJR\SEOAssistant\Scan\Ranking::mode(), 'anything else: the default' );
+	}
+
+	/**
+	 * Estate agent intent (Andrew, round 3): researching a move is commercial; acting is a lead.
+	 */
+	public function test_estate_agent_intent(): void {
+		$rules = Intent::GENERIC;
+		foreach ( Intent::BY_TYPE['RealEstateAgent'] as $intent => $phrases ) {
+			$rules[ $intent ] = array_merge( $rules[ $intent ] ?? [], $phrases );
+		}
+		foreach ( [ 'moving to boise', 'relocating to boise idaho', 'boise relocation', 'idaho real estate', 'living in eagle idaho', 'cost of living boise' ] as $q ) {
+			$this->assertSame( 'commercial', Intent::by_rules( $q, $rules ), $q );
+		}
+		foreach ( [ 'boise realtor', 'best real estate agent in boise', 'sell my house boise', 'selling your home in boise', 'homes for sale meridian', "what's my home worth", 'home valuation boise', 'list my home', "buyer's agent boise", 'mortgage broker' ] as $q ) {
+			$this->assertSame( 'lead', Intent::by_rules( $q, $rules ), $q );
+		}
+		$this->assertSame( [ 'eagle idaho' => 'informational' ], Intent::prune( [ 'eagle idaho' => 'informational', 'moving to boise' => 'lead' ], $rules, [] ), 'a cached answer the rules now decide is dropped' );
 	}
 
 	/**

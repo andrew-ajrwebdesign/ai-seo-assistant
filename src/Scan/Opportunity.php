@@ -9,7 +9,8 @@
  *                   + the REMAINDER (page impressions and clicks minus the top searches' own) at the page's
  *                     average position, the same way
  *   weighted      = missed clicks × value of the page's role × ( 1 + ln( 1 + enquiries started on the page ) )
- *   score         = 100 × weighted ÷ the site's largest weighted value      (0–100, rounded)
+ *   tier          = High: the top pages holding half the site's opportunity; Medium: the next quarter
+ *                   (floors: High from 24, Medium from 8 weighted visits a year; see tiers())
  *
  * WHY PER SEARCH. A page's average position mixes searches it wins (position 2, clicked) with searches it is
  * barely shown for (position 40, never clicked): averaged, those look like one search at position 9 that
@@ -101,14 +102,14 @@ class Opportunity {
 	];
 
 	/**
-	 * Default tiers: weighted extra visits a year (value_of()) for High and Medium; anything from 1 is Low.
-	 * A page at High wins about a visit a day once intent and role are counted; Medium about one a week.
+	 * Tier floors: weighted extra visits a year a page needs to be High (about two a month) or Medium (one
+	 * every six weeks or so), whatever its share of the site's opportunity (tiers()).
 	 *
 	 * @var array{high:float,medium:float}
 	 */
-	public const TIERS = [
-		'high'   => 300.0,
-		'medium' => 60.0,
+	public const FLOORS = [
+		'high'   => 24.0,
+		'medium' => 8.0,
 	];
 
 	/** Impressions a bucket needs before the site's own CTR replaces the built-in value. */
@@ -533,19 +534,21 @@ class Opportunity {
 	}
 
 	/**
-	 * Tier thresholds on weighted yearly visits (filterable).
+	 * Tier floors (filterable): a page is High only from FLOORS['high'] weighted visits a year, Medium only
+	 * from FLOORS['medium'], so a trivial gain on a quiet site never reads High or Medium.
 	 *
 	 * @return array{high:float,medium:float}
 	 */
-	public static function tier_thresholds(): array {
-		$t = self::TIERS;
+	public static function tier_floors(): array {
+		$t = self::FLOORS;
 		if ( function_exists( 'apply_filters' ) ) {
 			/**
-			 * Filters the opportunity tiers: weighted extra visits a year for High and Medium.
+			 * Filters the opportunity tier floors: the weighted extra visits a year a page needs to be High or
+			 * Medium, whatever its share of the site's opportunity.
 			 *
-			 * @param array{high:float,medium:float} $t Thresholds.
+			 * @param array{high:float,medium:float} $t Floors.
 			 */
-			$f = apply_filters( 'ai_seo_assistant_opportunity_tiers', $t );
+			$f = apply_filters( 'ai_seo_assistant_opportunity_floors', $t );
 			if ( is_array( $f ) && isset( $f['high'], $f['medium'] ) && is_numeric( $f['high'] ) && is_numeric( $f['medium'] ) ) {
 				$t = [
 					'high'   => (float) $f['high'],
@@ -558,26 +561,51 @@ class Opportunity {
 	}
 
 	/**
-	 * The tier: high, medium, low, or none (nothing to win).
+	 * Tiers that scale with the site (decision 2026-10-06, round 3): pages sorted by value; High is the
+	 * smallest set of top pages that together hold half the site's total opportunity, Medium the pages
+	 * holding the next quarter, Low the rest with a measurable value (≥ 1 weighted visit a year), None the
+	 * rest. A page below the High floor drops to Medium, below the Medium floor to Low.
 	 *
-	 * @param float $value Weighted yearly visits (value_of()).
+	 * @param array<int|string,float> $values Key => weighted value a year.
+	 * @return array<int|string,string> Key => high | medium | low | none.
 	 */
-	public static function tier( float $value ): string {
-		$t = self::tier_thresholds();
-		if ( $value >= $t['high'] ) {
-			return 'high';
-		}
-		if ( $value >= $t['medium'] ) {
-			return 'medium';
+	public static function tiers( array $values ): array {
+		$floors = self::tier_floors();
+		arsort( $values );
+		$total = array_sum( array_filter( $values, static fn( $v ) => $v > 0 ) );
+		$out   = [];
+		$sum   = 0.0;
+		foreach ( $values as $key => $value ) {
+			if ( $value < 1 || $total <= 0 ) {
+				$out[ $key ] = 'none';
+				continue;
+			}
+			$before = $sum;
+			$sum   += $value;
+			if ( $before < 0.5 * $total ) {
+				$tier = 'high';     // Still short of half when this page was added: it is part of the smallest set.
+			} elseif ( $before < 0.75 * $total ) {
+				$tier = 'medium';
+			} else {
+				$tier = 'low';
+			}
+			if ( 'high' === $tier && $value < $floors['high'] ) {
+				$tier = 'medium';
+			}
+			if ( 'medium' === $tier && $value < $floors['medium'] ) {
+				$tier = 'low';
+			}
+			$out[ $key ] = $tier;
 		}
 
-		return $value >= 1 ? 'low' : 'none';
+		return $out;
 	}
 
 	/**
-	 * The sort and tier value: weighted quick win a year × the page role's value × the enquiry lift.
+	 * A page's value a year: a weighted figure (quick win or top-3 prize, 90 days) × the page role's value ×
+	 * the enquiry lift.
 	 *
-	 * @param float $weighted  breakdown()['weighted'] (90 days).
+	 * @param float $weighted  breakdown()['weighted'] or ['weighted_prize'] (90 days).
 	 * @param float $role      value() of the page's role.
 	 * @param int   $enquiries Page enquiries (90 days).
 	 */

@@ -87,8 +87,10 @@ class Intent {
 	 */
 	public const BY_TYPE = [
 		'RealEstateAgent' => [
-			'lead'       => [ 'real estate', 'relocation', 'relocating', 'moving to', 'move to', 'home value', 'sell my house', 'listing agent', 'buyers agent' ],
-			'commercial' => [ 'homes', 'houses', 'condos', 'new construction', 'mls', 'neighborhoods' ],
+			// Ready to act: an agent, selling, buying a listed home, a valuation, listing a home.
+			'lead'       => [ 'agent', 'agents', 'realtor', 'realtors', 'broker', 'brokers', 'real estate agent', 'listing agent', 'buyers agent', 'buyer s agent', 'sell my house', 'sell my home', 'sell home', 'sell house', 'selling', 'homes for sale', 'houses for sale', 'for sale', 'home value', 'house value', 'what s my home worth', 'whats my home worth', 'what is my home worth', 'valuation', 'list my home', 'list my house' ],
+			// Researching a move (Andrew, 2026-10-06): commercial, not a lead.
+			'commercial' => [ 'moving to', 'move to', 'relocation', 'relocating', 'relocate', 'real estate', 'living in', 'cost of living', 'homes', 'houses', 'condos', 'new construction', 'mls', 'neighborhoods' ],
 		],
 	];
 
@@ -141,7 +143,7 @@ class Intent {
 				continue;
 			}
 			foreach ( (array) $phrases as $phrase ) {
-				$phrase = trim( mb_strtolower( (string) $phrase ) );
+				$phrase = trim( (string) preg_replace( '/[^\p{L}\p{N}]+/u', ' ', mb_strtolower( (string) $phrase ) ) ); // "what's" matches as "what s".
 				if ( '' === $phrase || false === strpos( $q, ' ' . $phrase . ' ' ) ) {
 					continue;
 				}
@@ -206,6 +208,19 @@ class Intent {
 	}
 
 	/**
+	 * Drop cached answers for searches the rules now decide (the rules always win; a changed rule must not
+	 * leave a stale Claude answer behind).
+	 *
+	 * @param array<string,string>            $cache cache().
+	 * @param array<string,array<int,string>> $rules rules().
+	 * @param array<int,string>               $brand Brand phrases.
+	 * @return array<string,string>
+	 */
+	public static function prune( array $cache, array $rules, array $brand ): array {
+		return array_filter( $cache, static fn( $intent, $query ) => '' === self::by_rules( (string) $query, $rules, $brand ), ARRAY_FILTER_USE_BOTH );
+	}
+
+	/**
 	 * The searches the rules leave and Claude has not sorted, most impressions first.
 	 *
 	 * @param array<int,array<string,mixed>>  $queries Rows with query and impressions.
@@ -235,8 +250,11 @@ class Intent {
 	 * @return array{state:string,sent:int,sorted:int,cost:float}
 	 */
 	public static function run_pass( ?Claude_Client $client = null ): array {
-		$meta = Page_Data::meta();
-		$key  = $meta['end'] . '|' . $meta['generated_at'];
+		$meta  = Page_Data::meta();
+		$rules = self::rules();
+		$brand = self::brand();
+		// A new push, or changed rules, runs the pass again (rules first, Claude only for what they leave).
+		$key  = $meta['end'] . '|' . $meta['generated_at'] . '|' . md5( (string) wp_json_encode( [ $rules, $brand ] ) );
 		$done = get_option( self::DONE_OPTION, [] );
 		$out  = [
 			'state'  => 'skipped',
@@ -260,8 +278,9 @@ class Intent {
 				$queries[] = $q;
 			}
 		}
-		$cache = self::cache();
-		$todo  = self::pending( $queries, self::rules(), self::brand(), $cache );
+		$cache = self::prune( self::cache(), $rules, $brand );
+		update_option( self::CACHE_OPTION, $cache, false );
+		$todo = self::pending( $queries, $rules, $brand, $cache );
 		if ( [] === $todo ) {
 			$out['state'] = 'nothing_to_sort';
 			update_option( self::DONE_OPTION, [ 'key' => $key ] + $out + [ 'at' => time() ], false );
