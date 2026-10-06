@@ -61,6 +61,7 @@ $ai_seo_assistant_options = [
 	'ai_seo_assistant_agency_users',
 	// 5.0: the scan, the pushed per-page data, the spend cap and its billing month.
 	'ai_seo_assistant_db_version',
+	'ai_seo_assistant_db_failed_at', // Core\Schema::FAILED_OPTION: a table update that did not take.
 	'ai_seo_assistant_scan_meta',
 	'ai_seo_assistant_scan_queue',
 	'ai_seo_assistant_scan_cancelled', // Scan/Scheduler::CANCELLED.

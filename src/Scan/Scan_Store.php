@@ -80,7 +80,25 @@ class Scan_Store {
 		global $wpdb;
 		Schema::ensure(); // The tables are current before any write (an update that skipped install()).
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the plugin's own table.
-		$wpdb->update( Schema::table( 'scan' ), [ 'inbound' => (string) wp_json_encode( $inbound ) ], [ 'post_id' => $post_id ], [ '%s' ], [ '%d' ] );
+		$wpdb->update(
+			Schema::table( 'scan' ),
+			[
+				'inbound'      => (string) wp_json_encode( $inbound ),
+				'inbound_hash' => self::inbound_hash( $inbound ),
+			],
+			[ 'post_id' => $post_id ],
+			[ '%s', '%s' ],
+			[ '%d' ]
+		);
+	}
+
+	/**
+	 * A short hash of an inbound list (scan.inbound_hash): what the site-wide pass compares.
+	 *
+	 * @param array<int,array{0:string,1:string}> $inbound The list.
+	 */
+	public static function inbound_hash( array $inbound ): string {
+		return substr( md5( (string) wp_json_encode( $inbound ) ), 0, 12 );
 	}
 
 	/**
@@ -171,17 +189,14 @@ class Scan_Store {
 	/**
 	 * One row, decoded, or null.
 	 *
-	 * @param int  $post_id Post ID.
-	 * @param bool $text    With the page's visible text and inbound links (false: the lean row, for a caller
-	 *                      that needs only the findings, facts and suggestions).
+	 * @param int $post_id Post ID.
 	 * @return array<string,mixed>|null
 	 */
-	public function get( int $post_id, bool $text = true ): ?array {
+	public function get( int $post_id ): ?array {
 		global $wpdb;
 		$table = Schema::table( 'scan' );
-		$cols  = $text ? '*' : 'post_id, path, post_type, scanned_at, source, flags, issue_count, issue_kinds, facts, issues, suggestions, suggested_at';
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own table; a fixed column list.
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT {$cols} FROM `{$table}` WHERE post_id = %d", $post_id ), ARRAY_A );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own table.
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM `{$table}` WHERE post_id = %d", $post_id ), ARRAY_A );
 		if ( ! is_array( $row ) ) {
 			return null;
 		}
@@ -234,17 +249,19 @@ class Scan_Store {
 	}
 
 	/**
-	 * Every row's facts (for the site-wide pass), keyed by post ID.
+	 * Every row's facts (for the site-wide pass), keyed by post ID, in post ID order.
 	 *
+	 * @param bool $inbound With each row's inbound_hash (the site-wide pass only; null when the column is
+	 *                      not there yet).
 	 * @return array<int,array<string,mixed>>
 	 */
-	public function all_facts(): array {
+	public function all_facts( bool $inbound = false ): array {
 		global $wpdb;
 		$table = Schema::table( 'scan' );
 		// The stored inbound links only once the column exists (a failed table update must not empty the pass).
-		$inbound = Schema::is_current() ? ', inbound' : '';
+		$inbound = $inbound && Schema::is_current() ? ', inbound_hash' : '';
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own table; the scan's site-wide pass.
-		$rows = (array) $wpdb->get_results( "SELECT post_id, path, post_type, scanned_at, source, flags, facts, issues{$inbound} FROM `{$table}`", ARRAY_A );
+		$rows = (array) $wpdb->get_results( "SELECT post_id, path, post_type, scanned_at, source, flags, facts, issues{$inbound} FROM `{$table}` ORDER BY post_id", ARRAY_A );
 		$out  = [];
 		foreach ( $rows as $row ) {
 			$facts                        = json_decode( (string) $row['facts'], true );
@@ -256,7 +273,7 @@ class Scan_Store {
 				'facts'        => is_array( $facts ) ? $facts : [],
 				'issues_json'  => (string) ( $row['issues'] ?? '' ), // As stored, so an unchanged page is not rewritten.
 				'flags'        => (string) ( $row['flags'] ?? '' ),
-				'inbound_json' => array_key_exists( 'inbound', $row ) ? (string) $row['inbound'] : null, // As stored; null: not readable yet.
+				'inbound_hash' => array_key_exists( 'inbound_hash', $row ) ? (string) $row['inbound_hash'] : null, // As stored ('' never built); null: not asked for, or no column yet.
 			];
 		}
 

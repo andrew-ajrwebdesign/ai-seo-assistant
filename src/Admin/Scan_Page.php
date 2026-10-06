@@ -1165,13 +1165,31 @@ class Scan_Page {
 		echo '<div class="aisa-editorbox"><p class="aisa-editorbox__head"><strong>' . Ui::icon( 'edit' ) . esc_html__( 'Do in the editor', 'ai-seo-assistant' ) . '</strong><span class="aisa-small">' . esc_html__( 'Not applied by the plugin', 'ai-seo-assistant' ) . '</span></p>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		echo '<p class="aisa-small">' . esc_html__( 'Headings, links and content are left to you: changing them automatically is too risky on builder pages.', 'ai-seo-assistant' ) . '</p><dl>';
 		foreach ( $items as $item ) {
-			$done = null !== $context && Page_Review::advice_in_place( $item, $context );
-			/* translators: %s: date of the scan. */
-			$found = sprintf( __( 'Done — found on the page %s', 'ai-seo-assistant' ), $when );
-			echo '<dt>' . esc_html( $labels[ $item['area'] ] ?? $item['area'] ) . '</dt><dd' . ( $done ? ' class="is-done"' : '' ) . '><span>' . esc_html( (string) $item['advice'] ) . '</span>'
-				. ( $done ? Ui::pill( $found, 'good' ) : ( '' !== $edit ? '<a href="' . esc_url( $edit ) . '">' . esc_html__( 'Open in editor', 'ai-seo-assistant' ) . '</a>' : '' ) ) . '</dd>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+			echo self::editor_box_item( $item, $context, $labels[ $item['area'] ] ?? (string) $item['area'], $when, $edit ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped piecewise.
 		}
 		echo '</dl></div>';
+	}
+
+	/**
+	 * One piece of editor advice in the review: done (found on the page), or the link to the editor, with
+	 * the same "cannot be checked automatically" note as the editor panel when the scan cannot tell.
+	 *
+	 * @param array<string,mixed>      $item    The advice.
+	 * @param array<string,mixed>|null $context Page_Review::editor_context() (null: not scanned).
+	 * @param string                   $label   The area's label.
+	 * @param string                   $when    The scan's date.
+	 * @param string                   $edit    The editor's URL ('' none).
+	 */
+	public static function editor_box_item( array $item, ?array $context, string $label, string $when, string $edit ): string {
+		$verdict = null === $context ? '' : Page_Review::advice_verdict( $item, $context );
+		$done    = \AJR\SEOAssistant\Review\Editor_Check::YES === $verdict;
+		$note    = null === $context ? '' : Page_Review::unknown_note( $item, $context );
+		/* translators: %s: date of the scan. */
+		$found = sprintf( __( 'Done — found on the page %s', 'ai-seo-assistant' ), $when );
+
+		return '<dt>' . esc_html( $label ) . '</dt><dd' . ( $done ? ' class="is-done"' : '' ) . '><span>' . esc_html( (string) $item['advice'] ) . '</span>'
+			. ( '' !== $note ? ' <span class="aisa-small">' . esc_html( $note ) . '</span>' : '' )
+			. ( $done ? Ui::pill( $found, 'good' ) : ( '' !== $edit ? '<a href="' . esc_url( $edit ) . '">' . esc_html__( 'Open in editor', 'ai-seo-assistant' ) . '</a>' : '' ) ) . '</dd>';
 	}
 
 	/**

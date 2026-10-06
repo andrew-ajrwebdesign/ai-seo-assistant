@@ -136,9 +136,10 @@ class Editor_Check {
 	 * @param string                              $text      The page's visible text, plain (Page_Review::page_text()).
 	 * @param array<int,array{0:string,1:string}> $inbound   Links to the page: [ from path, link text ].
 	 * @param bool                                $truncated The scan kept only the start of the text.
+	 * @param bool                                $inbound_complete Every link to the page is in $inbound.
 	 */
-	public static function in_place( array $check, array $facts, string $text = '', array $inbound = [], bool $truncated = false ): bool {
-		return self::YES === self::verdict( $check, $facts, $text, $inbound, $truncated );
+	public static function in_place( array $check, array $facts, string $text = '', array $inbound = [], bool $truncated = false, bool $inbound_complete = true ): bool {
+		return self::YES === self::verdict( $check, $facts, $text, $inbound, $truncated, $inbound_complete );
 	}
 
 	/**
@@ -151,8 +152,10 @@ class Editor_Check {
 	 * @param string                              $text      The page's visible text, plain.
 	 * @param array<int,array{0:string,1:string}> $inbound   Links to the page.
 	 * @param bool                                $truncated The scan kept only the start of the text.
+	 * @param bool                                $inbound_complete Every link to the page is in $inbound (false: not
+	 *                                                    built yet, or past the cap): a link not found is UNKNOWN.
 	 */
-	public static function verdict( array $check, array $facts, string $text = '', array $inbound = [], bool $truncated = false ): string {
+	public static function verdict( array $check, array $facts, string $text = '', array $inbound = [], bool $truncated = false, bool $inbound_complete = true ): string {
 		$targets = array_map( [ self::class, 'norm' ], $check['targets'] );
 		if ( [] === $targets || 'none' === $check['check'] ) {
 			return self::UNKNOWN;
@@ -167,7 +170,11 @@ class Editor_Check {
 			return self::YES;
 		}
 
-		return self::found( $check, $targets, $facts, $inbound ) ? self::YES : self::NO;
+		if ( self::found( $check, $targets, $facts, $inbound ) ) {
+			return self::YES;
+		}
+
+		return 'link' === $check['check'] && ! $inbound_complete ? self::UNKNOWN : self::NO;
 	}
 
 	/**

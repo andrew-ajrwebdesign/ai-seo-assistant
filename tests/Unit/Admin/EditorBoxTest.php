@@ -126,6 +126,7 @@ class EditorBoxTest extends TestCase {
 			}
 		);
 		\WP_Mock::userFunction( 'wp_next_scheduled' )->andReturn( 1 );
+		\WP_Mock::userFunction( 'get_post' )->andReturn( null ); // No stored text and no post: no page text.
 		\WP_Mock::userFunction( 'wp_send_json_success' )->andReturnUsing(
 			function () {
 				throw new \RuntimeException( 'success' );
@@ -163,5 +164,84 @@ class EditorBoxTest extends TestCase {
 		}
 		$this->assertSame( [ 'issue:h_order' ], array_keys( $meta['_aisa_todo_done'] ), 'a tick for a finding the page no longer has is pruned' );
 		$this->assertSame( [ 9 ], $queue['ids'], 'the page is queued for a rescan' );
+	}
+
+	/**
+	 * Verify review B1: the panel shows one open to-do and one advice item already found on the page
+	 * ("1 to-do"). Ticking the open one replies "0 to-dos": the found item is not counted as open again.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_tick_reply_counts_found_items_as_done(): void {
+		$meta = [];
+		$sent = null;
+		\WP_Mock::userFunction( 'check_ajax_referer' )->andReturn( 1 );
+		\WP_Mock::userFunction( 'absint' )->andReturnUsing( fn( $v ) => abs( (int) $v ) );
+		\WP_Mock::userFunction( 'sanitize_text_field' )->andReturnArg( 0 );
+		\WP_Mock::userFunction( 'wp_unslash' )->andReturnArg( 0 );
+		\WP_Mock::userFunction( 'current_user_can' )->andReturn( true );
+		\WP_Mock::userFunction( 'get_post_meta' )->andReturnUsing( fn( $id, $k ) => $meta[ $k ] ?? '' );
+		\WP_Mock::userFunction( 'update_post_meta' )->andReturnUsing(
+			function ( $id, $k, $v ) use ( &$meta ) {
+				$meta[ $k ] = $v;
+				return true;
+			}
+		);
+		\WP_Mock::userFunction( 'get_option' )->andReturnUsing( fn( $n, $d = false ) => 'ai_seo_assistant_db_version' === $n ? \AJR\SEOAssistant\Core\Schema::VERSION : $d );
+		\WP_Mock::userFunction( 'update_option' )->andReturn( true );
+		\WP_Mock::userFunction( 'wp_next_scheduled' )->andReturn( 1 );
+		\WP_Mock::userFunction( 'sanitize_text_field' )->andReturnArg( 0 );
+		\WP_Mock::userFunction( 'wp_send_json_success' )->andReturnUsing(
+			function ( $data ) use ( &$sent ) {
+				$sent = $data;
+				throw new \RuntimeException( 'success' );
+			}
+		);
+		$row             = [
+			'post_id'     => 9,
+			'path'        => '/x/',
+			'scanned_at'  => '2026-10-06 12:00:00',
+			'issue_count' => 1,
+			'facts'       => json_encode( [ 'h1' => [ 'Boise Neighborhoods Map' ] ] ), // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- test double.
+			'issues'      => json_encode( [ [ 'kind' => 'links', 'code' => 'orphan', 'who' => 'editor', 'title' => 'No other page links here', 'fix' => '' ] ] ), // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- test double.
+			'suggestions' => json_encode( [ 'editor' => [ [ 'area' => 'headings', 'advice' => 'Make the H1 "Boise Neighborhoods Map".', 'check' => 'h1', 'target' => 'Boise Neighborhoods Map', 'source' => '' ] ] ] ), // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- test double.
+			'body_text'   => 'Boise Neighborhoods Map',
+			'inbound'     => '[]',
+		];
+		$GLOBALS['wpdb'] = new class( $row ) { // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test double.
+			/** @var string */
+			public $prefix = 'wp_';
+			/** @var array<string,mixed> */
+			public $row;
+			public function __construct( $row ) {
+				$this->row = $row;
+			}
+			public function prepare( $q, ...$a ) {
+				return $q;
+			}
+			public function get_row( $q, $o ) {
+				return $this->row;
+			}
+			public function get_var( $q ) {
+				return null;
+			}
+			public function query( $q ) {
+				return 1;
+			}
+		};
+
+		$store   = new \AJR\SEOAssistant\Scan\Scan_Store();
+		$before  = $store->get( 9 );
+		$context = \AJR\SEOAssistant\Review\Page_Review::editor_context( 9, $before );
+		$this->assertMatchesRegularExpression( '/^1 to-do/', Editor_Box::line( 9, $before, Editor_Box::items( $before, [], $context ) ), 'the panel: the H1 found, the link open' );
+
+		$_POST = [ 'post' => '9', 'key' => 'issue:orphan' ];
+		try {
+			( new Editor_Box() )->ajax_done();
+		} catch ( \RuntimeException $e ) {
+			$this->assertSame( 'success', $e->getMessage() );
+		}
+		$this->assertMatchesRegularExpression( '/^0 to-do/', (string) $sent['line'], 'after the tick: nothing open, the found H1 still done' );
 	}
 }

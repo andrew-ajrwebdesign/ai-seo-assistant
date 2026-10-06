@@ -95,9 +95,11 @@ The product cut (decision 2026-10-06, `work/coding-projects/ai-seo-assistant/dec
   - Tags are stripped before entities are decoded, so copy reading `&lt;title&gt;` stays words.
   - A page longer than the 30,000 characters the scan keeps is flagged. A phrase that is not in the kept part shows "too long to check automatically" and stays a manual tick; it is never treated as missing.
   - A CI check (`bin/check-builder-safe.php`) fails on any `strip_shortcodes()` call in `src/` unless its line says `// builder-safe: <reason>`.
-- **Editor load is light on big sites.** Each site-wide pass stores the links to every page once (schema 6, `scan.inbound`). The editor box reads that page's list and one row, instead of every page's facts.
+- **Editor load is light on big sites.** Each site-wide pass stores the links to every page once (schema 6 and 7: `scan.inbound` and a short hash of it). The editor box reads that page's list and one row, instead of every page's facts. A link check on a page with more links than the pass keeps, or before the first pass, says it cannot be checked automatically and stays a manual tick.
+- **Fix:** ticking Done in the editor panel no longer counts to-dos already found on the page as open again.
 - **A failed table update no longer stops scans.** The table version is stored only once the newest columns really exist. A scan write that fails is logged and saved again without the page text.
-  - Every write to the plugin's tables first brings them up to date (`Schema::ensure()`), so an update that skipped the table update still writes correctly. A zip uploaded over the installed plugin now runs the upgrade steps too.
+  - Every write to the plugin's tables first brings them up to date (`Schema::ensure()`), so an update that skipped the table update still writes correctly. That covers the first upload of this release over an older copy. From the next release on, "Replace current with uploaded" also runs the upgrade steps straight away: the upload request still runs the old copy's code, so this release's handling of it applies from then.
+  - The tables are only changed in wp-admin, cron, REST or WP-CLI, never while a visitor's page renders. They are tried at most once per request. A failed update is tried again after an hour, with one notice to the agency until it takes.
   - A CI check (`bin/check-schema-guard.php`) fails on a write to the plugin's tables in a function without that check, unless its line says `// schema-guard: <reason>`.
 
 ### Removed

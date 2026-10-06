@@ -252,15 +252,14 @@ class Editor_Box {
 				$key     = 'advice:' . substr( md5( $kind . '|' . $text ), 0, 12 );
 				$verdict = null === $context ? '' : \AJR\SEOAssistant\Review\Page_Review::advice_verdict( $raw[ $kind ][ $i ], $context );
 				$found   = \AJR\SEOAssistant\Review\Editor_Check::YES === $verdict;
-				// A phrase not in the part of a very long page the scan keeps may still be further down: never
-				// called missing, the person ticks it.
-				$long  = \AJR\SEOAssistant\Review\Editor_Check::UNKNOWN === $verdict && ! empty( $context['truncated'] );
+				// What cannot be told from the scan (a phrase past the part of a long page it keeps, a link
+				// past the links it keeps) is never called missing: the person ticks it, and the note says why.
 				$out[] = [
 					'key'    => $key,
 					'area'   => $labels[ $kind ],
 					'text'   => $text,
 					'detail' => '',
-					'note'   => $long ? __( 'This page is too long to check automatically: tick Done once it is there.', 'ai-seo-assistant' ) : '',
+					'note'   => null === $context ? '' : \AJR\SEOAssistant\Review\Page_Review::unknown_note( $raw[ $kind ][ $i ], $context ),
 					'done'   => $found ? $scanned : ( isset( $done[ $key ] ) ? (int) $done[ $key ] : null ),
 					'found'  => $found,
 				];
@@ -351,8 +350,11 @@ class Editor_Box {
 		if ( ! preg_match( '/^(issue:[a-z0-9_]{1,40}|advice:[a-f0-9]{12})$/', $key ) ) {
 			wp_send_json_error( [ 'message' => __( 'Unknown to-do.', 'ai-seo-assistant' ) ], 400 );
 		}
-		$row  = ( new Scan_Store() )->get( $post_id, false ); // The lean row: findings and suggestions, no page text.
-		$keep = null === $row ? [] : array_column( self::items( $row, [] ), 'key' );
+		// The full row and the page as last scanned: the line counts what the panel shows, so a to-do already
+		// found on the page is not counted as open again after the tick.
+		$row     = ( new Scan_Store() )->get( $post_id );
+		$context = null === $row ? null : \AJR\SEOAssistant\Review\Page_Review::editor_context( $post_id, $row );
+		$keep    = null === $row ? [] : array_column( self::items( $row, [], $context ), 'key' );
 		// Only ticks for to-dos the page still has: a finding the scan no longer reports needs none.
 		$done         = array_intersect_key( self::done( $post_id ), array_flip( $keep ) );
 		$done[ $key ] = time();
@@ -363,7 +365,7 @@ class Editor_Box {
 			[
 				/* translators: %s: date. */
 				'label' => sprintf( __( 'Done %s', 'ai-seo-assistant' ), wp_date( 'j M' ) ),
-				'line'  => null === $row ? '' : self::line( $post_id, $row, self::items( $row, $done ) ),
+				'line'  => null === $row ? '' : self::line( $post_id, $row, self::items( $row, $done, $context ) ),
 			]
 		);
 	}

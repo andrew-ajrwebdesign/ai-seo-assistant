@@ -100,9 +100,7 @@ class Upgrade {
 		}
 		// The custom tables follow their own version: any mismatch (a column change in a point release, a
 		// table lost to a restore) re-runs dbDelta, which adds and alters columns without losing rows.
-		if ( ! Schema::is_current() ) {
-			Schema::install();
-		}
+		Schema::ensure(); // Once per request, and not again within an hour of a failed table update.
 		if ( self::is_current() || self::waiting() ) {
 			return;
 		}

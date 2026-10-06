@@ -247,7 +247,7 @@ class Scanner {
 	 * @return array{pages:int,issues:int,rendered:int,fallback:int}
 	 */
 	public function finalize( bool $network = true ): array {
-		$rows = $this->store->all_facts();
+		$rows = $this->store->all_facts( true );
 		if ( function_exists( 'update_meta_cache' ) ) {
 			update_meta_cache( 'post', array_keys( $rows ) ); // Page types and SEO meta, one query for all pages.
 		}
@@ -439,14 +439,18 @@ class Scanner {
 		foreach ( $rows as $row ) {
 			$from = self::norm_path( (string) $row['path'] );
 			foreach ( (array) ( $row['facts']['links'] ?? [] ) as $link ) {
-				$to = self::norm_path( (string) ( $link['p'] ?? '' ) );
-				if ( $from !== $to && count( $map[ $to ] ?? [] ) < self::MAX_INBOUND ) {
-					$map[ $to ][] = [ (string) $row['path'], (string) ( $link['t'] ?? '' ) ];
+				$to   = self::norm_path( (string) ( $link['p'] ?? '' ) );
+				$pair = [ (string) $row['path'], (string) ( $link['t'] ?? '' ) ];
+				// Keyed by source and words: the same link twice (a menu and a body link with the same words)
+				// counts once, before the cap.
+				if ( $from !== $to && count( $map[ $to ] ?? [] ) < self::MAX_INBOUND + 1 ) {
+					$map[ $to ][ $pair[0] . '|' . $pair[1] ] = $pair;
 				}
 			}
 		}
 
-		return $map;
+		// One past the cap is kept, so the editor can tell the list is not complete (Page_Review::editor_context()).
+		return array_map( 'array_values', $map );
 	}
 
 	/**
@@ -457,11 +461,11 @@ class Scanner {
 	public function save_inbound( array $rows ): void {
 		$map = self::inbound_map( $rows );
 		foreach ( $rows as $id => $row ) {
-			if ( null === ( $row['inbound_json'] ?? null ) ) {
+			if ( null === ( $row['inbound_hash'] ?? null ) ) {
 				continue; // The column is not there yet (the table update is pending).
 			}
 			$list = $map[ self::norm_path( (string) $row['path'] ) ] ?? [];
-			if ( (string) wp_json_encode( $list ) !== $row['inbound_json'] ) {
+			if ( Scan_Store::inbound_hash( $list ) !== $row['inbound_hash'] ) {
 				$this->store->save_inbound( (int) $id, $list );
 			}
 		}

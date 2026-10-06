@@ -780,7 +780,7 @@ class Page_Review {
 	 *
 	 * @param int                 $post_id Post ID.
 	 * @param array<string,mixed> $row     Its scan row (Scan_Store::get(), with text).
-	 * @return array{facts:array<string,mixed>,text:string,truncated:bool,inbound:array<int,array{0:string,1:string}>}
+	 * @return array{facts:array<string,mixed>,text:string,truncated:bool,inbound:array<int,array{0:string,1:string}>,inbound_complete:bool}
 	 */
 	public static function editor_context( int $post_id, array $row ): array {
 		$facts   = (array) ( $row['facts'] ?? [] );
@@ -792,10 +792,12 @@ class Page_Review {
 		}
 
 		return [
-			'facts'     => $facts,
-			'text'      => self::page_text( $post_id, $row ),
-			'truncated' => ! empty( $facts[ Html_Parser::TRUNCATED ] ),
-			'inbound'   => $inbound,
+			'facts'            => $facts,
+			'text'             => self::page_text( $post_id, $row ),
+			'truncated'        => ! empty( $facts[ Html_Parser::TRUNCATED ] ),
+			'inbound'          => array_slice( $inbound, 0, Scanner::MAX_INBOUND ),
+			// Not built yet, or more links than the pass keeps: a link not in the list may still exist.
+			'inbound_complete' => is_array( $row['inbound'] ?? null ) && count( $inbound ) <= Scanner::MAX_INBOUND,
 		];
 	}
 
@@ -871,7 +873,29 @@ class Page_Review {
 	 * @param array<string,mixed> $context editor_context().
 	 */
 	public static function advice_verdict( array $advice, array $context ): string {
-		return Editor_Check::verdict( Editor_Check::of( $advice ), (array) $context['facts'], (string) $context['text'], (array) $context['inbound'], ! empty( $context['truncated'] ) );
+		return Editor_Check::verdict( Editor_Check::of( $advice ), (array) $context['facts'], (string) $context['text'], (array) $context['inbound'], ! empty( $context['truncated'] ), (bool) ( $context['inbound_complete'] ?? true ) );
+	}
+
+	/**
+	 * Why a to-do cannot be checked automatically, for the editor panel and the review's editor box ('' when
+	 * it can be, or there is nothing to say).
+	 *
+	 * @param array<string,mixed> $advice  Advice.
+	 * @param array<string,mixed> $context editor_context().
+	 */
+	public static function unknown_note( array $advice, array $context ): string {
+		if ( Editor_Check::UNKNOWN !== self::advice_verdict( $advice, $context ) ) {
+			return '';
+		}
+		$check = Editor_Check::of( $advice )['check'];
+		if ( 'phrase' === $check && ! empty( $context['truncated'] ) ) {
+			return __( 'This page is too long to check automatically: tick Done once it is there.', 'ai-seo-assistant' );
+		}
+		if ( 'link' === $check && empty( $context['inbound_complete'] ) ) {
+			return __( 'Not every link to this page could be checked: tick Done once the link is there.', 'ai-seo-assistant' );
+		}
+
+		return '';
 	}
 
 	/**

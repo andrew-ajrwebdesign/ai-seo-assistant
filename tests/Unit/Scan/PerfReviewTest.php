@@ -79,29 +79,30 @@ class PerfReviewTest extends TestCase {
 	}
 
 	/**
-	 * (1) The site-wide pass builds who links to whom once; each page's list is written only when it
+	 * (1) The site-wide pass builds who links to whom once; each page's list is written only when its hash
 	 * changed, and never before its column exists. The editor reads that one list: no other page's facts.
+	 * Verify A2: the same link twice counts once, before the cap.
 	 */
 	public function test_inbound_built_once_and_read_per_page(): void {
 		$rows = [
 			1 => [
 				'path'         => '/guide/',
-				'facts'        => [ 'links' => [ [ 'p' => '/map/', 't' => 'Boise neighborhoods map' ], [ 'p' => '/guide/', 't' => 'self' ] ] ],
-				'inbound_json' => '[]',
+				'facts'        => [ 'links' => [ [ 'p' => '/map/', 't' => 'Boise neighborhoods map' ], [ 'p' => '/map/', 't' => 'Boise neighborhoods map' ], [ 'p' => '/guide/', 't' => 'self' ] ] ],
+				'inbound_hash' => '',
 			],
 			2 => [
 				'path'         => '/map/',
 				'facts'        => [ 'links' => [ [ 'p' => '/Guide', 't' => 'Back to the guide' ] ] ],
-				'inbound_json' => '[["\/guide\/","Boise neighborhoods map"]]',
+				'inbound_hash' => 'stale0000000',
 			],
 			3 => [
 				'path'         => '/new/',
 				'facts'        => [ 'links' => [ [ 'p' => '/map/', 't' => 'Map' ] ] ],
-				'inbound_json' => null,
+				'inbound_hash' => null,
 			],
 		];
 		$map  = Scanner::inbound_map( $rows );
-		$this->assertSame( [ [ '/guide/', 'Boise neighborhoods map' ], [ '/new/', 'Map' ] ], $map['/map/'] );
+		$this->assertSame( [ [ '/guide/', 'Boise neighborhoods map' ], [ '/new/', 'Map' ] ], $map['/map/'], 'the repeated link counted once' );
 		$this->assertSame( [ [ '/map/', 'Back to the guide' ] ], $map['/guide/'], 'paths compared normalised; a page\'s link to itself left out' );
 
 		$store = new Inbound_Store();
@@ -109,9 +110,9 @@ class PerfReviewTest extends TestCase {
 		$this->assertSame( [ 1, 2 ], array_keys( $store->written ), '/new/ has no column yet: not written' );
 		$this->assertSame( [ [ '/map/', 'Back to the guide' ] ], $store->written[1] );
 
-		// Unchanged lists are not rewritten.
-		$rows[1]['inbound_json'] = (string) json_encode( $store->written[1] ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode
-		$rows[2]['inbound_json'] = (string) json_encode( $store->written[2] ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode
+		// Unchanged lists (same hash) are not rewritten.
+		$rows[1]['inbound_hash'] = Scan_Store::inbound_hash( $store->written[1] );
+		$rows[2]['inbound_hash'] = Scan_Store::inbound_hash( $store->written[2] );
 		$store->written          = [];
 		( new Scanner( $store ) )->save_inbound( $rows );
 		$this->assertSame( [], $store->written );
@@ -127,31 +128,99 @@ class PerfReviewTest extends TestCase {
 			]
 		);
 		$this->assertSame( [ [ '/guide/', 'Boise neighborhoods map' ] ], $context['inbound'] );
-		$this->assertTrue( Editor_Check::in_place( [ 'check' => 'link', 'targets' => [ 'Boise neighborhoods map' ], 'sources' => [ '/guide/' ] ], [], '', $context['inbound'] ) );
-		$this->assertSame( [], Page_Review::editor_context( 2, [ 'path' => '/map/', 'body_text' => 'Words', 'inbound' => null ] )['inbound'], 'not built yet: empty, the link to-do stays a manual tick' );
+		$this->assertTrue( $context['inbound_complete'] );
+		$link = [
+			'area'   => 'links',
+			'advice' => 'Link from the guide with "Boise neighborhoods map".',
+			'check'  => 'link',
+			'target' => 'Boise neighborhoods map',
+			'source' => '/guide/',
+		];
+		$this->assertSame( Editor_Check::YES, Page_Review::advice_verdict( $link, $context ) );
+		$other = [ 'target' => 'Some other words' ] + $link;
+		$this->assertSame( Editor_Check::NO, Page_Review::advice_verdict( $other, $context ), 'every link known: not there' );
 	}
 
 	/**
-	 * (1) The editor screen's staleness check takes the row's scanned_at: no second fetch. (4) The tick
-	 * handler's lean row leaves out the page text and inbound links.
+	 * Verify A2: a link check on a page whose list is not built yet, or past the cap, cannot be told; the
+	 * panel says why and the to-do stays a manual tick.
 	 */
-	public function test_one_fetch_and_lean_row(): void {
+	public function test_link_check_unknown_when_the_list_is_incomplete(): void {
+		$link    = [
+			'area'   => 'links',
+			'advice' => 'Link from the guide with "Boise neighborhoods map".',
+			'check'  => 'link',
+			'target' => 'Boise neighborhoods map',
+			'source' => '/guide/',
+		];
+		$unbuilt = Page_Review::editor_context(
+			2,
+			[
+				'path'      => '/map/',
+				'body_text' => 'Words',
+				'inbound'   => null,
+			]
+		);
+		$this->assertFalse( $unbuilt['inbound_complete'] );
+		$this->assertSame( Editor_Check::UNKNOWN, Page_Review::advice_verdict( $link, $unbuilt ) );
+		$this->assertStringContainsString( 'Not every link to this page could be checked', Page_Review::unknown_note( $link, $unbuilt ) );
+
+		$many = [];
+		for ( $i = 0; $i <= Scanner::MAX_INBOUND; $i++ ) {
+			$many[] = [ '/p' . $i . '/', 'Other words' ];
+		}
+		$full = Page_Review::editor_context(
+			2,
+			[
+				'path'      => '/map/',
+				'body_text' => 'Words',
+				'inbound'   => $many,
+			]
+		);
+		$this->assertFalse( $full['inbound_complete'], 'one past the cap: the list is not complete' );
+		$this->assertCount( Scanner::MAX_INBOUND, $full['inbound'] );
+		$this->assertSame( Editor_Check::UNKNOWN, Page_Review::advice_verdict( $link, $full ) );
+
+		$rows = [];
+		for ( $i = 0; $i <= Scanner::MAX_INBOUND + 5; $i++ ) {
+			$rows[ $i + 10 ] = [
+				'path'  => '/p' . $i . '/',
+				'facts' => [ 'links' => [ [ 'p' => '/map/', 't' => 'x' ] ] ],
+			];
+		}
+		$this->assertCount( Scanner::MAX_INBOUND + 1, Scanner::inbound_map( $rows )['/map/'], 'the pass keeps one past the cap to say so' );
+
+		// The review's editor box shows the same note.
+		$html = \AJR\SEOAssistant\Admin\Scan_Page::editor_box_item( $link, $unbuilt, 'Links', '6 Oct', '' );
+		$this->assertStringContainsString( 'Not every link to this page could be checked', $html );
+	}
+
+	/**
+	 * (1) The editor panel reads the scan row once: the staleness check takes its scanned_at, so it is not
+	 * fetched again (a behaviour test: render() against a counting $wpdb).
+	 */
+	public function test_editor_panel_fetches_the_row_once(): void {
 		if ( ! class_exists( '\WP_Post' ) ) {
 			eval( 'class WP_Post { public $ID = 0; public $post_type = "page"; public $post_status = "publish"; public $post_password = ""; public $post_modified_gmt = ""; public $post_content = ""; public $post_excerpt = ""; }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a test stand-in for core's class.
 		}
 		$post                    = new \WP_Post();
+		$post->ID                = 5;
 		$post->post_modified_gmt = '2026-10-06 10:00:00';
 		\WP_Mock::userFunction( 'get_post' )->andReturn( $post );
-		$this->assertFalse( Scanner::refresh_if_stale( 5, '2026-10-06 12:00:00' ), 'not edited since: no rescan, and no query (setUp\'s $wpdb throws)' );
-
+		\WP_Mock::userFunction( 'add_query_arg' )->andReturn( 'https://x.test/wp-admin/admin.php?page=x' );
+		\WP_Mock::userFunction( 'admin_url' )->andReturn( 'https://x.test/wp-admin/admin.php' );
+		\WP_Mock::userFunction( 'get_option' )->andReturnUsing( fn( $n, $d = false ) => $d );
+		\WP_Mock::userFunction( 'get_post_meta' )->andReturn( '' );
 		$GLOBALS['wpdb'] = new class() {
 			/** @var string */
 			public $prefix = 'wp_';
-			/** @var array<int,string> */
-			public $sql = [];
+			/** @var int */
+			public $rows = 0;
+			/** @var int */
+			public $vars = 0;
 
 			/**
-			 * Capture.
+			 * Pass through.
 			 *
 			 * @param string $q    SQL.
 			 * @param mixed  ...$a Values.
@@ -161,24 +230,39 @@ class PerfReviewTest extends TestCase {
 			}
 
 			/**
-			 * Capture.
+			 * The row, counted.
 			 *
-			 * @param string $q SQL.
-			 * @return null
+			 * @return array<string,mixed>
 			 */
-			public function get_row( $q ) {
-				$this->sql[] = $q;
+			public function get_row() {
+				++$this->rows;
+				return [
+					'post_id'     => 5,
+					'path'        => '/x/',
+					'scanned_at'  => '2026-10-06 12:00:00',
+					'issue_count' => 0,
+					'facts'       => '{}',
+					'issues'      => '[]',
+					'suggestions' => null,
+					'body_text'   => 'Words',
+					'inbound'     => '[]',
+				];
+			}
+
+			/**
+			 * Counted.
+			 */
+			public function get_var() {
+				++$this->vars;
 				return null;
 			}
 		};
-		( new Scan_Store() )->get( 5, false );
-		( new Scan_Store() )->get( 5 );
-		$this->assertStringNotContainsString( 'body_text', $GLOBALS['wpdb']->sql[0] );
-		$this->assertStringNotContainsString( '*', $GLOBALS['wpdb']->sql[0] );
-		$this->assertStringContainsString( 'suggestions', $GLOBALS['wpdb']->sql[0], 'the tick handler still needs the advice' );
-		$this->assertStringContainsString( 'SELECT *', $GLOBALS['wpdb']->sql[1] );
-		$this->assertStringContainsString( "refresh_if_stale( \$post_id, (string) \$row['scanned_at'] )", (string) file_get_contents( dirname( __DIR__, 3 ) . '/src/Admin/Editor_Box.php' ), 'the editor box passes the row it fetched' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- source check.
-		$this->assertStringContainsString( '->get( $post_id, false )', (string) file_get_contents( dirname( __DIR__, 3 ) . '/src/Admin/Editor_Box.php' ), 'the tick handler reads the lean row' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- source check.
+		ob_start();
+		( new Editor_Box() )->render( $post );
+		$html = (string) ob_get_clean();
+		$this->assertStringContainsString( 'data-aisa-todo-box', $html, 'rendered' );
+		$this->assertSame( 1, $GLOBALS['wpdb']->rows, 'one row read' );
+		$this->assertSame( 0, $GLOBALS['wpdb']->vars, 'no second read for the staleness check' );
 	}
 
 	/**

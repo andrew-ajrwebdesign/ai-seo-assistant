@@ -35,6 +35,7 @@ class MenuUpgradeTest extends TestCase {
 	public function setUp(): void {
 		parent::setUp();
 		$this->wp_basics();
+		$this->new_request();
 		$this->options = [];
 		\WP_Mock::userFunction( 'get_option' )->andReturnUsing( fn( $n, $d = false ) => array_key_exists( $n, $this->options ) ? $this->options[ $n ] : $d );
 		\WP_Mock::userFunction( 'update_option' )->andReturnUsing(
@@ -187,6 +188,7 @@ class MenuUpgradeTest extends TestCase {
 	 * on the next admin load: the tables follow their own version, not the plugin level.
 	 */
 	public function test_schema_mismatch_reinstalls_tables(): void {
+		\WP_Mock::userFunction( 'is_admin' )->andReturn( true ); // wp-admin: the tables may change.
 		$this->options[ Upgrade::OPTION ]                                     = Upgrade::LEVEL;
 		$this->options[ \AJR\SEOAssistant\Core\Schema::VERSION_OPTION ]       = '5.0.0';
 		$GLOBALS['aisa_dbdelta']                                              = [];
@@ -195,21 +197,104 @@ class MenuUpgradeTest extends TestCase {
 
 		// Performance review (2): the ALTER that adds the newest columns failed. The version is not stored, so
 		// the next admin load tries again.
+		ini_set( 'error_log', '/dev/null' ); // phpcs:ignore WordPress.PHP.IniSet.Risky -- the expected log line would read as output.
 		$db->columns = [ 'post_id', 'facts', 'note' ];
 		( new Upgrade() )->maybe_run();
 		$this->assertSame( '5.0.0', $this->options[ \AJR\SEOAssistant\Core\Schema::VERSION_OPTION ], 'not marked current while body_text and inbound are missing' );
-		$this->assertSame( [ 'scan.body_text', 'scan.inbound' ], \AJR\SEOAssistant\Core\Schema::missing_columns() );
-		$db->columns             = [ 'post_id', 'facts', 'body_text', 'inbound', 'note' ];
-		$GLOBALS['aisa_dbdelta'] = [];
+		$this->assertSame( [ 'scan.body_text', 'scan.inbound', 'scan.inbound_hash' ], \AJR\SEOAssistant\Core\Schema::missing_columns() );
+		$this->assertSame( [ 'scan.body_text', 'scan.inbound', 'scan.inbound_hash' ], $this->options[ \AJR\SEOAssistant\Core\Schema::FAILED_OPTION ]['missing'], 'the failure is stored for the notice' );
 
+		// Verify review B2: the same request's writers do not try again; nor does the next admin load within
+		// the hour.
+		$GLOBALS['aisa_dbdelta'] = [];
+		( new \AJR\SEOAssistant\Changes\Change_Log() )->save_note( 9, 'x' );
+		$this->new_request();
+		( new Upgrade() )->maybe_run();
+		$this->assertSame( [], $GLOBALS['aisa_dbdelta'], 'not retried within the hour' );
+
+		// An hour later, with the ALTER working: installed, current, the failure forgotten.
+		$this->options[ \AJR\SEOAssistant\Core\Schema::FAILED_OPTION ]['at'] = time() - \AJR\SEOAssistant\Core\Schema::RETRY_AFTER - 1;
+		$db->columns = [ 'post_id', 'facts', 'body_text', 'inbound', 'inbound_hash', 'note' ];
+		$this->new_request();
 		( new Upgrade() )->maybe_run();
 		$this->assertStringContainsString( 'before_value longtext', implode( "\n", $GLOBALS['aisa_dbdelta'] ) );
 		$this->assertSame( \AJR\SEOAssistant\Core\Schema::VERSION, $this->options[ \AJR\SEOAssistant\Core\Schema::VERSION_OPTION ] );
+		$this->assertArrayNotHasKey( \AJR\SEOAssistant\Core\Schema::FAILED_OPTION, $this->options );
 
 		// Current tables: nothing to do.
 		$GLOBALS['aisa_dbdelta'] = [];
+		$this->new_request();
 		( new Upgrade() )->maybe_run();
 		$this->assertSame( [], $GLOBALS['aisa_dbdelta'] );
+	}
+
+	/**
+	 * Verify review A5: a visitor's page render never changes the tables; the write still goes ahead (and
+	 * falls back to the columns that exist).
+	 */
+	public function test_visitor_render_never_installs(): void {
+		$this->options[ \AJR\SEOAssistant\Core\Schema::VERSION_OPTION ] = '4';
+		$GLOBALS['aisa_dbdelta']                                        = [];
+		$db = $this->fake_db( null, 0 );
+		\WP_Mock::userFunction( 'is_admin' )->andReturn( false );
+		\WP_Mock::userFunction( 'wp_doing_cron' )->andReturn( false );
+		\WP_Mock::userFunction( 'wp_json_encode' )->andReturnUsing( 'json_encode' );
+		( new \AJR\SEOAssistant\Changes\Change_Log() )->save_note( 9, 'x' );
+		$this->assertSame( [], $GLOBALS['aisa_dbdelta'], 'no install on the front end' );
+		$this->assertNotEmpty( $db->updates, 'the write still runs' );
+	}
+
+	/**
+	 * Verify review A5: a cron request may bring the tables up to date.
+	 */
+	public function test_cron_installs(): void {
+		$this->options[ \AJR\SEOAssistant\Core\Schema::VERSION_OPTION ] = '4';
+		$GLOBALS['aisa_dbdelta']                                        = [];
+		$this->fake_db( null, 0 );
+		\WP_Mock::userFunction( 'is_admin' )->andReturn( false );
+		\WP_Mock::userFunction( 'wp_doing_cron' )->andReturn( true );
+		\WP_Mock::userFunction( 'wp_json_encode' )->andReturnUsing( 'json_encode' );
+		( new \AJR\SEOAssistant\Changes\Change_Log() )->save_note( 9, 'x' );
+		$this->assertNotEmpty( $GLOBALS['aisa_dbdelta'] );
+		$this->assertSame( \AJR\SEOAssistant\Core\Schema::VERSION, $this->options[ \AJR\SEOAssistant\Core\Schema::VERSION_OPTION ] );
+	}
+
+	/**
+	 * Verify review B2: one agency notice while a table update has not taken, none once current.
+	 */
+	public function test_failed_table_update_notice(): void {
+		\WP_Mock::userFunction( 'get_current_screen' )->andReturn( (object) [ 'id' => 'dashboard' ] );
+		\WP_Mock::userFunction( 'admin_url' )->andReturnUsing( fn( $p = '' ) => 'https://x.test/wp-admin/' . $p );
+		\WP_Mock::userFunction( 'get_users' )->andReturn( [] );
+		\WP_Mock::userFunction( 'get_user_meta' )->andReturn( '' );
+		\WP_Mock::userFunction( 'wp_salt' )->andReturn( 'salt' );
+		\WP_Mock::userFunction( 'current_user_can' )->andReturn( true );
+		$this->fake_db( null, 0 );
+		$this->options[ Upgrade::OPTION ]                                    = Upgrade::LEVEL;
+		$this->options[ \AJR\SEOAssistant\Core\Schema::VERSION_OPTION ]      = '5';
+		$this->options[ \AJR\SEOAssistant\Core\Schema::FAILED_OPTION ]       = [
+			'at'      => time(),
+			'missing' => [ 'scan.inbound' ],
+		];
+		ob_start();
+		( new \AJR\SEOAssistant\Admin\Secret_Notices() )->render();
+		$html = (string) ob_get_clean();
+		$this->assertSame( 1, substr_count( $html, 'could not update its database tables' ) );
+		$this->assertStringContainsString( 'missing: scan.inbound', $html );
+
+		$this->options[ \AJR\SEOAssistant\Core\Schema::VERSION_OPTION ] = \AJR\SEOAssistant\Core\Schema::VERSION;
+		ob_start();
+		( new \AJR\SEOAssistant\Admin\Secret_Notices() )->render();
+		$this->assertStringNotContainsString( 'database tables', (string) ob_get_clean() );
+	}
+
+	/**
+	 * A new request: Schema::ensure()'s once-per-request flag cleared.
+	 */
+	protected function new_request(): void {
+		$tried = new \ReflectionProperty( \AJR\SEOAssistant\Core\Schema::class, 'tried' );
+		$tried->setAccessible( true );
+		$tried->setValue( null, false );
 	}
 
 	/**
@@ -221,6 +306,7 @@ class MenuUpgradeTest extends TestCase {
 	 * @preserveGlobalState disabled
 	 */
 	public function test_writers_ensure_the_tables_first(): void {
+		\WP_Mock::userFunction( 'is_admin' )->andReturn( true ); // wp-admin: the tables may change.
 		$this->options[ \AJR\SEOAssistant\Core\Schema::VERSION_OPTION ] = '4';
 		$GLOBALS['aisa_dbdelta']                                        = [];
 		$db = $this->fake_db( null, 0 );
@@ -241,6 +327,7 @@ class MenuUpgradeTest extends TestCase {
 	 * @preserveGlobalState disabled
 	 */
 	public function test_writer_installs_before_writing(): void {
+		\WP_Mock::userFunction( 'is_admin' )->andReturn( true ); // wp-admin: the tables may change.
 		$this->options[ \AJR\SEOAssistant\Core\Schema::VERSION_OPTION ] = '4';
 		$GLOBALS['aisa_dbdelta']                                        = [];
 		$db = $this->fake_db( null, 0 );
@@ -339,7 +426,7 @@ class MenuUpgradeTest extends TestCase {
 				return $this->table;
 			}
 			/** @var array<int,string> The tables' columns, as SHOW COLUMNS lists them. */
-			public $columns = [ 'post_id', 'facts', 'body_text', 'inbound', 'note' ];
+			public $columns = [ 'post_id', 'facts', 'body_text', 'inbound', 'inbound_hash', 'note' ];
 			public function get_col( $q ) {
 				if ( false !== strpos( $q, 'SHOW COLUMNS' ) ) {
 					return $this->columns;

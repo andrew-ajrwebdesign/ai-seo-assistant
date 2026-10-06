@@ -95,6 +95,13 @@ class Secret_Notices {
 			echo '<div class="notice notice-warning"><p>' . esc_html( sprintf( __( 'AI SEO Assistant: the search data for %1$d pages pushed on %2$s could not be saved (the database refused it), so the scan still uses the previous push. The next push tries again; if this stays, check the database.', 'ai-seo-assistant' ), (int) ( $failed['pages'] ?? 0 ), wp_date( 'D j M', (int) ( $failed['at'] ?? time() ) ) ) ) . '</p></div>';
 		}
 
+		// A table update that did not take (no ALTER privilege, a full disk): one notice while it stays so.
+		$db_failed = get_option( \AJR\SEOAssistant\Core\Schema::FAILED_OPTION, false );
+		if ( is_array( $db_failed ) && ! \AJR\SEOAssistant\Core\Schema::is_current() ) {
+			/* translators: %s: comma-separated table columns, e.g. "scan.body_text". */
+			echo '<div class="notice notice-error"><p>' . esc_html( sprintf( __( 'AI SEO Assistant could not update its database tables (missing: %s). Scans still run, without the page text that marks editor to-dos done. It tries again every hour; check that the database user may alter tables.', 'ai-seo-assistant' ), implode( ', ', array_map( 'strval', (array) ( $db_failed['missing'] ?? [] ) ) ) ) ) . '</p></div>';
+		}
+
 		// 5.0: Google did not confirm revoking the old on-site Search Console grant. Shown once.
 		if ( false !== get_option( Upgrade::REVOKE_FAILED, false ) ) {
 			echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'AI SEO Assistant 5.0 removed its old Search Console connection, but Google did not confirm revoking the access it held. Remove "AI SEO Assistant" (or the Google Cloud app it used) from the Google account’s third-party access:', 'ai-seo-assistant' ) . ' <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">myaccount.google.com/permissions</a></p></div>';
