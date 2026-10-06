@@ -1,0 +1,29 @@
+{
+  "suggestions": [
+    {
+      "id": "description-length",
+      "priority": "high",
+      "field": "description",
+      "current": "Plumbers.",
+      "suggested": "Licensed plumbers for water heaters, boilers and drains across Northfield.",
+      "why": "Your listing description is 9 characters; Google allows 750 and shows the first 250.",
+      "where": "google",
+      "detail": "Add the services you list on the website, in the same words.",
+      "copy": "Northfield Plumbing & Heating installs and repairs water heaters, boilers and drains."
+    },
+    {
+      "id": "add-hours",
+      "priority": "medium",
+      "field": "hours",
+      "current": null,
+      "suggested": "Mon-Fri 8am-6pm",
+      "why": "Google shows no hours <script>alert(1)</script>",
+      "where": "site_or_google",
+      "detail": ""
+    },
+    { "id": "bad priority", "priority": "urgent", "field": "x", "why": "dropped: id has a space and priority is unknown" },
+    { "id": "no-why", "priority": "low", "field": "photos" },
+    "not an object",
+    { "id": "long", "priority": "low", "field": "photos", "why": "WHY_LONG", "where": "elsewhere" }
+  ]
+}

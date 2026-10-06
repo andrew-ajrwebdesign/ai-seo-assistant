@@ -201,6 +201,13 @@ class Scan_Page {
 				. ( '' !== (string) ( $listing['reason'] ?? '' ) ? ' ' . esc_html( (string) $listing['reason'] ) : '' ) . '</p></section>';
 			return;
 		}
+		$suggested = count( (array) ( $listing['suggestions'] ?? [] ) );
+		if ( $suggested > 0 ) {
+			// One line only: AJR Core lists them, on Business details.
+			/* translators: %d: number of suggested edits. */
+			$line = sprintf( _n( '%d suggested edit for your Google listing', '%d suggested edits for your Google listing', $suggested, 'ai-seo-assistant' ), $suggested );
+			echo '<p class="aisa-small">' . ( '' !== $core ? '<a href="' . esc_url( $core ) . '">' . esc_html( $line ) . ' → ' . esc_html__( 'Business details', 'ai-seo-assistant' ) . '</a>' : esc_html( $line ) ) . '</p>';
+		}
 		if ( [] === $group['issues'] && [] === $group['kept'] ) {
 			echo '<p class="aisa-tone--good">' . Ui::icon( 'yes-alt' ) . esc_html__( 'Your website matches your Google listing on every detail compared.', 'ai-seo-assistant' ) . '</p></section>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 			return;

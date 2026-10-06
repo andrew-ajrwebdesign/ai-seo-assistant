@@ -594,8 +594,10 @@ class RoundTwoTest extends TestCase {
 				[ 'field' => 'name', 'status' => 'match', 'severity' => 'info', 'site' => 'A', 'google' => 'A', 'message' => '', 'detail' => '', 'fix' => null ],
 			],
 			'problems'   => 1,
+			'suggestions' => [ [ 'id' => 'add-hours', 'priority' => 'medium', 'field' => 'hours', 'current' => '', 'suggested' => 'Mon-Fri', 'why' => 'w', 'where' => 'google', 'detail' => '' ] ],
 		];
 		$block                                    = Snapshot_Store::listing_block();
+		$this->assertSame( 'add-hours', $block['suggestions'][0]['id'], 'suggestions go to AJR Core' );
 		$this->assertSame( 1, $block['version'] );
 		$this->assertSame( '2026-10-05T07:11:40.000Z', $block['checked_at'] );
 		$this->assertSame( 1, $block['summary']['problems'] );

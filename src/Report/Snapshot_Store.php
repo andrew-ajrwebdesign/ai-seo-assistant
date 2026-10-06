@@ -117,8 +117,9 @@ class Snapshot_Store {
 			'fields'     => $checked ? $fields : [],
 		];
 		if ( $checked ) {
-			$block['maps_url'] = (string) ( $l['maps_url'] ?? '' );
-			$block['google']   = (array) ( $l['google'] ?? [] );
+			$block['maps_url']    = (string) ( $l['maps_url'] ?? '' );
+			$block['google']      = (array) ( $l['google'] ?? [] );
+			$block['suggestions'] = array_values( (array) ( $l['suggestions'] ?? [] ) ); // AJR Core shows them (Business details).
 		} else {
 			$block['reason'] = (string) ( $l['reason'] ?? '' );
 		}

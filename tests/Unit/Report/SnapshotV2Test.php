@@ -159,6 +159,33 @@ class SnapshotV2Test extends TestCase {
 	}
 
 	/**
+	 * Profile-check suggestions (PR #145): cleaned and capped like the other Google text, bad rows dropped,
+	 * at most 20, passed to AJR Core in the listing block.
+	 */
+	public function test_profile_suggestions(): void {
+		$errors = [];
+		$week   = self::fixture( 'snapshot-v2.week.example.json' );
+		$extra  = json_decode( (string) file_get_contents( dirname( __DIR__, 2 ) . '/fixtures/profile-suggestions.json' ), true ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- test fixture.
+		$extra['suggestions'][5]['why']               = str_repeat( 'w', 300 );
+		$week['business_profile_check']['suggestions'] = $extra['suggestions'];
+		$snap = self::parse( $week, $errors );
+		$this->assertNotNull( $snap, implode( '; ', $errors ) );
+		$got = $snap['listing']['suggestions'];
+		$this->assertSame( [ 'description-length', 'add-hours', 'long' ], array_column( $got, 'id' ) );
+		$this->assertStringNotContainsString( '<', $got[1]['why'] );
+		$this->assertSame( '', $got[1]['current'], 'null current is empty' );
+		$this->assertSame( 200, mb_strlen( $got[2]['why'] ) );
+		$this->assertSame( '', $got[2]['where'], 'unknown where dropped' );
+		$this->assertArrayHasKey( 'copy', $got[0] );
+		$this->assertArrayNotHasKey( 'copy', $got[1] );
+
+		$week['business_profile_check']['suggestions'] = array_fill( 0, 30, $extra['suggestions'][0] );
+		$this->assertCount( 20, self::parse( $week, $errors )['listing']['suggestions'] );
+		unset( $week['business_profile_check']['suggestions'] );
+		$this->assertSame( [], self::parse( $week, $errors )['listing']['suggestions'], 'an older push: none' );
+	}
+
+	/**
 	 * Country filter (PR #144 cb8aacf): site figures and per-page search lists carry the country; a bad code,
 	 * or a snapshot from before the field, means all countries. Labels name the country.
 	 */

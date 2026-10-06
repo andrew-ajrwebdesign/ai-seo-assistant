@@ -548,13 +548,13 @@ class Snapshot_V2 extends Snapshot {
 		$maps   = is_string( $raw['maps_url'] ?? null ) && preg_match( '#^https://(www\.)?google\.[a-z.]+/maps[^\s<>"\']{0,400}$|^https://maps\.google\.[a-z.]+/[^\s<>"\']{0,400}$#', $raw['maps_url'] ) ? $raw['maps_url'] : '';
 
 		return [
-			'reason'     => self::text( $raw['reason'] ?? null, 200 ),
-			'checked'    => true === ( $raw['checked'] ?? false ),
-			'checked_at' => is_string( $raw['checked_at'] ?? null ) ? (int) strtotime( $raw['checked_at'] ) : 0,
-			'maps_url'   => $maps,
-			'page'       => is_string( $raw['page'] ?? null ) && preg_match( '#^https://[a-z0-9.-]+(/[^\s<>"\']{0,300})?$#i', $raw['page'] ) ? $raw['page'] : '',
-			'place_id'   => is_string( $raw['place_id'] ?? null ) && preg_match( '/^[A-Za-z0-9_-]{1,200}$/', $raw['place_id'] ) ? $raw['place_id'] : '',
-			'google'     => [
+			'reason'      => self::text( $raw['reason'] ?? null, 200 ),
+			'checked'     => true === ( $raw['checked'] ?? false ),
+			'checked_at'  => is_string( $raw['checked_at'] ?? null ) ? (int) strtotime( $raw['checked_at'] ) : 0,
+			'maps_url'    => $maps,
+			'page'        => is_string( $raw['page'] ?? null ) && preg_match( '#^https://[a-z0-9.-]+(/[^\s<>"\']{0,300})?$#i', $raw['page'] ) ? $raw['page'] : '',
+			'place_id'    => is_string( $raw['place_id'] ?? null ) && preg_match( '/^[A-Za-z0-9_-]{1,200}$/', $raw['place_id'] ) ? $raw['place_id'] : '',
+			'google'      => [
 				'name'              => self::text( $google['name'] ?? null, 120 ),
 				'phone'             => self::text( $google['phone'] ?? null, 40 ),
 				'status'            => self::text( $google['status'] ?? null, 40 ),
@@ -563,9 +563,50 @@ class Snapshot_V2 extends Snapshot {
 				'review_count'      => is_int( $google['review_count'] ?? null ) && $google['review_count'] >= 0 ? $google['review_count'] : null,
 				'service_area_only' => true === ( $google['service_area_only'] ?? false ),
 			],
-			'fields'     => $fields,
-			'problems'   => count( array_filter( $fields, static fn( $f ) => in_array( $f['status'], [ 'mismatch', 'missing_on_site', 'missing_on_google' ], true ) && 'info' !== $f['severity'] ) ),
+			'fields'      => $fields,
+			'suggestions' => self::listing_suggestions( $raw['suggestions'] ?? null ),
+			'problems'    => count( array_filter( $fields, static fn( $f ) => in_array( $f['status'], [ 'mismatch', 'missing_on_site', 'missing_on_google' ], true ) && 'info' !== $f['severity'] ) ),
 		];
+	}
+
+	/**
+	 * The profile check's suggested edits to the Google listing (profile-check PR #145): at most 20, every
+	 * string capped and cleaned like the rest of the Google-sourced text; a row without an id, a known
+	 * priority, a field or a reason is dropped.
+	 *
+	 * @param mixed $raw Raw list.
+	 * @return array<int,array<string,string>>
+	 */
+	protected static function listing_suggestions( $raw ): array {
+		$out = [];
+		foreach ( self::rows( $raw, 40 ) as $s ) {
+			$id       = is_string( $s['id'] ?? null ) && preg_match( '/^[A-Za-z0-9_.:-]{1,60}$/', $s['id'] ) ? $s['id'] : '';
+			$priority = is_string( $s['priority'] ?? null ) && in_array( $s['priority'], [ 'high', 'medium', 'low' ], true ) ? $s['priority'] : '';
+			$field    = self::text( $s['field'] ?? null, 40 );
+			$why      = self::text( $s['why'] ?? null, 200 );
+			if ( '' === $id || '' === $priority || '' === $field || '' === $why ) {
+				continue;
+			}
+			$row = [
+				'id'        => $id,
+				'priority'  => $priority,
+				'field'     => $field,
+				'current'   => self::text( is_scalar( $s['current'] ?? null ) ? (string) $s['current'] : null, 200 ),
+				'suggested' => self::text( is_scalar( $s['suggested'] ?? null ) ? (string) $s['suggested'] : null, 200 ),
+				'why'       => $why,
+				'where'     => is_string( $s['where'] ?? null ) && in_array( $s['where'], [ 'site', 'google', 'site_or_google' ], true ) ? $s['where'] : '',
+				'detail'    => self::text( $s['detail'] ?? null, 400 ),
+			];
+			if ( isset( $s['copy'] ) ) {
+				$row['copy'] = self::text( $s['copy'], 750 ); // Text to paste into the listing (a description is at most 750).
+			}
+			$out[] = $row;
+			if ( count( $out ) >= 20 ) {
+				break;
+			}
+		}
+
+		return $out;
 	}
 
 	/**
