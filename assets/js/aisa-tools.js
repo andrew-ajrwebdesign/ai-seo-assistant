@@ -154,7 +154,13 @@
 			const before = state.data.before;
 			if ( null !== before && undefined !== before && ! Number.isNaN( now ) ) {
 				const diff = now - Number( before );
-				line += 0 === diff ? t.same : fmt( diff < 0 ? t.fewer : t.more, Math.abs( diff ) );
+				if ( 0 === diff ) {
+					line += t.same;
+				} else if ( 1 === Math.abs( diff ) ) {
+					line += diff < 0 ? t.fewer1 : t.more1;
+				} else {
+					line += fmt( diff < 0 ? t.fewer : t.more, Math.abs( diff ) );
+				}
 			}
 			showProgress( total, total, null );
 			await finishScan( line );

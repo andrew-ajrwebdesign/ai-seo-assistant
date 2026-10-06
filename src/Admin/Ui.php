@@ -60,7 +60,7 @@ class Ui {
 				'nonces' => array_combine( self::AJAX_ACTIONS, array_map( 'wp_create_nonce', self::AJAX_ACTIONS ) ),
 				'i18n'   => [
 					/* translators: 1: pages done, 2: pages in all. */
-					'scanning'     => __( 'Scanning: %1$d of %2$d pages', 'ai-seo-assistant' ),
+					'scanning'     => __( 'Scanning %1$d of %2$d pages', 'ai-seo-assistant' ),
 					'finishing'    => __( 'Checking links, duplicates and the sitemap…', 'ai-seo-assistant' ),
 					/* translators: %d: minutes. */
 					'leftMin'      => __( ' · about %d min left', 'ai-seo-assistant' ),
@@ -69,8 +69,10 @@ class Ui {
 					'finished'     => __( '%d pages checked just now', 'ai-seo-assistant' ),
 					/* translators: %d: number of issues. */
 					'fewer'        => __( ' · %d fewer issues than before', 'ai-seo-assistant' ),
+					'fewer1'       => __( ' · 1 fewer issue than before', 'ai-seo-assistant' ),
 					/* translators: %d: number of issues. */
 					'more'         => __( ' · %d more issues than before', 'ai-seo-assistant' ),
+					'more1'        => __( ' · 1 more issue than before', 'ai-seo-assistant' ),
 					'same'         => __( ' · as many issues as before', 'ai-seo-assistant' ),
 					/* translators: 1: pages done, 2: pages in all. */
 					'stopped'      => __( 'Stopped after %1$d of %2$d pages. What was scanned is kept.', 'ai-seo-assistant' ),
