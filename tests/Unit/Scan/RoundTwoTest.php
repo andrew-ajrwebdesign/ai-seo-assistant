@@ -247,7 +247,7 @@ class RoundTwoTest extends TestCase {
 	 */
 	public function test_migrate_roles_into_page_types(): void {
 		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- test double for AJR Core 0.22's contract.
-		eval( 'namespace AJR\Core\Schema; class Page_Types { public static $t = [ 30 => "faq" ]; public static function types(): array { return [ "service" => [ "Service page", "the service", "" ], "area" => [ "Area page", "the area", "" ], "article" => [ "Article", "headline", "" ], "faq" => [ "FAQ", "q and a", "" ] ]; } public static function get( int $id ): string { return self::$t[ $id ] ?? ""; } public static function set( int $id, string $type ): bool { self::$t[ $id ] = $type; return true; } public static function suggest( int $id ): string { return "service"; } }' );
+		eval( 'namespace AJR\Core\Schema; class Page_Types { public static $t = [ 30 => "faq" ]; public static function types(): array { return [ "service" => [ "Service page", "the service", "" ], "area" => [ "Area page", "the area", "" ], "article" => [ "Article", "headline", "" ], "faq" => [ "FAQ", "q and a", "" ] ]; } public static function get( int $id ): string { return self::$t[ $id ] ?? ""; } public static function set( int $id, string $type ): bool { if ( 50 === $id ) { return false; } self::$t[ $id ] = $type; return true; } public static function suggest( int $id ): string { return "service"; } }' );
 		global $wpdb;
 		$wpdb = new class() { // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test double.
 			/**
@@ -275,6 +275,7 @@ class RoundTwoTest extends TestCase {
 					[ 'post_id' => 20, 'meta_value' => 'money' ],
 					[ 'post_id' => 30, 'meta_value' => 'info' ],
 					[ 'post_id' => 40, 'meta_value' => 'unclassified' ],
+					[ 'post_id' => 50, 'meta_value' => 'location' ],
 				];
 			}
 		};
@@ -292,6 +293,7 @@ class RoundTwoTest extends TestCase {
 				'moved'   => 1,
 				'noted'   => 1,
 				'dropped' => 2,
+				'failed'  => 1,
 			],
 			$out
 		);
@@ -299,7 +301,7 @@ class RoundTwoTest extends TestCase {
 		$this->assertSame( 'faq', \AJR\Core\Schema\Page_Types::get( 30 ), 'a page type already set is kept' );
 		$this->assertSame( '', \AJR\Core\Schema\Page_Types::get( 20 ), 'money: service or contact is the agency’s call' );
 		$this->assertSame( [ 20 ], $this->options[ Page_Role::NOTES_OPTION ] );
-		$this->assertSame( [ 10, 20, 30, 40 ], $deleted, 'every old role meta is deleted' );
+		$this->assertSame( [ 10, 20, 30, 40 ], $deleted, 'old role meta deleted once dealt with; 50 (AJR Core refused the type) kept for a retry' );
 		$this->assertSame( 'Service page', Page_Role::types()['service']['label'] );
 		$this->assertSame( 'service', Page_Role::suggest( 1 ) );
 	}

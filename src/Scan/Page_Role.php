@@ -274,7 +274,7 @@ class Page_Role {
 	 * area, info → article; money is left unset (service or contact is the agency's call: noted for them);
 	 * unclassified was the default anyway. A page that already has a type keeps it.
 	 *
-	 * @return array{moved:int,noted:int,dropped:int}|null Null when there is nothing to do or no Core.
+	 * @return array{moved:int,noted:int,dropped:int,failed:int}|null Null when there is nothing to do or no Core.
 	 */
 	public static function migrate(): ?array {
 		global $wpdb;
@@ -294,19 +294,26 @@ class Page_Role {
 			'moved'   => 0,
 			'noted'   => 0,
 			'dropped' => 0,
+			'failed'  => 0,
 		];
 		$notes = (array) get_option( self::NOTES_OPTION, [] );
 		$core  = self::CORE;
 		foreach ( $rows as $row ) {
-			$id  = (int) $row['post_id'];
-			$old = (string) $row['meta_value'];
-			if ( isset( $map[ $old ] ) && '' === (string) $core::get( $id ) && $core::set( $id, $map[ $old ] ) ) {
+			$id   = (int) $row['post_id'];
+			$old  = (string) $row['meta_value'];
+			$type = (string) $core::get( $id );
+			if ( isset( $map[ $old ] ) && '' === $type ) {
+				// Page_Types::set() checks edit_post and validates: a refusal keeps the old role for a retry.
+				if ( ! $core::set( $id, $map[ $old ] ) ) {
+					++$out['failed'];
+					continue;
+				}
 				++$out['moved'];
-			} elseif ( 'money' === $old && '' === (string) $core::get( $id ) ) {
+			} elseif ( 'money' === $old && '' === $type ) {
 				$notes[] = $id;
 				++$out['noted'];
 			} else {
-				++$out['dropped'];
+				++$out['dropped']; // Already typed, or unclassified (the default anyway).
 			}
 			delete_post_meta( $id, self::LEGACY_META );
 		}

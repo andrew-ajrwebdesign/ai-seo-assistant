@@ -144,12 +144,14 @@ class Secret_Store {
 	}
 
 	/**
-	 * Whether this request may write to the database on a read: wp-admin (screens, admin-ajax,
-	 * admin-post), cron or WP-CLI. A visitor's page view (and a REST request) never writes because a
-	 * secret was read.
+	 * Whether this request may write to the database on a read: a logged-in wp-admin request (screens,
+	 * admin-ajax, admin-post), cron or WP-CLI. A visitor's page view, a REST request and a logged-out
+	 * admin-ajax.php request never write because a secret was read.
 	 */
 	protected static function may_write_here(): bool {
-		return ( function_exists( 'is_admin' ) && is_admin() )
+		// Logged-out admin-ajax.php is is_admin() too: anyone can reach it, so it never seals or writes a
+		// secret. Kept identical to AJR Core's Secret_Store::may_seal_now().
+		return ( function_exists( 'is_admin' ) && is_admin() && function_exists( 'is_user_logged_in' ) && is_user_logged_in() )
 			|| ( function_exists( 'wp_doing_cron' ) && wp_doing_cron() )
 			|| ( defined( 'WP_CLI' ) && WP_CLI );
 	}

@@ -166,8 +166,13 @@ class Plugin {
 		add_action(
 			'admin_init',
 			static function (): void {
-				if ( \AJR\SEOAssistant\Scan\Page_Role::core() && ! get_option( 'ai_seo_assistant_roles_migrated' ) ) {
-					\AJR\SEOAssistant\Scan\Page_Role::migrate();
+				// The agency only (page types are theirs to set); a refused page keeps its old role and the
+				// next agency admin load tries again.
+				if ( ! current_user_can( Report\Access::TOOLS_CAP ) || ! \AJR\SEOAssistant\Scan\Page_Role::core() || get_option( 'ai_seo_assistant_roles_migrated' ) ) {
+					return;
+				}
+				$out = \AJR\SEOAssistant\Scan\Page_Role::migrate();
+				if ( null === $out || 0 === $out['failed'] ) {
 					update_option( 'ai_seo_assistant_roles_migrated', time(), false );
 				}
 			}

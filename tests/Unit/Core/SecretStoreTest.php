@@ -131,6 +131,7 @@ class SecretStoreTest extends TestCase {
 		\WP_Mock::userFunction( 'wp_json_encode' )->andReturnUsing( fn( $v ) => json_encode( $v ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- test double.
 		// Request context: a visitor's page view by default; tests switch it.
 		\WP_Mock::userFunction( 'is_admin' )->andReturnUsing( fn() => $this->context['admin'] );
+		\WP_Mock::userFunction( 'is_user_logged_in' )->andReturnUsing( fn() => $this->context['logged_in'] ?? true );
 		\WP_Mock::userFunction( 'wp_doing_cron' )->andReturnUsing( fn() => $this->context['cron'] );
 		\WP_Mock::userFunction( 'current_user_can' )->andReturnUsing( fn( $cap ) => in_array( $cap, $this->context['caps'], true ) );
 		$this->context = [
@@ -705,5 +706,24 @@ class SecretStoreTest extends TestCase {
 		foreach ( array_keys( Secret_Store::OPTIONS ) as $option ) {
 			$this->assertStringContainsString( "'" . $option . "'", $uninstall, $option . ' is deleted on uninstall' );
 		}
+	}
+
+	/**
+	 * Logged-out admin-ajax.php is is_admin() but anyone can reach it: a read there never writes (no reseal).
+	 * The rule is identical to AJR Core's Secret_Store::may_seal_now().
+	 */
+	public function test_logged_out_ajax_never_writes(): void {
+		$m = new \ReflectionMethod( Secret_Store::class, 'may_write_here' );
+		$m->setAccessible( true );
+		$this->context['admin']     = true;
+		$this->context['logged_in'] = false;
+		$this->assertFalse( $m->invoke( null ), 'logged-out admin-ajax' );
+		$this->context['logged_in'] = true;
+		$this->assertTrue( $m->invoke( null ), 'a logged-in wp-admin request' );
+		$this->context['admin'] = false;
+		$this->context['cron']  = true;
+		$this->assertTrue( $m->invoke( null ), 'cron' );
+		$this->context['cron'] = false;
+		$this->assertFalse( $m->invoke( null ), 'a front-end request' );
 	}
 }

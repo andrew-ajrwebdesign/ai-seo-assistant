@@ -171,7 +171,8 @@ class SecretStoreCasesTest extends TestCase {
 		);
 		\WP_Mock::userFunction( 'wp_salt' )->andReturnUsing( fn( $scheme ) => $this->salt . '-' . $scheme );
 		\WP_Mock::userFunction( 'wp_json_encode' )->andReturnUsing( fn( $v ) => json_encode( $v ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- test double.
-		\WP_Mock::userFunction( 'is_admin' )->andReturnUsing( fn() => 'admin' === $this->context );
+		\WP_Mock::userFunction( 'is_admin' )->andReturnUsing( fn() => in_array( $this->context, [ 'admin', 'ajax-logged-out' ], true ) );
+		\WP_Mock::userFunction( 'is_user_logged_in' )->andReturnUsing( fn() => 'admin' === $this->context );
 		\WP_Mock::userFunction( 'wp_doing_cron' )->andReturnUsing( fn() => 'cron' === $this->context );
 		\WP_Mock::userFunction( 'current_user_can' )->andReturnUsing( fn( $cap ) => 'admin' === $this->context && in_array( $cap, [ 'manage_options', Access::TOOLS_CAP ], true ) );
 		\WP_Mock::userFunction( '__' )->andReturnArg( 0 );
