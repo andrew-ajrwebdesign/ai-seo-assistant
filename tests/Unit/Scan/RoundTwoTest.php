@@ -313,6 +313,8 @@ class RoundTwoTest extends TestCase {
 			public $sql = [];
 			/** @var bool Every increment touches no row (a database that refuses them). */
 			public $broken = false;
+			/** @var string One counter whose increments touch no row (the other still works). */
+			public $refuse = '';
 			public function __construct( array &$store ) {
 				$this->store = &$store;
 			}
@@ -328,7 +330,7 @@ class RoundTwoTest extends TestCase {
 				if ( preg_match( '/option_value = option_value \+ (%d|1) WHERE option_name = %s/', $q, $m ) ) {
 					$name = '%d' === $m[1] ? $args[1] : $args[0];
 					$by   = '%d' === $m[1] ? (int) $args[0] : 1;
-					if ( isset( $this->store[ $name ] ) && ! $this->broken ) {
+					if ( isset( $this->store[ $name ] ) && ! $this->broken && $name !== $this->refuse ) {
 						$this->store[ $name ] = (string) ( (int) $this->store[ $name ] + $by );
 						return 1;
 					}
@@ -371,6 +373,18 @@ class RoundTwoTest extends TestCase {
 		$this->assertSame( $before['calls'] + 1, \AJR\SEOAssistant\AI\Spend::current()['calls'] );
 		$GLOBALS['wpdb']->broken = false;
 
+		// Code-standards re-review (2): only ONE counter refused. That one is counted through its option, the
+		// other was already increased in SQL and is not counted again.
+		foreach ( [ \AJR\SEOAssistant\AI\Spend::TOTAL_PREFIX, \AJR\SEOAssistant\AI\Spend::CALLS_PREFIX ] as $prefix ) {
+			$GLOBALS['wpdb']->refuse = $prefix . $period;
+			$before                  = \AJR\SEOAssistant\AI\Spend::current();
+			\AJR\SEOAssistant\AI\Spend::record( 'claude-haiku-4-5', [ 'input_tokens' => 1000000, 'output_tokens' => 0 ] );
+			$after = \AJR\SEOAssistant\AI\Spend::current();
+			$this->assertEqualsWithDelta( $before['usd'] + 1.0, $after['usd'], 1e-6, $prefix . ' refused: the dollars counted once' );
+			$this->assertSame( $before['calls'] + 1, $after['calls'], $prefix . ' refused: the call counted once' );
+		}
+		$GLOBALS['wpdb']->refuse = '';
+
 		// Through the client: a call that timed out after it was sent, and a 2xx that could not be read, are
 		// both counted at their worst case; a refused connection (never sent) is not.
 		$client = new class() extends \AJR\SEOAssistant\AI\Claude_Client {
@@ -400,15 +414,16 @@ class RoundTwoTest extends TestCase {
 		\WP_Mock::userFunction( 'wp_remote_retrieve_body' )->andReturn( 'not json' );
 		\WP_Mock::userFunction( 'apply_filters' )->andReturnUsing( fn( $h, $v ) => $v );
 		$calls = static fn( $t ) => \AJR\SEOAssistant\AI\Spend::current()['calls'];
+		$base  = $calls( $this );
 		$reply = new \WP_Error( 'http_request_failed', 'cURL error 7: Failed to connect' );
 		$client->generate_json( 'x', [], 'intent' );
-		$this->assertSame( 2, $calls( $this ), 'never sent: not counted' );
+		$this->assertSame( $base, $calls( $this ), 'never sent: not counted' );
 		$reply = new \WP_Error( 'http_request_failed', 'cURL error 28: Operation timed out after 60000 milliseconds' );
 		$client->generate_json( 'x', [], 'intent' );
-		$this->assertSame( 3, $calls( $this ), 'timed out after sending: counted' );
+		$this->assertSame( $base + 1, $calls( $this ), 'timed out after sending: counted' );
 		$reply = [ 'response' => [ 'code' => 200 ] ];
 		$client->generate_json( 'x', [], 'intent' );
-		$this->assertSame( 4, $calls( $this ), 'an unreadable 2xx: counted' );
+		$this->assertSame( $base + 2, $calls( $this ), 'an unreadable 2xx: counted' );
 	}
 
 	/**

@@ -330,32 +330,41 @@ class Spend {
 			add_option( $calls, (string) (int) $now['calls'], '', false );
 			self::prune( $now['period'] );
 		}
-		$micros = (int) round( $usd * 1000000 );
-		$ok     = 0 === $micros || self::increment( $total, $micros, (int) round( $now['usd'] * 1000000 ) );
-		$ok     = self::increment( $calls, 1, (int) $now['calls'] ) && $ok;
+		$micros   = (int) round( $usd * 1000000 );
+		$usd_ok   = 0 === $micros || self::increment( $total, $micros, (int) round( $now['usd'] * 1000000 ) );
+		$calls_ok = self::increment( $calls, 1, (int) $now['calls'] );
 		if ( function_exists( 'wp_cache_delete' ) ) {
 			wp_cache_delete( $total, 'options' );
 			wp_cache_delete( $calls, 'options' );
 		}
-		if ( ! $ok ) {
-			// The counter could not be increased in SQL (seeding failed, a database error): the call is still
-			// counted, through the plain option write, and the agency's log says so.
+		// A counter that could not be increased in SQL (seeding failed, a database error) is still counted,
+		// through the plain option write, and the agency's log says so. Only the one that failed: the other
+		// was already increased, and writing it again would count the call twice.
+		if ( ! $usd_ok ) {
+			self::count_by_option( $total, 'usd', $micros );
+		}
+		if ( ! $calls_ok ) {
+			self::count_by_option( $calls, 'calls', 1 );
+		}
+	}
+
+	/**
+	 * Count into one counter without SQL: its option increased, or, when it does not exist, the 5.0 array
+	 * option's field (current() reads each counter, else that field).
+	 *
+	 * @param string $name  The counter's option.
+	 * @param string $field 'usd' | 'calls'.
+	 * @param int    $by    Micro-dollars or calls.
+	 */
+	protected static function count_by_option( string $name, string $field, int $by ): void {
+		if ( false === get_option( $name, false ) ) {
 			$fresh = self::current();
-			if ( false === get_option( $total, false ) ) {
-				self::save(
-					$fresh,
-					[
-						'usd'   => round( $fresh['usd'] + $usd, 6 ),
-						'calls' => $fresh['calls'] + 1,
-					]
-				);
-			} else {
-				update_option( $total, (string) ( (int) get_option( $total, 0 ) + $micros ), false );
-				update_option( $calls, (string) ( (int) get_option( $calls, 0 ) + 1 ), false );
-			}
-			if ( function_exists( 'error_log' ) ) {
-				error_log( 'AI SEO Assistant: the spend counter could not be increased in SQL; counted through the option instead.' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- a counting failure the agency must be able to find.
-			}
+			self::save( $fresh, [ $field => 'usd' === $field ? round( $fresh['usd'] + $by / 1000000, 6 ) : $fresh['calls'] + $by ] );
+		} else {
+			update_option( $name, (string) ( (int) get_option( $name, 0 ) + $by ), false );
+		}
+		if ( function_exists( 'error_log' ) ) {
+			error_log( 'AI SEO Assistant: the spend counter (' . $field . ') could not be increased in SQL; counted through the option instead.' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- a counting failure the agency must be able to find.
 		}
 	}
 
