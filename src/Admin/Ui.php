@@ -33,8 +33,8 @@ class Ui {
 	/** Report stylesheet handle (tokens, cards, tiles). */
 	public const BASE_STYLE = 'ai-seo-assistant-weekly-report';
 
-	/** AJAX nonce action for the tool screens. */
-	public const NONCE = 'aisa_tools';
+	/** The tool screens' AJAX actions: each has its own nonce (named after the action). */
+	public const AJAX_ACTIONS = [ 'aisa_scan_start', 'aisa_scan_step', 'aisa_generate', 'aisa_set_page_type' ];
 
 	/**
 	 * Enqueue the tool screens' CSS and JS.
@@ -56,9 +56,9 @@ class Ui {
 			self::SCRIPT,
 			'aisaTools',
 			[
-				'ajax'  => admin_url( 'admin-ajax.php' ),
-				'nonce' => wp_create_nonce( self::NONCE ),
-				'i18n'  => [
+				'ajax'   => admin_url( 'admin-ajax.php' ),
+				'nonces' => array_combine( self::AJAX_ACTIONS, array_map( 'wp_create_nonce', self::AJAX_ACTIONS ) ),
+				'i18n'   => [
 					/* translators: 1: pages done, 2: pages in all. */
 					'scanning'     => __( 'Scanning: %1$d of %2$d pages', 'ai-seo-assistant' ),
 					'finishing'    => __( 'Checking links, duplicates and the sitemap…', 'ai-seo-assistant' ),

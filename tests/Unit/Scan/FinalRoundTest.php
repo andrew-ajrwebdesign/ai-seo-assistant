@@ -278,6 +278,42 @@ class FinalRoundTest extends TestCase {
 	}
 
 	/**
+	 * Item 17: an oversized push is refused on rest_pre_dispatch (before WordPress decodes its JSON);
+	 * other routes and normal-sized pushes pass through untouched.
+	 */
+	public function test_oversize_push_refused_before_dispatch(): void {
+		\WP_Mock::userFunction( 'untrailingslashit' )->andReturnUsing( fn( $s ) => rtrim( (string) $s, '/' ) );
+		$endpoint = new \AJR\SEOAssistant\Report\Push_Endpoint( new \AJR\SEOAssistant\Report\Snapshot_Store() );
+		$big      = new \WP_REST_Request( 'POST', '/ai-seo-assistant/v1/report' );
+		$big->set_header( 'Content-Length', (string) ( \AJR\SEOAssistant\Report\Snapshot::MAX_BYTES_V2 + 1 ) );
+		$got = $endpoint->refuse_oversize( null, null, $big );
+		$this->assertInstanceOf( \WP_Error::class, $got );
+		$this->assertSame( 'aisa_report_too_large', $got->get_error_code() );
+
+		$other = new \WP_REST_Request( 'POST', '/wp/v2/posts' );
+		$other->set_header( 'Content-Length', (string) ( \AJR\SEOAssistant\Report\Snapshot::MAX_BYTES_V2 + 1 ) );
+		$this->assertNull( $endpoint->refuse_oversize( null, null, $other ), 'another route is not ours to judge' );
+
+		$small = new \WP_REST_Request( 'POST', '/ai-seo-assistant/v1/report' );
+		$small->set_body( '{}' );
+		$this->assertNull( $endpoint->refuse_oversize( null, null, $small ) );
+	}
+
+	/**
+	 * Item 15: each tools AJAX action checks its own nonce, and the screen hands out one per action.
+	 */
+	public function test_separate_nonce_per_ajax_action(): void {
+		$root  = dirname( __DIR__, 3 );
+		$tools = (string) file_get_contents( $root . '/src/Admin/Tools_Actions.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading source.
+		$this->assertStringNotContainsString( 'Ui::NONCE', $tools );
+		$this->assertSame( 0, preg_match( '/this->guard_ajax\(\s*\)/', $tools ), 'every guard names its action' );
+		$this->assertSame( 4, preg_match_all( "/guard_ajax\\( (?:'aisa_[a-z_]+'|self::ROLE) \\)/", $tools ) );
+		$this->assertSame( \AJR\SEOAssistant\Admin\Tools_Actions::ROLE, \AJR\SEOAssistant\Admin\Ui::AJAX_ACTIONS[3] );
+		$js = (string) file_get_contents( $root . '/assets/js/aisa-tools.js' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading source.
+		$this->assertStringContainsString( '( cfg.nonces || {} )[ action ]', $js );
+	}
+
+	/**
 	 * Item 23: admin-ajax builds the admin stack only for this plugin's own actions.
 	 */
 	public function test_admin_stack_only_for_own_ajax(): void {

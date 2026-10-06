@@ -66,6 +66,26 @@ if ( ! class_exists( 'WP_REST_Request' ) ) {
 		/** @var array<string,string> */
 		protected $headers = [];
 
+		/** @var string */
+		protected $route = '';
+
+		/**
+		 * Constructor (method, route), as core's.
+		 *
+		 * @param string $method Method.
+		 * @param string $route  Route.
+		 */
+		public function __construct( $method = '', $route = '' ) {
+			$this->route = (string) $route;
+		}
+
+		/**
+		 * The route.
+		 */
+		public function get_route() {
+			return $this->route;
+		}
+
 		/**
 		 * Set the body.
 		 *

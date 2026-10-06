@@ -7,11 +7,16 @@
  *   X-AISA-Signature: t=<unix>,v1=<hmac>        (see Push_Key)
  *
  * Order, and why:
- *   1. Rate limit   an address that keeps failing is turned away before any work (brute force).
- *   2. Signature    checked in permission_callback, so an unsigned request never reaches the handler.
- *   3. Validate     Snapshot::from_json(); anything malformed is refused whole.
- *   4. Right site   the snapshot names its site; one client's report can never be stored on another's.
- *   5. Store        Snapshot_Store::put() (a same-week correction replaces, an older retry is ignored).
+ *   1. Size         on rest_pre_dispatch, before WordPress matches the route: it json_decode()s an
+ *                   application/json body while validating parameters, BEFORE permission_callback, so a
+ *                   size check there would come after the decode it is meant to prevent.
+ *   2. Signature    checked in permission_callback, so an unsigned request never reaches the handler. A
+ *                   good signature is never throttled (callers behind one proxy share an address).
+ *   3. Rate limit   only a wrong or expired signature counts; an address over the limit gets 429 (its
+ *                   signature is still hashed first: an HMAC is cheap, a lock-out of the real push is not).
+ *   4. Validate     Snapshot::from_json(); anything malformed is refused whole.
+ *   5. Right site   the snapshot names its site; one client's report can never be stored on another's.
+ *   6. Store        Snapshot_Store::put() (a same-week correction replaces, an older retry is ignored).
  *
  * Works on any host: plain HTTPS to the WordPress REST API, no SSH or FTP. A host or firewall that blocks
  * outside POSTs is covered by the Import fallback on the report screen.
@@ -63,6 +68,37 @@ class Push_Endpoint {
 	 */
 	public function register(): void {
 		add_action( 'rest_api_init', [ $this, 'register_route' ] );
+		add_filter( 'rest_pre_dispatch', [ $this, 'refuse_oversize' ], 10, 3 );
+	}
+
+	/**
+	 * Refuse an oversized push before WordPress decodes its JSON (step 1 above). Other routes pass through.
+	 *
+	 * @param mixed            $result  Earlier filter's result (null to carry on).
+	 * @param mixed            $server  REST server (unused).
+	 * @param \WP_REST_Request $request Request.
+	 * @return mixed
+	 */
+	public function refuse_oversize( $result, $server, $request ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundInExtendedClassBeforeLastUsed,Generic.CodeAnalysis.UnusedFunctionParameter.FoundBeforeLastUsed -- the filter's signature.
+		if ( null !== $result || ! $request instanceof \WP_REST_Request || '/' . self::REST_NAMESPACE . self::ROUTE !== untrailingslashit( (string) $request->get_route() ) ) {
+			return $result;
+		}
+
+		return self::too_large( $request ) ?? $result;
+	}
+
+	/**
+	 * A 413 error when the body (declared or actual) is over the v2 limit, else null.
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 */
+	protected static function too_large( \WP_REST_Request $request ): ?\WP_Error {
+		$declared = (int) $request->get_header( 'content_length' );
+		if ( $declared > Snapshot::MAX_BYTES_V2 || strlen( (string) $request->get_body() ) > Snapshot::MAX_BYTES_V2 ) {
+			return new \WP_Error( 'aisa_report_too_large', 'Body is larger than ' . Snapshot::MAX_BYTES_V2 . ' bytes.', [ 'status' => 413 ] );
+		}
+
+		return null;
 	}
 
 	/**
@@ -93,10 +129,10 @@ class Push_Endpoint {
 	 * @return true|\WP_Error
 	 */
 	public function authorize( \WP_REST_Request $request ) {
-		// 5.0: size first (declared, then actual), before any hashing or decoding of a body that big.
-		$declared = (int) $request->get_header( 'content_length' );
-		if ( $declared > Snapshot::MAX_BYTES_V2 || strlen( (string) $request->get_body() ) > Snapshot::MAX_BYTES_V2 ) {
-			return new \WP_Error( 'aisa_report_too_large', 'Body is larger than ' . Snapshot::MAX_BYTES_V2 . ' bytes.', [ 'status' => 413 ] );
+		// Size again (refuse_oversize() normally answered already): never hash a body that big.
+		$too_large = self::too_large( $request );
+		if ( null !== $too_large ) {
+			return $too_large;
 		}
 		$problem = Push_Key::verify( Push_Key::get(), (string) $request->get_body(), (string) $request->get_header( Push_Key::HEADER ), time() );
 		if ( '' === $problem ) {

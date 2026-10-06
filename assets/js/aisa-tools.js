@@ -35,7 +35,7 @@
 	 * @return {Promise<Object>} Parsed JSON ({ success, data }).
 	 */
 	async function post( action, data = {} ) {
-		const body = new URLSearchParams( { action, nonce: cfg.nonce, ...data } );
+		const body = new URLSearchParams( { action, nonce: ( cfg.nonces || {} )[ action ] || '', ...data } );
 		const res = await fetch( cfg.ajax, { method: 'POST', credentials: 'same-origin', body } );
 		let json = null;
 		try {

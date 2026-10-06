@@ -80,13 +80,16 @@ class Tools_Actions {
 	}
 
 	/**
-	 * The same for AJAX (JSON errors).
+	 * The same for AJAX (JSON errors). Each action has its own nonce, so a token lifted for one (a scan
+	 * step) cannot be replayed for another (writing suggestions, which spends money).
+	 *
+	 * @param string $action The AJAX action, which is also its nonce action (Ui::AJAX_ACTIONS).
 	 */
-	protected function guard_ajax(): void {
+	protected function guard_ajax( string $action ): void {
 		if ( ! current_user_can( Access::TOOLS_CAP ) ) {
 			wp_send_json_error( [ 'message' => __( 'You are not allowed to do that.', 'ai-seo-assistant' ) ], 403 );
 		}
-		check_ajax_referer( Ui::NONCE, 'nonce' );
+		check_ajax_referer( $action, 'nonce' );
 	}
 
 	// phpcs:disable WordPress.Security.NonceVerification.Missing -- every handler below calls guard() (check_admin_referer) or guard_ajax() (check_ajax_referer) before it reads $_POST.
@@ -104,7 +107,7 @@ class Tools_Actions {
 	 * AJAX: queue every page and report the queue.
 	 */
 	public function ajax_scan_start(): void {
-		$this->guard_ajax();
+		$this->guard_ajax( 'aisa_scan_start' );
 		if ( null === Scheduler::queue() ) {
 			Scheduler::start_full();
 		}
@@ -122,7 +125,7 @@ class Tools_Actions {
 	 * AJAX: scan the next batch (about 15 seconds of work).
 	 */
 	public function ajax_scan_step(): void {
-		$this->guard_ajax();
+		$this->guard_ajax( 'aisa_scan_step' );
 		wp_send_json_success( Scheduler::step( 15 ) );
 	}
 
@@ -130,7 +133,7 @@ class Tools_Actions {
 	 * AJAX: write suggestions for one page (the bulk bar and the review's Generate both use it).
 	 */
 	public function ajax_generate(): void {
-		$this->guard_ajax();
+		$this->guard_ajax( 'aisa_generate' );
 		$post_id = isset( $_POST['post'] ) ? absint( $_POST['post'] ) : 0; // phpcs:ignore WordPress.Security.NonceVerification.Missing -- verified in guard_ajax().
 		ignore_user_abort( true ); // "You can leave this screen": the suggestions are still saved.
 		$this->long_request();
@@ -251,7 +254,7 @@ class Tools_Actions {
 	 * AJAX: set the page type of one page (the list's tag) or of the selected pages (the bulk bar).
 	 */
 	public function ajax_set_role(): void {
-		$this->guard_ajax();
+		$this->guard_ajax( self::ROLE );
 		$ids  = isset( $_POST['posts'] ) ? array_filter( array_map( 'absint', explode( ',', sanitize_text_field( wp_unslash( $_POST['posts'] ) ) ) ) ) : [];
 		$type = isset( $_POST['type'] ) ? sanitize_key( wp_unslash( $_POST['type'] ) ) : '';
 		$done = self::apply_type( array_slice( $ids, 0, 500 ), $type );
