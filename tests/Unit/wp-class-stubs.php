@@ -46,6 +46,13 @@ if ( ! class_exists( 'WP_Error' ) ) {
 		}
 
 		/**
+		 * Error message.
+		 */
+		public function get_error_message() {
+			return $this->message;
+		}
+
+		/**
 		 * Error data.
 		 */
 		public function get_error_data() {

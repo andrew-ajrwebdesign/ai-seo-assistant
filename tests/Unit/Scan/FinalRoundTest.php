@@ -452,6 +452,11 @@ class FinalRoundTest extends TestCase {
 		$this->assertSame( 0, preg_match( '/this->guard_ajax\(\s*\)/', $tools ), 'every guard names its action' );
 		$this->assertSame( 5, preg_match_all( "/guard_ajax\\( (?:'aisa_[a-z_]+'|self::ROLE) \\)/", $tools ) );
 		$this->assertSame( \AJR\SEOAssistant\Admin\Tools_Actions::ROLE, \AJR\SEOAssistant\Admin\Ui::AJAX_ACTIONS[3] );
+		// Each handler checks the nonce of its OWN action, and the guard checks the action it is given.
+		foreach ( [ 'ajax_scan_start' => "'aisa_scan_start'", 'ajax_scan_step' => "'aisa_scan_step'", 'ajax_scan_cancel' => "'aisa_scan_cancel'", 'ajax_generate' => "'aisa_generate'", 'ajax_set_role' => 'self::ROLE' ] as $method => $action ) {
+			$this->assertMatchesRegularExpression( '/function ' . $method . '\(\): void \{\s+\$this->guard_ajax\( ' . preg_quote( $action, '/' ) . ' \);/', $tools, $method );
+		}
+		$this->assertStringContainsString( "check_ajax_referer( \$action, 'nonce' );", $tools );
 		$js = (string) file_get_contents( $root . '/assets/js/aisa-tools.js' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading source.
 		$this->assertStringContainsString( '( cfg.nonces || {} )[ action ]', $js );
 	}

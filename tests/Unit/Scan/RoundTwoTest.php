@@ -291,6 +291,45 @@ class RoundTwoTest extends TestCase {
 		$this->assertEqualsWithDelta( $lost + 1.0, $state['usd'], 1e-6 );
 		$this->assertSame( 2, $state['calls'] );
 		$this->assertArrayNotHasKey( \AJR\SEOAssistant\AI\Spend::LOCK_OPTION, $this->options, 'the lock is released' );
+
+		// Through the client: a call that timed out after it was sent, and a 2xx that could not be read, are
+		// both counted at their worst case; a refused connection (never sent) is not.
+		$client = new class() extends \AJR\SEOAssistant\AI\Claude_Client {
+			/**
+			 * A key.
+			 */
+			public function get_api_key() {
+				return 'sk-ant-test';
+			}
+
+			/**
+			 * No rate limit.
+			 */
+			protected function check_rate_limit() {
+				return true;
+			}
+		};
+		$reply = null;
+		\WP_Mock::userFunction( 'wp_remote_post' )->andReturnUsing(
+			function () use ( &$reply ) {
+				return $reply;
+			}
+		);
+		\WP_Mock::userFunction( 'is_wp_error' )->andReturnUsing( fn( $v ) => $v instanceof \WP_Error );
+		\WP_Mock::userFunction( 'wp_json_encode' )->andReturnUsing( 'json_encode' );
+		\WP_Mock::userFunction( 'wp_remote_retrieve_response_code' )->andReturn( 200 );
+		\WP_Mock::userFunction( 'wp_remote_retrieve_body' )->andReturn( 'not json' );
+		\WP_Mock::userFunction( 'apply_filters' )->andReturnUsing( fn( $h, $v ) => $v );
+		$calls = static fn( $t ) => (int) ( $t->options[ \AJR\SEOAssistant\AI\Spend::OPTION ]['calls'] ?? 0 );
+		$reply = new \WP_Error( 'http_request_failed', 'cURL error 7: Failed to connect' );
+		$client->generate_json( 'x', [], 'intent' );
+		$this->assertSame( 2, $calls( $this ), 'never sent: not counted' );
+		$reply = new \WP_Error( 'http_request_failed', 'cURL error 28: Operation timed out after 60000 milliseconds' );
+		$client->generate_json( 'x', [], 'intent' );
+		$this->assertSame( 3, $calls( $this ), 'timed out after sending: counted' );
+		$reply = [ 'response' => [ 'code' => 200 ] ];
+		$client->generate_json( 'x', [], 'intent' );
+		$this->assertSame( 4, $calls( $this ), 'an unreadable 2xx: counted' );
 	}
 
 	/**
