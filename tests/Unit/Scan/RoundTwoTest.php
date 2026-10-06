@@ -297,6 +297,37 @@ class RoundTwoTest extends TestCase {
 				return true;
 			}
 		);
+		// The options table, as far as the atomic increments go: UPDATE … SET option_value = option_value + n.
+		$options         = &$this->options;
+		$GLOBALS['wpdb'] = new class( $options ) { // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test double.
+			/** @var string */
+			public $options = 'wp_options';
+			/** @var array<string,mixed> */
+			public $store;
+			/** @var array<int,string> */
+			public $sql = [];
+			public function __construct( array &$store ) {
+				$this->store = &$store;
+			}
+			public function esc_like( $s ) {
+				return $s;
+			}
+			public function prepare( $q, ...$args ) {
+				return [ $q, $args ];
+			}
+			public function query( $p ) {
+				[ $q, $args ] = $p;
+				$this->sql[]  = $q;
+				if ( preg_match( '/option_value = option_value \+ (%d|1) WHERE option_name = %s/', $q, $m ) ) {
+					$name = '%d' === $m[1] ? $args[1] : $args[0];
+					$by   = '%d' === $m[1] ? (int) $args[0] : 1;
+					if ( isset( $this->store[ $name ] ) ) {
+						$this->store[ $name ] = (string) ( (int) $this->store[ $name ] + $by );
+					}
+				}
+				return 1;
+			}
+		};
 		$lost = \AJR\SEOAssistant\AI\Spend::record_unknown( 'intent', 'claude-haiku-4-5' );
 		$this->assertEqualsWithDelta( \AJR\SEOAssistant\AI\Spend::reserve( 'intent', 'claude-haiku-4-5' ), $lost, 1e-9 );
 		\AJR\SEOAssistant\AI\Spend::record(
@@ -306,10 +337,12 @@ class RoundTwoTest extends TestCase {
 				'output_tokens' => 0,
 			]
 		);
-		$state = $this->options[ \AJR\SEOAssistant\AI\Spend::OPTION ];
+		$state = \AJR\SEOAssistant\AI\Spend::current();
 		$this->assertEqualsWithDelta( $lost + 1.0, $state['usd'], 1e-6 );
 		$this->assertSame( 2, $state['calls'] );
-		$this->assertArrayNotHasKey( \AJR\SEOAssistant\AI\Spend::LOCK_OPTION, $this->options, 'the lock is released' );
+		foreach ( $GLOBALS['wpdb']->sql as $q ) {
+			$this->assertDoesNotMatchRegularExpression( '/SET option_value = %[sf]/', $q, 'only ever increased in SQL, never written whole' );
+		}
 
 		// Through the client: a call that timed out after it was sent, and a 2xx that could not be read, are
 		// both counted at their worst case; a refused connection (never sent) is not.
@@ -339,7 +372,7 @@ class RoundTwoTest extends TestCase {
 		\WP_Mock::userFunction( 'wp_remote_retrieve_response_code' )->andReturn( 200 );
 		\WP_Mock::userFunction( 'wp_remote_retrieve_body' )->andReturn( 'not json' );
 		\WP_Mock::userFunction( 'apply_filters' )->andReturnUsing( fn( $h, $v ) => $v );
-		$calls = static fn( $t ) => (int) ( $t->options[ \AJR\SEOAssistant\AI\Spend::OPTION ]['calls'] ?? 0 );
+		$calls = static fn( $t ) => \AJR\SEOAssistant\AI\Spend::current()['calls'];
 		$reply = new \WP_Error( 'http_request_failed', 'cURL error 7: Failed to connect' );
 		$client->generate_json( 'x', [], 'intent' );
 		$this->assertSame( 2, $calls( $this ), 'never sent: not counted' );

@@ -73,7 +73,6 @@ $ai_seo_assistant_options = [
 	'ai_seo_assistant_spend_cap',
 	'ai_seo_assistant_billing_day',
 	'ai_seo_assistant_billing_day_pushed',
-	'ai_seo_assistant_spend_lock', // AI/Spend::LOCK_OPTION (left only if a request died holding it).
 	'ai_seo_assistant_redirects_pending',
 	'ai_seo_assistant_google_revoke_failed', // Core/Upgrade::REVOKE_FAILED (a pending notice).
 	'ai_seo_assistant_auto_page_types', // Scan/Auto_Types::OPTION (the Settings toggle).
@@ -97,6 +96,10 @@ $ai_seo_assistant_options = [
 foreach ( $ai_seo_assistant_options as $ai_seo_assistant_option ) {
 	delete_option( $ai_seo_assistant_option );
 }
+// AI/Spend's per-period counters (ai_seo_assistant_spend_usd_<period>, ai_seo_assistant_spend_calls_<period>).
+global $wpdb;
+// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- uninstall, the plugin's own options.
+$wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s", $wpdb->esc_like( 'ai_seo_assistant_spend_usd_' ) . '%', $wpdb->esc_like( 'ai_seo_assistant_spend_calls_' ) . '%' ) );
 \AJR\SEOAssistant\Core\Schema::drop();
 delete_metadata( 'user', 0, 'aisa_rank_mode', '', true ); // Scan/Ranking::MODE_META (each agency user's list mode).
 delete_post_meta_by_key( '_aisa_page_role' ); // Scan/Page_Role::LEGACY_META (page types belong to AJR Core and stay).

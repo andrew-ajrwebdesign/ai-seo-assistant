@@ -82,8 +82,9 @@ class Spend {
 		'test'            => 50,
 	];
 
-	/** Option used as a short lock around adding to the month's total. */
-	public const LOCK_OPTION = 'ai_seo_assistant_spend_lock';
+	/** Per-period counters (numeric options, increased in SQL): the total in micro-dollars, and the calls. */
+	public const TOTAL_PREFIX = 'ai_seo_assistant_spend_usd_';
+	public const CALLS_PREFIX = 'ai_seo_assistant_spend_calls_';
 
 	/**
 	 * Price one reply.
@@ -251,11 +252,14 @@ class Spend {
 		$state = get_option( self::OPTION, [] );
 		$state = is_array( $state ) ? $state : [];
 		$same  = ( $state['period'] ?? '' ) === $start->format( 'Y-m-d' );
+		// The counters add() increases in SQL; until this period's first call, the 5.0 array's figures.
+		$total = get_option( self::TOTAL_PREFIX . $start->format( 'Y-m-d' ), null );
+		$calls = get_option( self::CALLS_PREFIX . $start->format( 'Y-m-d' ), null );
 
 		return [
 			'period'    => $start->format( 'Y-m-d' ),
-			'usd'       => $same ? (float) ( $state['usd'] ?? 0 ) : 0.0,
-			'calls'     => $same ? (int) ( $state['calls'] ?? 0 ) : 0,
+			'usd'       => is_numeric( $total ) ? (int) $total / 1000000 : ( $same ? (float) ( $state['usd'] ?? 0 ) : 0.0 ),
+			'calls'     => is_numeric( $calls ) ? (int) $calls : ( $same ? (int) ( $state['calls'] ?? 0 ) : 0 ),
 			'capped_at' => $same ? (int) ( $state['capped_at'] ?? 0 ) : 0,
 			'start'     => $start,
 			'end'       => $end,
@@ -309,38 +313,50 @@ class Spend {
 	}
 
 	/**
-	 * Add to the month's total under a short lock (two calls finishing together must both count). The
-	 * lock is an add_option(), which only one request can win; a lock older than 10 s is taken over.
+	 * Add to the month's total with one atomic SQL increment: two calls finishing together both count,
+	 * with no lock to take and nothing to wait on. The total and the call count are numeric options per
+	 * billing period (micro-dollars and calls), created once with add_option() (an insert only one request
+	 * can make) and only ever increased in the database; the previous period's are removed when a new one
+	 * starts. The period's first total is seeded from the 5.0 array option, so nothing counted is lost.
 	 *
 	 * @param float $usd Dollars.
 	 */
 	protected static function add( float $usd ): void {
-		$locked = false;
-		for ( $i = 0; $i < 40 && ! $locked; $i++ ) {
-			$locked = add_option( self::LOCK_OPTION, time(), '', false );
-			if ( ! $locked ) {
-				$held = (int) get_option( self::LOCK_OPTION, 0 );
-				if ( $held > 0 && time() - $held > 10 ) {
-					delete_option( self::LOCK_OPTION );
-					continue;
-				}
-				usleep( 50000 );
-			}
+		global $wpdb;
+		$now   = self::current();
+		$total = self::TOTAL_PREFIX . $now['period'];
+		$calls = self::CALLS_PREFIX . $now['period'];
+		if ( add_option( $total, (string) (int) round( $now['usd'] * 1000000 ), '', false ) ) {
+			add_option( $calls, (string) (int) $now['calls'], '', false );
+			self::prune( $now['period'] );
 		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- an atomic increment; the option cache is cleared below.
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = option_value + %d WHERE option_name = %s", (int) round( $usd * 1000000 ), $total ) );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- as above.
+		$wpdb->query( $wpdb->prepare( "UPDATE {$wpdb->options} SET option_value = option_value + 1 WHERE option_name = %s", $calls ) );
 		if ( function_exists( 'wp_cache_delete' ) ) {
-			wp_cache_delete( self::OPTION, 'options' ); // Read the stored total, not this request's copy.
+			wp_cache_delete( $total, 'options' );
+			wp_cache_delete( $calls, 'options' );
 		}
-		$now = self::current();
-		self::save(
-			$now,
-			[
-				'usd'   => round( $now['usd'] + $usd, 6 ),
-				'calls' => $now['calls'] + 1,
-			]
+	}
+
+	/**
+	 * Remove the counters of every period but this one.
+	 *
+	 * @param string $period This period (Y-m-d).
+	 */
+	protected static function prune( string $period ): void {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the plugin's own counters, once a month.
+		$wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM {$wpdb->options} WHERE ( option_name LIKE %s OR option_name LIKE %s ) AND option_name NOT IN ( %s, %s )",
+				$wpdb->esc_like( self::TOTAL_PREFIX ) . '%',
+				$wpdb->esc_like( self::CALLS_PREFIX ) . '%',
+				self::TOTAL_PREFIX . $period,
+				self::CALLS_PREFIX . $period
+			)
 		);
-		if ( $locked ) {
-			delete_option( self::LOCK_OPTION );
-		}
 	}
 
 	/**
