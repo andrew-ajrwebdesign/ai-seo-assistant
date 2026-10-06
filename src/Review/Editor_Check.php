@@ -38,6 +38,15 @@ class Editor_Check {
 	/** What can be checked. */
 	public const CHECKS = [ 'h1', 'h2', 'phrase', 'link', 'none' ];
 
+	/** Verdict: in place. */
+	public const YES = 'yes';
+
+	/** Verdict: not in place. */
+	public const NO = 'no';
+
+	/** Verdict: cannot be told from the scan. */
+	public const UNKNOWN = 'unknown';
+
 	/**
 	 * The check for one piece of advice: Claude's own when it gave one, else worked out from its words.
 	 *
@@ -122,16 +131,54 @@ class Editor_Check {
 	/**
 	 * Whether the advice is in place on the page.
 	 *
-	 * @param array<string,mixed>                 $check   of().
-	 * @param array<string,mixed>                 $facts   The page's latest facts (Html_Parser).
-	 * @param string                              $text    The page's visible text, plain (Page_Review::page_text()).
-	 * @param array<int,array{0:string,1:string}> $inbound Links to the page: [ from path, link text ].
+	 * @param array<string,mixed>                 $check     of().
+	 * @param array<string,mixed>                 $facts     The page's latest facts (Html_Parser).
+	 * @param string                              $text      The page's visible text, plain (Page_Review::page_text()).
+	 * @param array<int,array{0:string,1:string}> $inbound   Links to the page: [ from path, link text ].
+	 * @param bool                                $truncated The scan kept only the start of the text.
 	 */
-	public static function in_place( array $check, array $facts, string $text = '', array $inbound = [] ): bool {
+	public static function in_place( array $check, array $facts, string $text = '', array $inbound = [], bool $truncated = false ): bool {
+		return self::YES === self::verdict( $check, $facts, $text, $inbound, $truncated );
+	}
+
+	/**
+	 * In place (YES), not (NO), or cannot be told (UNKNOWN: nothing checkable, or a phrase not in the part of
+	 * a long page the scan kept, which may still be further down). Only YES marks a to-do done; NO and
+	 * UNKNOWN both stay a manual tick, and UNKNOWN says why.
+	 *
+	 * @param array<string,mixed>                 $check     of().
+	 * @param array<string,mixed>                 $facts     The page's latest facts.
+	 * @param string                              $text      The page's visible text, plain.
+	 * @param array<int,array{0:string,1:string}> $inbound   Links to the page.
+	 * @param bool                                $truncated The scan kept only the start of the text.
+	 */
+	public static function verdict( array $check, array $facts, string $text = '', array $inbound = [], bool $truncated = false ): string {
 		$targets = array_map( [ self::class, 'norm' ], $check['targets'] );
 		if ( [] === $targets || 'none' === $check['check'] ) {
-			return false;
+			return self::UNKNOWN;
 		}
+		if ( 'phrase' === $check['check'] ) {
+			$body = ' ' . self::norm( $text ) . ' ';
+			foreach ( $targets as $t ) {
+				if ( false === strpos( $body, ' ' . $t . ' ' ) ) {
+					return $truncated ? self::UNKNOWN : self::NO;
+				}
+			}
+			return self::YES;
+		}
+
+		return self::found( $check, $targets, $facts, $inbound ) ? self::YES : self::NO;
+	}
+
+	/**
+	 * The heading and link checks.
+	 *
+	 * @param array<string,mixed>                 $check   of().
+	 * @param array<int,string>                   $targets Its targets, normalised.
+	 * @param array<string,mixed>                 $facts   The page's latest facts.
+	 * @param array<int,array{0:string,1:string}> $inbound Links to the page.
+	 */
+	protected static function found( array $check, array $targets, array $facts, array $inbound ): bool {
 		switch ( $check['check'] ) {
 			case 'h1':
 				return in_array( $targets[0], array_map( [ self::class, 'norm' ], (array) ( $facts['h1'] ?? [] ) ), true );
@@ -143,14 +190,6 @@ class Editor_Check {
 					}
 				}
 				return in_array( $targets[0], $h2, true );
-			case 'phrase':
-				$body = ' ' . self::norm( $text ) . ' ';
-				foreach ( $targets as $t ) {
-					if ( false === strpos( $body, ' ' . $t . ' ' ) ) {
-						return false;
-					}
-				}
-				return true;
 			case 'link':
 				$sources = array_map( static fn( $s ) => strtolower( trim( $s, '/' ) ), $check['sources'] );
 				foreach ( $inbound as [ $from, $anchor ] ) {

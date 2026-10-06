@@ -190,8 +190,18 @@ class MenuUpgradeTest extends TestCase {
 		$this->options[ Upgrade::OPTION ]                                     = Upgrade::LEVEL;
 		$this->options[ \AJR\SEOAssistant\Core\Schema::VERSION_OPTION ]       = '5.0.0';
 		$GLOBALS['aisa_dbdelta']                                              = [];
-		$this->fake_db( null, 0 );
+		$db = $this->fake_db( null, 0 );
 		\WP_Mock::userFunction( 'current_user_can' )->andReturn( true );
+
+		// Performance review (2): the ALTER that adds the newest columns failed. The version is not stored, so
+		// the next admin load tries again.
+		$db->columns = [ 'post_id', 'facts', 'note' ];
+		( new Upgrade() )->maybe_run();
+		$this->assertSame( '5.0.0', $this->options[ \AJR\SEOAssistant\Core\Schema::VERSION_OPTION ], 'not marked current while body_text and inbound are missing' );
+		$this->assertSame( [ 'scan.body_text', 'scan.inbound' ], \AJR\SEOAssistant\Core\Schema::missing_columns() );
+		$db->columns             = [ 'post_id', 'facts', 'body_text', 'inbound', 'note' ];
+		$GLOBALS['aisa_dbdelta'] = [];
+
 		( new Upgrade() )->maybe_run();
 		$this->assertStringContainsString( 'before_value longtext', implode( "\n", $GLOBALS['aisa_dbdelta'] ) );
 		$this->assertSame( \AJR\SEOAssistant\Core\Schema::VERSION, $this->options[ \AJR\SEOAssistant\Core\Schema::VERSION_OPTION ] );
@@ -234,7 +244,12 @@ class MenuUpgradeTest extends TestCase {
 			public function get_var( $q ) {
 				return $this->table;
 			}
+			/** @var array<int,string> The tables' columns, as SHOW COLUMNS lists them. */
+			public $columns = [ 'post_id', 'facts', 'body_text', 'inbound', 'note' ];
 			public function get_col( $q ) {
+				if ( false !== strpos( $q, 'SHOW COLUMNS' ) ) {
+					return $this->columns;
+				}
 				return array_fill( 0, $this->enabled, '/old/' );
 			}
 			public function query( $q ) {

@@ -93,7 +93,10 @@ The product cut (decision 2026-10-06, `work/coding-projects/ai-seo-assistant/dec
   - The scan now stores each page's rendered visible text (schema 5, `scan.body_text`). That includes builder modules and attribute-only copy such as a blurb's title.
   - Rows scanned before this fall back to the title and content with shortcode tags removed but their text kept.
   - Tags are stripped before entities are decoded, so copy reading `&lt;title&gt;` stays words.
+  - A page longer than the 30,000 characters the scan keeps is flagged. A phrase that is not in the kept part shows "too long to check automatically" and stays a manual tick; it is never treated as missing.
   - A CI check (`bin/check-builder-safe.php`) fails on any `strip_shortcodes()` call in `src/` unless its line says `// builder-safe: <reason>`.
+- **Editor load is light on big sites.** Each site-wide pass stores the links to every page once (schema 6, `scan.inbound`). The editor box reads that page's list and one row, instead of every page's facts.
+- **A failed table update no longer stops scans.** The table version is stored only once the newest columns really exist. A scan write that fails is logged and saved again without the page text.
 
 ### Removed
 - Markdown for AI, Redirects, the `core_owns_*` hand-over filters, the Metadata report, Indexing Tools, the Google Search Console OAuth screen and client, and the runtime Composer dependency (no `vendor/` in the zip).

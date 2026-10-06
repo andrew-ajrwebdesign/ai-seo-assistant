@@ -175,12 +175,14 @@ class Utils {
 	 * @param string $text Post content or HTML.
 	 */
 	public static function visible_text( string $text ): string {
-		$text = (string) preg_replace( '@<(script|style)[^>]*>.*?</\1>@si', ' ', $text );
-		$text = (string) preg_replace( '/\[\/?[a-zA-Z0-9_-]+(?:\s[^\]]*)?\]/', ' ', $text ); // Shortcode tags, attributes and all; the text between stays.
-		$text = (string) preg_replace( '/<[^>]*>/', ' ', $text ); // phpcs:ignore -- pure PHP (no WordPress); tags and attributes out.
+		// A pattern that fails (a backtrack limit on a huge page, bad UTF-8) returns null: the step is skipped,
+		// never turned into '' (an empty page would read as "phrase missing" and lose the review's text).
+		$text = preg_replace( '@<(script|style)[^>]*>.*?</\1>@si', ' ', $text ) ?? $text;
+		$text = preg_replace( '/\[\/?[a-zA-Z0-9_-]+(?:\s[^\]]*)?\]/', ' ', $text ) ?? $text; // Shortcode tags, attributes and all; the text between stays.
+		$text = preg_replace( '/<[^>]*>/', ' ', $text ) ?? strip_tags( $text ); // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- pure PHP (no WordPress); tags and attributes out.
 		$text = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' ); // After the tags are out, never before.
 
-		return trim( (string) preg_replace( '/\s+/u', ' ', $text ) );
+		return trim( preg_replace( '/\s+/u', ' ', $text ) ?? preg_replace( '/\s+/', ' ', $text ) ?? $text );
 	}
 
 	public static function mask_sensitive_text( $text ) {

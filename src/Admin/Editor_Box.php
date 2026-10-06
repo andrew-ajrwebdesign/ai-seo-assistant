@@ -124,8 +124,12 @@ class Editor_Box {
 			],
 			admin_url( 'admin.php' )
 		);
-		\AJR\SEOAssistant\Scan\Scanner::refresh_if_stale( $post_id ); // Edited since the last scan: look again now.
-		$row = ( new Scan_Store() )->get( $post_id );
+		$store   = new Scan_Store();
+		$row     = $store->get( $post_id );
+		// Edited since the last scan: look again now, and read the row again only when it was rescanned.
+		if ( null !== $row && \AJR\SEOAssistant\Scan\Scanner::refresh_if_stale( $post_id, (string) $row['scanned_at'] ) ) {
+			$row = $store->get( $post_id );
+		}
 		if ( null === $row ) {
 			echo '<p class="aisa-todo__none">' . esc_html__( 'Not scanned yet. It is scanned after it is published or saved.', 'ai-seo-assistant' ) . '</p>';
 			return;
@@ -245,14 +249,18 @@ class Editor_Box {
 				continue; // Already shown with the finding it is about.
 			}
 			foreach ( $list as $i => $text ) {
-				$key   = 'advice:' . substr( md5( $kind . '|' . $text ), 0, 12 );
-				$found = null !== $context && \AJR\SEOAssistant\Review\Page_Review::advice_in_place( $raw[ $kind ][ $i ], $context );
+				$key     = 'advice:' . substr( md5( $kind . '|' . $text ), 0, 12 );
+				$verdict = null === $context ? '' : \AJR\SEOAssistant\Review\Page_Review::advice_verdict( $raw[ $kind ][ $i ], $context );
+				$found   = \AJR\SEOAssistant\Review\Editor_Check::YES === $verdict;
+				// A phrase not in the part of a very long page the scan keeps may still be further down: never
+				// called missing, the person ticks it.
+				$long  = \AJR\SEOAssistant\Review\Editor_Check::UNKNOWN === $verdict && ! empty( $context['truncated'] );
 				$out[] = [
 					'key'    => $key,
 					'area'   => $labels[ $kind ],
 					'text'   => $text,
 					'detail' => '',
-					'note'   => '',
+					'note'   => $long ? __( 'This page is too long to check automatically: tick Done once it is there.', 'ai-seo-assistant' ) : '',
 					'done'   => $found ? $scanned : ( isset( $done[ $key ] ) ? (int) $done[ $key ] : null ),
 					'found'  => $found,
 				];
@@ -343,7 +351,7 @@ class Editor_Box {
 		if ( ! preg_match( '/^(issue:[a-z0-9_]{1,40}|advice:[a-f0-9]{12})$/', $key ) ) {
 			wp_send_json_error( [ 'message' => __( 'Unknown to-do.', 'ai-seo-assistant' ) ], 400 );
 		}
-		$row  = ( new Scan_Store() )->get( $post_id );
+		$row  = ( new Scan_Store() )->get( $post_id, false ); // The lean row: findings and suggestions, no page text.
 		$keep = null === $row ? [] : array_column( self::items( $row, [] ), 'key' );
 		// Only ticks for to-dos the page still has: a finding the scan no longer reports needs none.
 		$done         = array_intersect_key( self::done( $post_id ), array_flip( $keep ) );

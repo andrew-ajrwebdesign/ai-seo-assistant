@@ -33,7 +33,19 @@ class Schema {
 	public const VERSION_OPTION = 'ai_seo_assistant_db_version';
 
 	/** Current table version. */
-	public const VERSION = '5'; // The tables' own version, not the plugin's. 2: the change log's before/after are longtext (a builder page's content is often over 64 KB). 3: scan.flags (listing / form, found at scan time). 4: changes.note (a content row's one-line summary, written when logged). 5: scan.body_text (the page's rendered visible text, for the editor advice's phrase check and the review).
+	public const VERSION = '6'; // The tables' own version, not the plugin's. 2: the change log's before/after are longtext (a builder page's content is often over 64 KB). 3: scan.flags (listing / form, found at scan time). 4: changes.note (a content row's one-line summary, written when logged). 5: scan.body_text (the page's rendered visible text, for the editor advice's phrase check and the review). 6: scan.inbound (the links to the page from the other scanned pages, built once per site-wide pass).
+
+	/**
+	 * The newest column of each table: the version is stored only once each really exists, so a failed
+	 * ALTER (no ALTER privilege, a full disk) is tried again on the next admin load instead of being taken
+	 * as done.
+	 *
+	 * @var array<string,array<int,string>>
+	 */
+	public const NEWEST = [
+		'scan'    => [ 'body_text', 'inbound' ],
+		'changes' => [ 'note' ],
+	];
 
 	/**
 	 * A table's full name.
@@ -80,6 +92,7 @@ issue_kinds varchar(255) NOT NULL DEFAULT '',
 flags varchar(32) NOT NULL DEFAULT '',
 facts longtext NOT NULL,
 body_text mediumtext NULL,
+inbound mediumtext NULL,
 issues longtext NOT NULL,
 suggestions longtext NULL,
 suggested_at datetime NULL DEFAULT NULL,
@@ -117,7 +130,38 @@ KEY applied_at (applied_at)
 ) {$charset};"
 		);
 
+		$missing = self::missing_columns();
+		if ( [] !== $missing ) {
+			// Not stored: the next admin load tries again, and the scan writes without the missing column meanwhile.
+			if ( function_exists( 'error_log' ) ) {
+				error_log( 'AI SEO Assistant: the table update did not add ' . implode( ', ', $missing ) . ( '' !== (string) ( $wpdb->last_error ?? '' ) ? ' (' . $wpdb->last_error . ')' : '' ) . '; it is tried again on the next admin page load.' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- a failed table update the agency must be able to find.
+			}
+			return;
+		}
+
 		update_option( self::VERSION_OPTION, self::VERSION, true );
+	}
+
+	/**
+	 * The newest columns (NEWEST) that are not in the tables, as "table.column".
+	 *
+	 * @return array<int,string>
+	 */
+	public static function missing_columns(): array {
+		global $wpdb;
+		$missing = [];
+		foreach ( self::NEWEST as $name => $columns ) {
+			$table = self::table( $name );
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own table, read after dbDelta.
+			$have = array_map( 'strtolower', (array) $wpdb->get_col( "SHOW COLUMNS FROM `{$table}`" ) );
+			foreach ( $columns as $column ) {
+				if ( ! in_array( $column, $have, true ) ) {
+					$missing[] = $name . '.' . $column;
+				}
+			}
+		}
+
+		return $missing;
 	}
 
 	/**

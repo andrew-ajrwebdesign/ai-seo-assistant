@@ -46,6 +46,9 @@ class Scanner {
 	/** Most pages scanned (the queries elsewhere cap lists at 500; the scan allows a little more). */
 	public const MAX_PAGES = 1000;
 
+	/** Most links to one page kept (scan.inbound, read by the editor's link to-dos). */
+	public const MAX_INBOUND = 200;
+
 	/**
 	 * Storage.
 	 *
@@ -383,6 +386,7 @@ class Scanner {
 			}
 			$total += count( $issues );
 		}
+		$this->save_inbound( $rows );
 
 		$summary = [
 			'finished_at'  => time(),
@@ -424,17 +428,58 @@ class Scanner {
 	}
 
 	/**
+	 * Who links to whom, with the link text, keyed by the target's path: built once per site-wide pass, so
+	 * the editor reads one page's list (scan.inbound) instead of every page's facts.
+	 *
+	 * @param array<int,array<string,mixed>> $rows all_facts() rows.
+	 * @return array<string,array<int,array{0:string,1:string}>>
+	 */
+	public static function inbound_map( array $rows ): array {
+		$map = [];
+		foreach ( $rows as $row ) {
+			$from = self::norm_path( (string) $row['path'] );
+			foreach ( (array) ( $row['facts']['links'] ?? [] ) as $link ) {
+				$to = self::norm_path( (string) ( $link['p'] ?? '' ) );
+				if ( $from !== $to && count( $map[ $to ] ?? [] ) < self::MAX_INBOUND ) {
+					$map[ $to ][] = [ (string) $row['path'], (string) ( $link['t'] ?? '' ) ];
+				}
+			}
+		}
+
+		return $map;
+	}
+
+	/**
+	 * Store each page's inbound links where they changed (an unchanged list is not rewritten).
+	 *
+	 * @param array<int,array<string,mixed>> $rows all_facts() rows.
+	 */
+	public function save_inbound( array $rows ): void {
+		$map = self::inbound_map( $rows );
+		foreach ( $rows as $id => $row ) {
+			if ( null === ( $row['inbound_json'] ?? null ) ) {
+				continue; // The column is not there yet (the table update is pending).
+			}
+			$list = $map[ self::norm_path( (string) $row['path'] ) ] ?? [];
+			if ( (string) wp_json_encode( $list ) !== $row['inbound_json'] ) {
+				$this->store->save_inbound( (int) $id, $list );
+			}
+		}
+	}
+
+	/**
 	 * Rescan one page now when it was edited after its last scan (the on-save queue may not have run: no
 	 * cron on a local copy, a busy site). The page is fetched; the site-wide pass makes no network calls.
 	 *
-	 * @param int $post_id Post ID.
+	 * @param int         $post_id    Post ID.
+	 * @param string|null $scanned_at Its row's scanned_at when the caller has it (null: read here).
 	 * @return bool Whether it was rescanned.
 	 */
-	public static function refresh_if_stale( int $post_id ): bool {
-		$store = new Scan_Store();
-		$row   = $store->get( $post_id );
-		$post  = get_post( $post_id );
-		if ( null === $row || ! $post instanceof \WP_Post || $post->post_modified_gmt <= (string) $row['scanned_at'] ) {
+	public static function refresh_if_stale( int $post_id, ?string $scanned_at = null ): bool {
+		$store      = new Scan_Store();
+		$scanned_at = $scanned_at ?? $store->scanned_at( $post_id ); // One column: the caller usually has the row already.
+		$post       = get_post( $post_id );
+		if ( null === $scanned_at || ! $post instanceof \WP_Post || $post->post_modified_gmt <= $scanned_at ) {
 			return false;
 		}
 		if ( ! Scheduler::acquire( 120 ) ) {

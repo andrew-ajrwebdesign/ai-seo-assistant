@@ -40,22 +40,59 @@ class Scan_Store {
 		// The page's visible text has its own column: the site-wide pass loads every row's facts, never this.
 		$text = mb_substr( (string) ( $facts[ Html_Parser::TEXT ] ?? '' ), 0, Html_Parser::MAX_TEXT );
 		unset( $facts[ Html_Parser::TEXT ] );
+		$values = [ $post_id, mb_substr( $path, 0, 190 ), $post_type, gmdate( 'Y-m-d H:i:s' ), $source, substr( $flags, 0, 32 ), (string) wp_json_encode( $facts ) ];
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own table.
-		$wpdb->query(
-			$wpdb->prepare(
+		$ok = $wpdb->query(
+			$wpdb->prepare( // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- the values are spread from one array.
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own table name (Schema::table()).
 				"INSERT INTO `{$table}` (post_id, path, post_type, scanned_at, source, flags, facts, body_text, issues) VALUES (%d, %s, %s, %s, %s, %s, %s, %s, '[]')
 				ON DUPLICATE KEY UPDATE path = VALUES(path), post_type = VALUES(post_type), scanned_at = VALUES(scanned_at), source = VALUES(source), flags = VALUES(flags), facts = VALUES(facts), body_text = VALUES(body_text)", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
-				$post_id,
-				mb_substr( $path, 0, 190 ),
-				$post_type,
-				gmdate( 'Y-m-d H:i:s' ),
-				$source,
-				substr( $flags, 0, 32 ),
-				(string) wp_json_encode( $facts ),
-				$text
+				...array_merge( $values, [ $text ] )
 			)
 		);
+		if ( false !== $ok ) {
+			return;
+		}
+		// The write failed (most likely the table update that adds body_text has not run yet): logged, and the
+		// facts saved without the text, so a failed ALTER never stops every scan write.
+		if ( function_exists( 'error_log' ) ) {
+			error_log( 'AI SEO Assistant: saving a page scan with its text failed (' . (string) ( $wpdb->last_error ?? '' ) . '); saved without the text.' ); // phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- a failed write the agency must be able to find.
+		}
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own table.
+		$wpdb->query(
+			$wpdb->prepare( // phpcs:ignore WordPress.DB.PreparedSQLPlaceholders.ReplacementsWrongNumber -- the values are spread from one array.
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own table name (Schema::table()).
+				"INSERT INTO `{$table}` (post_id, path, post_type, scanned_at, source, flags, facts, issues) VALUES (%d, %s, %s, %s, %s, %s, %s, '[]')
+				ON DUPLICATE KEY UPDATE path = VALUES(path), post_type = VALUES(post_type), scanned_at = VALUES(scanned_at), source = VALUES(source), flags = VALUES(flags), facts = VALUES(facts)", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				...$values
+			)
+		);
+	}
+
+	/**
+	 * Save the links to a page from the other scanned pages (the site-wide pass, when they changed).
+	 *
+	 * @param int                                 $post_id Post ID.
+	 * @param array<int,array{0:string,1:string}> $inbound [ from path, link text ] each.
+	 */
+	public function save_inbound( int $post_id, array $inbound ): void {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the plugin's own table.
+		$wpdb->update( Schema::table( 'scan' ), [ 'inbound' => (string) wp_json_encode( $inbound ) ], [ 'post_id' => $post_id ], [ '%s' ], [ '%d' ] );
+	}
+
+	/**
+	 * When a page was last scanned (GMT), or null: one column, for the editor's staleness check.
+	 *
+	 * @param int $post_id Post ID.
+	 */
+	public function scanned_at( int $post_id ): ?string {
+		global $wpdb;
+		$table = Schema::table( 'scan' );
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own table.
+		$at = $wpdb->get_var( $wpdb->prepare( "SELECT scanned_at FROM `{$table}` WHERE post_id = %d", $post_id ) );
+
+		return null === $at ? null : (string) $at;
 	}
 
 	/**
@@ -130,14 +167,17 @@ class Scan_Store {
 	/**
 	 * One row, decoded, or null.
 	 *
-	 * @param int $post_id Post ID.
+	 * @param int  $post_id Post ID.
+	 * @param bool $text    With the page's visible text and inbound links (false: the lean row, for a caller
+	 *                      that needs only the findings, facts and suggestions).
 	 * @return array<string,mixed>|null
 	 */
-	public function get( int $post_id ): ?array {
+	public function get( int $post_id, bool $text = true ): ?array {
 		global $wpdb;
 		$table = Schema::table( 'scan' );
-		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own table.
-		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM `{$table}` WHERE post_id = %d", $post_id ), ARRAY_A );
+		$cols  = $text ? '*' : 'post_id, path, post_type, scanned_at, source, flags, issue_count, issue_kinds, facts, issues, suggestions, suggested_at';
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own table; a fixed column list.
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT {$cols} FROM `{$table}` WHERE post_id = %d", $post_id ), ARRAY_A );
 		if ( ! is_array( $row ) ) {
 			return null;
 		}
@@ -197,19 +237,22 @@ class Scan_Store {
 	public function all_facts(): array {
 		global $wpdb;
 		$table = Schema::table( 'scan' );
+		// The stored inbound links only once the column exists (a failed table update must not empty the pass).
+		$inbound = Schema::is_current() ? ', inbound' : '';
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own table; the scan's site-wide pass.
-		$rows = (array) $wpdb->get_results( "SELECT post_id, path, post_type, scanned_at, source, flags, facts, issues FROM `{$table}`", ARRAY_A );
+		$rows = (array) $wpdb->get_results( "SELECT post_id, path, post_type, scanned_at, source, flags, facts, issues{$inbound} FROM `{$table}`", ARRAY_A );
 		$out  = [];
 		foreach ( $rows as $row ) {
 			$facts                        = json_decode( (string) $row['facts'], true );
 			$out[ (int) $row['post_id'] ] = [
-				'path'        => (string) $row['path'],
-				'post_type'   => (string) $row['post_type'],
-				'scanned_at'  => (string) $row['scanned_at'],
-				'source'      => (string) $row['source'],
-				'facts'       => is_array( $facts ) ? $facts : [],
-				'issues_json' => (string) ( $row['issues'] ?? '' ), // As stored, so an unchanged page is not rewritten.
-				'flags'       => (string) ( $row['flags'] ?? '' ),
+				'path'         => (string) $row['path'],
+				'post_type'    => (string) $row['post_type'],
+				'scanned_at'   => (string) $row['scanned_at'],
+				'source'       => (string) $row['source'],
+				'facts'        => is_array( $facts ) ? $facts : [],
+				'issues_json'  => (string) ( $row['issues'] ?? '' ), // As stored, so an unchanged page is not rewritten.
+				'flags'        => (string) ( $row['flags'] ?? '' ),
+				'inbound_json' => array_key_exists( 'inbound', $row ) ? (string) $row['inbound'] : null, // As stored; null: not readable yet.
 			];
 		}
 
@@ -266,12 +309,14 @@ class Scan_Store {
 	 */
 	protected static function decode( array $row ): array {
 		foreach ( [ 'facts', 'issues', 'suggestions' ] as $col ) {
-			$value       = null === $row[ $col ] ? null : json_decode( (string) $row[ $col ], true );
+			$value       = null === ( $row[ $col ] ?? null ) ? null : json_decode( (string) $row[ $col ], true );
 			$row[ $col ] = is_array( $value ) ? $value : ( 'suggestions' === $col ? null : [] );
 		}
 		$row['post_id']     = (int) $row['post_id'];
 		$row['issue_count'] = (int) $row['issue_count'];
 		$row['body_text']   = (string) ( $row['body_text'] ?? '' );
+		$inbound            = isset( $row['inbound'] ) ? json_decode( (string) $row['inbound'], true ) : null;
+		$row['inbound']     = is_array( $inbound ) ? $inbound : null; // Null: not built yet (the next site-wide pass builds it).
 
 		return $row;
 	}

@@ -57,7 +57,7 @@ class Fake_Adapter {
 class Fake_Store extends Scan_Store {
 	/** @var array<string,mixed>|null */
 	public $row;
-	public function get( int $post_id ): ?array {
+	public function get( int $post_id, bool $text = true ): ?array {
 		return $this->row;
 	}
 	public function save_suggestions( int $post_id, ?array $suggestions ): void {
@@ -356,6 +356,15 @@ class ReviewTest extends TestCase {
 			 */
 			public function get_charset_collate() {
 				return '';
+			}
+
+			/**
+			 * Every newest column is there.
+			 *
+			 * @return array<int,string>
+			 */
+			public function get_col() {
+				return [ 'body_text', 'inbound', 'note' ];
 			}
 		};
 		\WP_Mock::userFunction( 'update_option' )->andReturn( true );

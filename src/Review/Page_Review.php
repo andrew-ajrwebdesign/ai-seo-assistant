@@ -30,6 +30,7 @@ use AJR\SEOAssistant\Content\Business;
 use AJR\SEOAssistant\Content\Content_Extractor;
 use AJR\SEOAssistant\Core\Utils;
 use AJR\SEOAssistant\Scan\Google_Reads;
+use AJR\SEOAssistant\Scan\Html_Parser;
 use AJR\SEOAssistant\Scan\Intent;
 use AJR\SEOAssistant\Scan\Opportunity;
 use AJR\SEOAssistant\Scan\Page_Role;
@@ -771,31 +772,30 @@ class Page_Review {
 	}
 
 	/**
-	 * What the page is now, for checking editor advice: its latest facts, its text, and the links to it
-	 * from the other scanned pages ([ from path, link text ]).
+	 * What the page is now, for checking editor advice: its latest facts, its text (and whether the scan
+	 * cut it short), and the links to it from the other scanned pages ([ from path, link text ]), as the
+	 * last site-wide pass stored them for this page alone (scan.inbound): never every page's facts on an
+	 * editor load. Before the first pass has stored them the list is empty, so a link to-do stays a
+	 * manual tick (never marked done by guess).
 	 *
 	 * @param int                 $post_id Post ID.
-	 * @param array<string,mixed> $row     Its scan row.
-	 * @return array{facts:array<string,mixed>,text:string,inbound:array<int,array{0:string,1:string}>}
+	 * @param array<string,mixed> $row     Its scan row (Scan_Store::get(), with text).
+	 * @return array{facts:array<string,mixed>,text:string,truncated:bool,inbound:array<int,array{0:string,1:string}>}
 	 */
 	public static function editor_context( int $post_id, array $row ): array {
-		$here    = Scanner::norm_path( (string) ( $row['path'] ?? '' ) );
+		$facts   = (array) ( $row['facts'] ?? [] );
 		$inbound = [];
-		foreach ( ( new Scan_Store() )->all_facts() as $id => $other ) {
-			if ( (int) $id === $post_id ) {
-				continue;
-			}
-			foreach ( (array) ( $other['facts']['links'] ?? [] ) as $link ) {
-				if ( Scanner::norm_path( (string) ( $link['p'] ?? '' ) ) === $here ) {
-					$inbound[] = [ (string) $other['path'], (string) ( $link['t'] ?? '' ) ];
-				}
+		foreach ( (array) ( $row['inbound'] ?? [] ) as $link ) {
+			if ( is_array( $link ) ) {
+				$inbound[] = [ (string) ( $link[0] ?? '' ), (string) ( $link[1] ?? '' ) ];
 			}
 		}
 
 		return [
-			'facts'   => (array) ( $row['facts'] ?? [] ),
-			'text'    => self::page_text( $post_id, $row ),
-			'inbound' => $inbound,
+			'facts'     => $facts,
+			'text'      => self::page_text( $post_id, $row ),
+			'truncated' => ! empty( $facts[ Html_Parser::TRUNCATED ] ),
+			'inbound'   => $inbound,
 		];
 	}
 
@@ -861,7 +861,17 @@ class Page_Review {
 	 * @param array<string,mixed> $context editor_context().
 	 */
 	public static function advice_in_place( array $advice, array $context ): bool {
-		return Editor_Check::in_place( Editor_Check::of( $advice ), (array) $context['facts'], (string) $context['text'], (array) $context['inbound'] );
+		return Editor_Check::YES === self::advice_verdict( $advice, $context );
+	}
+
+	/**
+	 * Editor_Check::verdict() for one piece of advice on the page as last scanned.
+	 *
+	 * @param array<string,mixed> $advice  Advice.
+	 * @param array<string,mixed> $context editor_context().
+	 */
+	public static function advice_verdict( array $advice, array $context ): string {
+		return Editor_Check::verdict( Editor_Check::of( $advice ), (array) $context['facts'], (string) $context['text'], (array) $context['inbound'], ! empty( $context['truncated'] ) );
 	}
 
 	/**
