@@ -20,6 +20,7 @@ use AJR\SEOAssistant\Admin\Audit_Page;
 use AJR\SEOAssistant\Admin\Report_Page;
 use AJR\SEOAssistant\Admin\Markdown_Page;
 use AJR\SEOAssistant\Admin\Indexing_Tools_Page;
+use AJR\SEOAssistant\Admin\Secret_Notices;
 use AJR\SEOAssistant\GSC\GSC_Client;
 use AJR\SEOAssistant\GSC\GSC_Page;
 use AJR\SEOAssistant\Redirects\Redirect_Store;
@@ -66,9 +67,102 @@ class Plugin {
 
 	private function __construct() {}
 
+	/**
+	 * Wire the plugin for this request.
+	 *
+	 * ⚖ FRONT-END WEIGHT (4.4.0). Until 4.3.2 every request, a visitor's page view included, built all
+	 * twenty-odd classes (the editor box, the audit, the Search Console screens, the Claude client...),
+	 * none of which does anything outside wp-admin. Now a visitor's request builds only what acts there:
+	 * the weekly-report push endpoint (REST), its daily lateness check (cron), the tools capability, and,
+	 * on a site without a core plugin, this plugin's own redirects. Everything else is built when
+	 * is_admin(), which covers admin-ajax.php and admin-post.php as well as the screens. None of the
+	 * admin classes registers a REST route, a cron event or a WP-CLI command, so nothing else needs them.
+	 */
 	public function init() {
 		add_action( 'init', [ $this, 'load_textdomain' ] );
 
+		/*
+		 * Weekly report (4.3.0). The figures arrive by a signed push from the agency's machine;
+		 * this site stores the snapshots and holds no Google keys. Access keeps the tool screens
+		 * for agency users, so the client's Administrator sees the report only.
+		 */
+		$report_store = new Report\Snapshot_Store();
+		( new Report\Access() )->register();
+		( new Report\Push_Endpoint( $report_store ) )->register();
+		( new Report\Stale_Alert( $report_store ) )->register();
+
+		if ( is_admin() ) {
+			$this->init_admin( $report_store );
+		}
+
+		/*
+		 * ⛔ REDIRECTS HAVE MOVED TO AJR CORE. ONE FEATURE, ONE PLUGIN.
+		 *
+		 * AJR Core 0.5.0 owns redirects on every site, retainer or not. Both plugins
+		 * hooked `template_redirect` at priority 1, so with both active the same rules
+		 * were applied twice by two owners — and a rule edited on one screen and not the
+		 * other would have been decided by whichever plugin happened to load first. That
+		 * is not a conflict anyone would see in testing; it is one that appears months
+		 * later as "that redirect stopped working".
+		 *
+		 * So this feature stands down the moment AJR Core is present: no handler, no
+		 * menu item, no table install. It keeps running only on a site that does not
+		 * have AJR Core yet, because standing down there would drop that site's
+		 * redirects on an update — the one outcome worse than duplication.
+		 *
+		 * AJR Core copies this plugin's rules into its own table on first run and
+		 * changes nothing here, so the hand-over needs no migration and is reversible.
+		 * The code goes altogether in 5.0, once AJR Core is on every site. (4.4.0: an
+		 * EMPTY leftover table is dropped by Core\Upgrade::retire_redirects_table().)
+		 */
+		if ( self::core_owns_redirects() ) {
+			/*
+			 * The SUGGESTIONS do not move with the redirects, and should not: they need
+			 * Search Console, which is this plugin's job and part of what a retainer pays
+			 * for. AJR Core owns the screen and the rules; this supplies the knowledge of
+			 * which addresses Google is still asking for. Admin only — it is a screen.
+			 */
+			if ( is_admin() ) {
+				( new Core_Suggestions( $this->gsc_client ) )->register();
+			}
+		} else {
+			$this->redirect_store = new Redirect_Store();
+			( new Redirect_Handler( $this->redirect_store ) )->register();
+
+			if ( is_admin() ) {
+				/*
+				 * ⛔ is_admin() is a CONTEXT flag, not a permission check. admin-post.php
+				 * defines WP_ADMIN and fires admin_init (line 27) BEFORE it checks
+				 * is_user_logged_in() (line 36) — verified in core on this site — so anything
+				 * gated on is_admin() alone is reachable by a request carrying no cookie.
+				 * Here that only ever meant a dbDelta while the version flag was stale, which
+				 * self-heals, so nothing was exposed; this makes the gate say what it means.
+				 *
+				 * The capability is checked ON admin_init, not here: calling
+				 * current_user_can() at plugins_loaded resolves the current user before the
+				 * authentication filters have run, which breaks application-password and REST
+				 * logins — a worse bug than the one being fixed.
+				 */
+				add_action(
+					'admin_init',
+					function (): void {
+						if ( current_user_can( 'manage_options' ) ) {
+							$this->redirect_store->maybe_install();
+						}
+					}
+				);
+				$this->redirects_page = new Redirects_Page( $this->redirect_store, $this->gsc_client );
+				$this->redirects_page->init();
+			}
+		}
+	}
+
+	/**
+	 * Build and register everything that only acts in wp-admin (screens, editor box, AJAX, admin-post).
+	 *
+	 * @param Report\Snapshot_Store $report_store Weekly report storage.
+	 */
+	protected function init_admin( Report\Snapshot_Store $report_store ) {
 		$this->tsf_adapter      = new TSF_Adapter();
 		$this->yoast_adapter    = new Yoast_Adapter();
 		$this->rankmath_adapter = new RankMath_Adapter();
@@ -143,76 +237,11 @@ class Plugin {
 		$this->indexing_tools_page->init();
 		$this->ajax->init();
 
-		/*
-		 * Weekly report (4.3.0). The figures arrive by a signed push from the agency's machine;
-		 * this site stores the snapshots and holds no Google keys. Access keeps the tool screens
-		 * for agency users, so the client's Administrator sees the report only.
-		 */
-		$report_store = new Report\Snapshot_Store();
-		( new Report\Access() )->register();
-		( new Report\Push_Endpoint( $report_store ) )->register();
 		( new Report\Report_Page( $report_store ) )->register();
-		( new Report\Stale_Alert( $report_store ) )->register();
 
-		/*
-		 * ⛔ REDIRECTS HAVE MOVED TO AJR CORE. ONE FEATURE, ONE PLUGIN.
-		 *
-		 * AJR Core 0.5.0 owns redirects on every site, retainer or not. Both plugins
-		 * hooked `template_redirect` at priority 1, so with both active the same rules
-		 * were applied twice by two owners — and a rule edited on one screen and not the
-		 * other would have been decided by whichever plugin happened to load first. That
-		 * is not a conflict anyone would see in testing; it is one that appears months
-		 * later as "that redirect stopped working".
-		 *
-		 * So this feature stands down the moment AJR Core is present: no handler, no
-		 * menu item, no table install. It keeps running only on a site that does not
-		 * have AJR Core yet, because standing down there would drop that site's
-		 * redirects on an update — the one outcome worse than duplication.
-		 *
-		 * AJR Core copies this plugin's rules into its own table on first run and
-		 * changes nothing here, so the hand-over needs no migration and is reversible.
-		 * The code goes altogether in 5.0, once AJR Core is on every site.
-		 */
-		if ( self::core_owns_redirects() ) {
-			/*
-			 * The SUGGESTIONS do not move with the redirects, and should not: they need
-			 * Search Console, which is this plugin's job and part of what a retainer pays
-			 * for. AJR Core owns the screen and the rules; this supplies the knowledge of
-			 * which addresses Google is still asking for. Admin only — it is a screen.
-			 */
-			if ( is_admin() ) {
-				( new Core_Suggestions( $this->gsc_client ) )->register();
-			}
-		} else {
-			$this->redirect_store = new Redirect_Store();
-			( new Redirect_Handler( $this->redirect_store ) )->register();
-
-			if ( is_admin() ) {
-				/*
-				 * ⛔ is_admin() is a CONTEXT flag, not a permission check. admin-post.php
-				 * defines WP_ADMIN and fires admin_init (line 27) BEFORE it checks
-				 * is_user_logged_in() (line 36) — verified in core on this site — so anything
-				 * gated on is_admin() alone is reachable by a request carrying no cookie.
-				 * Here that only ever meant a dbDelta while the version flag was stale, which
-				 * self-heals, so nothing was exposed; this makes the gate say what it means.
-				 *
-				 * The capability is checked ON admin_init, not here: calling
-				 * current_user_can() at plugins_loaded resolves the current user before the
-				 * authentication filters have run, which breaks application-password and REST
-				 * logins — a worse bug than the one being fixed.
-				 */
-				add_action(
-					'admin_init',
-					function (): void {
-						if ( current_user_can( 'manage_options' ) ) {
-							$this->redirect_store->maybe_install();
-						}
-					}
-				);
-				$this->redirects_page = new Redirects_Page( $this->redirect_store, $this->gsc_client );
-				$this->redirects_page->init();
-			}
-		}
+		// One-time data changes (secrets sealed, leftover redirects table) and the agency's key warnings.
+		( new Upgrade() )->register();
+		( new Secret_Notices() )->register();
 	}
 
 	/**
