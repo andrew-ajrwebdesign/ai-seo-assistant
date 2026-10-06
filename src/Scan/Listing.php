@@ -4,7 +4,7 @@
  * read against AJR Core's pins.
  *
  * Google's listing is the source of truth for the business details (decision 2026-10-06). A difference the
- * agency pinned in AJR Core → Business details (contract 4: `\AJR\Core\Business\Pins`) is "Kept on purpose":
+ * agency pinned in the Business details row of AJR Core → Your essentials (contract 4: `\AJR\Core\Business\Pins`) is "Kept on purpose":
  * shown with its reason, never counted as an issue. A check that could not run says "Google listing not
  * checked", never "all match".
  *
@@ -27,8 +27,8 @@ class Listing {
 	/** AJR Core's pins (contract 4). */
 	public const PINS = 'AJR\Core\Business\Pins';
 
-	/** AJR Core's Business details screen slug (0.22). */
-	public const CORE_SCREEN = 'ajr-core-business-details';
+	/** AJR Core's settings screen, whose "Business details" row holds the business facts (no screen of its own). */
+	public const CORE_SETTINGS = 'AJR\Core\Admin\Settings';
 
 	/**
 	 * AJR Core's pins: field => { reason, pinned_at, user_id }. [] without Core 0.22.
@@ -91,13 +91,18 @@ class Listing {
 	}
 
 	/**
-	 * Link to AJR Core → Business details ('' before Core 0.22 has the screen).
+	 * Link to the "Business details" row of AJR Core → Your essentials, opened. AJR Core's own
+	 * `Settings::business_details_url()` when it has one; else the essentials screen with the row's anchor.
 	 */
 	public static function core_url(): string {
-		if ( ! class_exists( self::PINS ) ) {
-			return '';
+		if ( class_exists( self::CORE_SETTINGS ) && method_exists( self::CORE_SETTINGS, 'business_details_url' ) ) {
+			$settings = self::CORE_SETTINGS;
+			$url      = (string) $settings::business_details_url();
+			if ( '' !== $url ) {
+				return $url;
+			}
 		}
 
-		return admin_url( 'admin.php?page=' . self::CORE_SCREEN );
+		return admin_url( 'admin.php?page=ajr-core#business-details' );
 	}
 }

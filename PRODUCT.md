@@ -91,7 +91,7 @@ The SEO scan lists pages by **opportunity**: the extra visits a year a better Go
   - the structured data found on the rendered page, in plain words;
   - a link to Google's Rich Results Test.
 - **The "Google listing" group** in the SEO scan comes from the weekly push's `business_profile_check`.
-  - A difference the agency pinned in AJR Core → Business details is "Kept on purpose": shown with its reason, never counted.
+  - A difference the agency pinned in the Business details row of AJR Core → Your essentials is "Kept on purpose": shown with its reason, never counted.
   - A check that could not run says "Google listing not checked", never "all match".
   - The plugin hands the stored check to AJR Core through `ajr_core_business_profile_check`.
 

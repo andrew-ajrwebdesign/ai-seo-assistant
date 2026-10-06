@@ -213,7 +213,7 @@ class Settings_Page {
 			echo $this->row( esc_html( $label ), '', '<span class="aisa-readonly"><input type="text" id="' . esc_attr( $id ) . '" value="' . esc_attr( $facts[ $key ] ) . '" readonly placeholder="' . esc_attr__( 'Not set in AJR Core', 'ai-seo-assistant' ) . '">' . $chip . '</span>', $id ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped piecewise.
 		}
 		$tone = '<textarea id="aisa-tone" name="tone" rows="3">' . esc_textarea( Business::tone() ) . '</textarea>'
-			. '<p><a href="' . esc_url( admin_url( 'admin.php?page=ajr-core-business' ) ) . '">' . esc_html__( 'Edit business details in AJR Core', 'ai-seo-assistant' ) . '</a></p>';
+			. '<p><a href="' . esc_url( \AJR\SEOAssistant\Scan\Listing::core_url() ) . '">' . esc_html__( 'Fix in Business details', 'ai-seo-assistant' ) . ' ↗</a></p>';
 		echo $this->row( esc_html__( 'Tone and extra notes', 'ai-seo-assistant' ), __( 'Only this field is stored by the plugin.', 'ai-seo-assistant' ), $tone, 'aisa-tone' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped piecewise.
 		echo '</section>';
 	}

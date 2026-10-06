@@ -140,7 +140,7 @@ class Scan_Page {
 
 	/**
 	 * "Google listing" (J1): the pushed Business Profile check against the site's own business details.
-	 * Each difference shows both values and one way to fix it (AJR Core → Business details); a difference
+	 * Each difference shows both values and one way to fix it (the Business details row of AJR Core → Your essentials); a difference
 	 * the agency pinned in AJR Core is "Kept on purpose", with its reason, and never counted.
 	 */
 	protected function listing_card(): void {

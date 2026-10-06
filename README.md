@@ -85,7 +85,7 @@ tier               = High from 300, Medium from 60, Low from 1   (filter: ai_seo
   - the link to the business;
   - the structured data on the rendered page, in plain words;
   - a link to the Rich Results Test.
-- **The SEO scan's "Google listing" group** lists the pushed `business_profile_check`. Differences pinned in AJR Core → Business details are "Kept on purpose" and not counted.
+- **The SEO scan's "Google listing" group** lists the pushed `business_profile_check`. Differences pinned in the Business details row of AJR Core → Your essentials are "Kept on purpose" and not counted.
 - **Hand-over to AJR Core:** the plugin returns the stored check on `ajr_core_business_profile_check`.
 
 ### Page review

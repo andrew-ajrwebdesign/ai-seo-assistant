@@ -259,6 +259,21 @@ class RoundTwoTest extends TestCase {
 	}
 
 	/**
+	 * "Fix in Business details" opens the Business details row of AJR Core's essentials screen: Core's own
+	 * URL when it has one, else the essentials screen with the row's anchor. Never a screen of its own.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_business_details_url(): void {
+		\WP_Mock::userFunction( 'admin_url' )->andReturnUsing( fn( $p = '' ) => 'https://x.test/wp-admin/' . $p );
+		$this->assertSame( 'https://x.test/wp-admin/admin.php?page=ajr-core#business-details', Listing::core_url() );
+		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- test double for AJR Core's contract.
+		eval( 'namespace AJR\Core\Admin; class Settings { public static function business_details_url(): string { return "https://x.test/wp-admin/admin.php?page=ajr-core&open=business"; } }' );
+		$this->assertSame( 'https://x.test/wp-admin/admin.php?page=ajr-core&open=business', Listing::core_url() );
+	}
+
+	/**
 	 * Contract 3: the stored check goes back to AJR Core in the snapshot schema's own shape.
 	 */
 	public function test_listing_block_for_core(): void {
