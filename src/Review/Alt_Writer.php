@@ -5,7 +5,7 @@
  * WHY (Andrew, 2026-10-06, post 363): the Media Library alt is not what most pages print. Divi's image,
  * fullwidth-image, blurb and slide modules carry their OWN alt attribute in the shortcode; a core Image
  * block and a classic <img> carry it in the saved markup. Writing only `_wp_attachment_image_alt` reported
- * success while the page kept "Moving To Boise Services" on a kitchen photo.
+ * success while the page kept "Our Services" on a kitchen photo.
  *
  * HOW, guarded. The image is found by its file name (size suffixes ignored) in a Divi module's image
  * attribute, or by its `wp-image-{id}` class (or file name) on an <img> tag. EXACTLY ONE place must match;

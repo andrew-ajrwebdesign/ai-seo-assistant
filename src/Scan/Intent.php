@@ -7,7 +7,7 @@
  *   lead           ready to get in touch or buy: "realtor near me", "hire", "quote", "book"       weight 3
  *   commercial     comparing or pricing: "best", "cost", "price", "for sale", "reviews"           weight 2
  *   informational  learning: "weather", "how to", "what is", "things to do", "guide"              weight 1
- *   navigational   looking for this business by name                                              weight 0.5
+ *   navigational   looking for this business, or another business or site, by name                weight 0
  *
  * A search no rule matches and Claude has not sorted yet weighs 1 (as informational): unknown is never
  * guessed upwards.
@@ -48,7 +48,7 @@ class Intent {
 		'lead'          => 3.0,
 		'commercial'    => 2.0,
 		'informational' => 1.0,
-		'navigational'  => 0.5,
+		'navigational'  => 0.0, // Looking for this business, or another one by name: a better listing wins nothing.
 	];
 
 	/** Weight of a search not sorted yet. */
@@ -75,9 +75,22 @@ class Intent {
 	 * @var array<string,array<int,string>>
 	 */
 	public const GENERIC = [
-		'lead'          => [ 'near me', 'hire', 'quote', 'quotes', 'book', 'booking', 'appointment', 'schedule', 'consultation', 'contact', 'call', 'phone number', 'emergency', 'company', 'companies', 'service', 'services', 'repair', 'install', 'installation', 'agent', 'agents', 'realtor', 'realtors', 'real estate agent', 'broker', 'sell my', 'list my', 'lawyer', 'attorney', 'plumber', 'electrician', 'contractor', 'dentist' ],
+		// No bare "call", "book", "contact", "schedule", "agent" or "near me": alone they mark a search about
+		// anything ("elementary schools near me", "book club"). Multi-word phrases carry the intent.
+		'lead'          => [ 'hire', 'quote', 'quotes', 'booking', 'book an appointment', 'appointment', 'consultation', 'contact us', 'call now', 'phone number', 'emergency', 'company', 'companies', 'service', 'services', 'repair', 'install', 'installation', 'realtor', 'realtors', 'real estate agent', 'broker', 'sell my', 'list my', 'lawyer', 'attorney', 'plumber', 'electrician', 'contractor', 'dentist' ],
 		'commercial'    => [ 'best', 'top', 'cost', 'costs', 'price', 'prices', 'pricing', 'cheap', 'affordable', 'review', 'reviews', 'vs', 'compare', 'buy', 'buying', 'sell', 'selling', 'for sale', 'homes for sale', 'houses for sale', 'rent', 'rental', 'value', 'worth', 'market', 'deal', 'deals' ],
-		'informational' => [ 'how to', 'how do', 'how much does', 'what is', 'what are', 'why', 'when', 'where is', 'who', 'guide', 'tips', 'ideas', 'things to do', 'weather', 'climate', 'temperature', 'snow', 'history', 'facts', 'map', 'meaning', 'definition', 'cost of living', 'population', 'pros and cons', 'events', 'news' ],
+		'informational' => [ 'how to', 'how do', 'how much does', 'what is', 'what are', 'why', 'when', 'where is', 'who', 'guide', 'tips', 'ideas', 'things to do', 'weather', 'climate', 'temperature', 'snow', 'history', 'facts', 'map', 'meaning', 'definition', 'cost of living', 'population', 'pros and cons', 'events', 'news', 'school', 'schools', 'elementary schools', 'restaurant', 'restaurants', 'dining', 'dinner', 'attractions', 'outdoor', 'outdoors', 'outdoorsy', 'activities', 'pronounce', 'pronunciation', 'time in', 'with kids', 'parks', 'trails', 'hiking' ],
+	];
+
+	/**
+	 * Other businesses and sites people search for by name (navigational, weight 0): generic ones for every
+	 * site, plus the ones for AJR Core's business type. Filterable (`ai_seo_assistant_competitors`).
+	 *
+	 * @var array<string,array<int,string>>
+	 */
+	public const COMPETITORS = [
+		''                => [ 'yelp', 'angi', 'angies list', 'thumbtack', 'facebook', 'nextdoor', 'google maps', 'craigslist', 'reddit', 'youtube', 'wikipedia' ],
+		'RealEstateAgent' => [ 'zillow', 'realtor com', 'redfin', 'trulia', 'homes com', 'opendoor', 'offerpad', 'century 21', 'keller williams', 're max', 'remax', 'coldwell banker', 'compass', 'exp realty', 'berkshire hathaway', 'sotheby s', 'movoto', 'apartments com' ],
 	];
 
 	/**
@@ -88,9 +101,9 @@ class Intent {
 	public const BY_TYPE = [
 		'RealEstateAgent' => [
 			// Ready to act: an agent, selling, buying a listed home, a valuation, listing a home.
-			'lead'       => [ 'agent', 'agents', 'realtor', 'realtors', 'broker', 'brokers', 'real estate agent', 'listing agent', 'buyers agent', 'buyer s agent', 'sell my house', 'sell my home', 'sell home', 'sell house', 'selling', 'homes for sale', 'houses for sale', 'for sale', 'home value', 'house value', 'what s my home worth', 'whats my home worth', 'what is my home worth', 'valuation', 'list my home', 'list my house' ],
+			'lead'       => [ 'agent', 'agents', 'realtor', 'realtors', 'broker', 'brokers', 'real estate agent', 'listing agent', 'buyers agent', 'buyer s agent', 'sell my house', 'sell my home', 'sell home', 'sell house', 'sell a home', 'sell a house', 'selling', 'homes for sale', 'houses for sale', 'for sale', 'home value', 'house value', 'what s my home worth', 'whats my home worth', 'what is my home worth', 'valuation', 'list my home', 'list my house' ],
 			// Researching a move (Andrew, 2026-10-06): commercial, not a lead.
-			'commercial' => [ 'moving to', 'move to', 'relocation', 'relocating', 'relocate', 'real estate', 'living in', 'cost of living', 'homes', 'houses', 'condos', 'new construction', 'mls', 'neighborhoods' ],
+			'commercial' => [ 'moving to', 'move to', 'moving', 'relocation', 'relocating', 'relocate', 'real estate', 'living in', 'living on', 'cost of living', 'homes', 'houses', 'home', 'condos', 'new construction', 'mls', 'neighborhood', 'neighborhoods', 'communities', 'second home', 'housing market', 'housing' ],
 		],
 	];
 
@@ -100,8 +113,12 @@ class Intent {
 	 * @return array<string,array<int,string>>
 	 */
 	public static function rules(): array {
+		static $memo = [];
+		$type        = self::business_type();
+		if ( isset( $memo[ $type ] ) ) {
+			return $memo[ $type ];
+		}
 		$rules = self::GENERIC;
-		$type  = self::business_type();
 		foreach ( self::BY_TYPE[ $type ] ?? [] as $intent => $phrases ) {
 			$rules[ $intent ] = array_merge( $rules[ $intent ] ?? [], $phrases );
 		}
@@ -117,6 +134,8 @@ class Intent {
 				$rules = $filtered;
 			}
 		}
+		$rules['navigational'] = array_merge( (array) ( $rules['navigational'] ?? [] ), self::competitors( $type ) );
+		$memo[ $type ]         = $rules;
 
 		return $rules;
 	}
@@ -129,6 +148,11 @@ class Intent {
 	 * @param array<int,string>               $brand Brand phrases (the business name).
 	 */
 	public static function by_rules( string $query, array $rules, array $brand = [] ): string {
+		static $norm = [];
+		// A web address in the search ("gardencityid.granicus.com …") is someone looking for that site.
+		if ( preg_match( '/[a-z0-9-]\.(com|org|net|gov|edu|io|co|us)\b/i', $query ) ) {
+			return 'navigational';
+		}
 		$q = ' ' . trim( (string) preg_replace( '/[^\p{L}\p{N}]+/u', ' ', mb_strtolower( $query ) ) ) . ' ';
 		foreach ( $brand as $name ) {
 			$name = trim( (string) preg_replace( '/[^\p{L}\p{N}]+/u', ' ', mb_strtolower( $name ) ) );
@@ -136,14 +160,27 @@ class Intent {
 				return 'navigational';
 			}
 		}
+		foreach ( (array) ( $rules['navigational'] ?? [] ) as $phrase ) {
+			$phrase = trim( (string) preg_replace( '/[^\p{L}\p{N}]+/u', ' ', mb_strtolower( (string) $phrase ) ) );
+			if ( '' !== $phrase && false !== strpos( $q, ' ' . $phrase . ' ' ) ) {
+				return 'navigational';
+			}
+		}
 		$best = '';
 		$len  = 0;
 		foreach ( $rules as $intent => $phrases ) {
+			if ( 'navigational' === $intent ) {
+				continue;
+			}
 			if ( ! isset( self::WEIGHTS[ $intent ] ) ) {
 				continue;
 			}
 			foreach ( (array) $phrases as $phrase ) {
-				$phrase = trim( (string) preg_replace( '/[^\p{L}\p{N}]+/u', ' ', mb_strtolower( (string) $phrase ) ) ); // "what's" matches as "what s".
+				$raw = (string) $phrase;
+				if ( ! isset( $norm[ $raw ] ) ) {
+					$norm[ $raw ] = trim( (string) preg_replace( '/[^\p{L}\p{N}]+/u', ' ', mb_strtolower( $raw ) ) ); // "what's" matches as "what s"; once per request.
+				}
+				$phrase = $norm[ $raw ];
 				if ( '' === $phrase || false === strpos( $q, ' ' . $phrase . ' ' ) ) {
 					continue;
 				}
@@ -370,12 +407,42 @@ class Intent {
 	}
 
 	/**
-	 * The business's own names (navigational searches).
+	 * Other businesses and sites, by AJR Core business type (COMPETITORS, filterable).
+	 *
+	 * @param string $type Business type.
+	 * @return array<int,string>
+	 */
+	public static function competitors( string $type ): array {
+		$list = array_merge( self::COMPETITORS[''], '' !== $type ? ( self::COMPETITORS[ $type ] ?? [] ) : [] );
+		if ( function_exists( 'apply_filters' ) ) {
+			/**
+			 * Filters the other businesses and sites a search names (counted as navigational, weight 0).
+			 *
+			 * @param array<int,string> $list Names.
+			 * @param string            $type AJR Core business type ('' when unknown).
+			 */
+			$list = (array) apply_filters( 'ai_seo_assistant_competitors', $list, $type );
+		}
+
+		return array_values( array_filter( array_map( 'strval', $list ) ) );
+	}
+
+	/**
+	 * The business's own names (navigational searches): AJR Core's name, alternate name and founder, and
+	 * the site's host name ("examplerealty" from examplerealty.com).
 	 *
 	 * @return array<int,string>
 	 */
 	public static function brand(): array {
 		$names = [];
+		if ( function_exists( 'home_url' ) ) {
+			$host  = (string) wp_parse_url( home_url(), PHP_URL_HOST );
+			$host  = (string) preg_replace( '/^www\./', '', $host );
+			$label = strtok( $host, '.' );
+			if ( false !== $label && mb_strlen( $label ) >= 6 ) {
+				$names[] = $label;
+			}
+		}
 		if ( class_exists( '\AJR\SEOAssistant\Content\Business' ) ) {
 			$names[] = (string) ( \AJR\SEOAssistant\Content\Business::facts()['name'] ?? '' );
 		}

@@ -165,15 +165,21 @@ class OpportunityTest extends TestCase {
 	public function test_uncalibrated_bucket_scaled_by_nearest(): void {
 		$out = Opportunity::site_curve(
 			[
-				[ 'impressions' => 500, 'clicks' => 100, 'position' => 1.0 ],  // Too few: not calibrated.
-				[ 'impressions' => 10000, 'clicks' => 91, 'position' => 2.0 ], // 0.91%.
+				[ 'impressions' => 500, 'clicks' => 100, 'position' => 1.0 ],   // Too few: not calibrated.
+				[ 'impressions' => 10000, 'clicks' => 1200, 'position' => 2.0 ], // 12%.
 			]
 		);
+		$this->assertTrue( $out['site'] );
 		$this->assertSame( 1, $out['buckets'] );
-		$this->assertEqualsWithDelta( 28 * 0.91 / 15, $out['curve'][1], 0.01 );
-		$this->assertSame( 0.91, $out['curve'][2] );
-		$this->assertEqualsWithDelta( 7.2 * 0.91 / 15, $out['curve'][3], 0.01, 'every thin bucket scaled by the same nearest ratio' );
-		$this->assertLessThan( 0.1, $out['curve'][50] );
+		$this->assertEqualsWithDelta( 28 * 12 / 15, $out['curve'][1], 0.01 );
+		$this->assertSame( 12.0, $out['curve'][2] );
+		$this->assertEqualsWithDelta( 7.2 * 12 / 15, $out['curve'][3], 0.01, 'every thin bucket scaled by the same nearest ratio' );
+
+		// Sanity gate: a site curve whose position 1 is below the built-in position 5 is not believed.
+		$flat = Opportunity::site_curve( [ [ 'impressions' => 10000, 'clicks' => 91, 'position' => 2.0 ] ] );
+		$this->assertFalse( $flat['site'] );
+		$this->assertSame( 'implausible', $flat['reason'] );
+		$this->assertSame( Opportunity::CURVE, $flat['curve'] );
 	}
 
 	/**

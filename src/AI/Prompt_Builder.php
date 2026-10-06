@@ -175,13 +175,14 @@ class Prompt_Builder {
 		$p[] = '';
 		$p[] = 'Rules for the title:';
 		$p[] = '- At most about 55 characters, so it fits Google\'s desktop width (about 580 px in Arial 20px). Never longer than 60 characters.';
-		$p[] = '- Lead with the page\'s main search (the query with the most clicks; if none has clicks, the most impressions), worded naturally.';
+		$p[] = '- Lead with the page\'s main search (given below, chosen from the searches that bring this page real traffic and are about what it is for), worded naturally. If no main search is given, lead with what the page offers.';
+		$p[] = '- If the top search is not what this page is for (a competitor\'s or another business\'s name, or a topic the page does not cover), say so in the why and write for what the page is for. Never retarget a service, contact or other money page around a competitor or an off-topic search.';
 		$p[] = '- Then a short differentiator or the business name, separated by " | ". No keyword stuffing, no ALL CAPS.';
 		$p[] = 'Rules for the meta description:';
 		$p[] = '- 120 to 155 characters, one or two complete sentences, ending on a full stop.';
 		$p[] = '- Answer what the searcher wants (cost, speed, area, trust) using only facts from the page or the business details. End with the next step when the page supports one (a phone number only if it is in the business details).';
 		$p[] = 'Rules for the focus keyphrase:';
-		$p[] = '- The main search the page should rank for, lower case, 2 to 5 words, usually the top query. It must appear in your title.';
+		$p[] = '- The main search the page should rank for, lower case, 2 to 5 words: the main search given below when there is one, never a business\'s name or an off-topic search. It must appear in your title.';
 		$p[] = 'Rules for alt text:';
 		$p[] = '- Look at each attached photo and describe what is actually in it, in plain words, under 125 characters. Name a recognisable landmark when you can see one (a capitol dome, a clock tower, a named river or mountain). No "image of" or "photo of", no keyword lists, nothing the photo does not show.';
 		$p[] = '- If you cannot tell what a photo shows, return an empty alt and say so in the why; never guess from the file name or the page.';
@@ -224,10 +225,11 @@ class Prompt_Builder {
 			$p[] = 'No Search Console data for this page yet: write for what the page offers.';
 		}
 		if ( ! empty( $args['queries'] ) ) {
-			$p[] = 'Top searches that showed this page (query | clicks | impressions | position | CTR %):';
+			$p[] = 'Top searches that showed this page (query | clicks | impressions | position | CTR % | intent: lead = ready to enquire, commercial = comparing, informational = learning, navigational = looking for a business by name):';
 			foreach ( (array) $args['queries'] as $q ) {
-				$p[] = sprintf( '- %s | %d | %d | %s | %s', $q['query'], $q['clicks'], $q['impressions'], $q['position'] ?? '', $q['ctr'] ?? '' );
+				$p[] = sprintf( '- %s | %d | %d | %s | %s | %s', $q['query'], $q['clicks'], $q['impressions'], $q['position'] ?? '', $q['ctr'] ?? '', $q['intent'] ?? 'unknown' );
 			}
+			$p[] = '' !== (string) ( $args['main_query'] ?? '' ) ? 'Main search for this page: "' . $args['main_query'] . '".' : 'Main search for this page: none qualifies (no search with real traffic is about what this page is for); write for what the page offers.';
 		}
 		if ( ! empty( $args['ga4'] ) ) {
 			$g   = $args['ga4'];

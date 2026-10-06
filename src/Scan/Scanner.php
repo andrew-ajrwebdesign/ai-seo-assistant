@@ -279,7 +279,7 @@ class Scanner {
 				'in_sitemap'       => null === $sitemap ? null : isset( $sitemap[ Rules::bare_url( (string) ( $f['url'] ?? '' ) ) ] ),
 				'self_url'         => (string) ( $f['url'] ?? '' ),
 				'impressions'      => (int) ( $page['gsc']['impressions'] ?? 0 ),
-				'top_query'        => self::main_query( $page ),
+				'top_query'        => self::main_query( $page, (string) ( $f['title'] ?? '' ) . ' ' . str_replace( [ '/', '-' ], ' ', $path ) ),
 				'is_front'         => $id === $front || '/' === $path,
 				'is_utility'       => (bool) preg_match( '#/(contact|privacy|terms|cookie|thank|accessibility|sitemap|login|account|cart|checkout)#i', $path ),
 				'is_service'       => 'page' === $row['post_type'] && self::matches_service( $f, $path, $services ),
@@ -339,18 +339,38 @@ class Scanner {
 	}
 
 	/**
-	 * The page's main search: most clicks, else most impressions; '' without data.
+	 * The page's main search, the one the title should lead with: by clicks then impressions, the first that
+	 * has 3+ clicks or a fifth of the page's impressions, is not a business's name (this one's or a
+	 * competitor's), and, when it is a learning search, shares a word with the page's topic. '' when none
+	 * qualifies: then no "title misses the main search" finding, and Claude writes for what the page is for.
 	 *
-	 * @param array<string,mixed>|null $page Page data.
+	 * @param array<string,mixed>|null $page  Page data.
+	 * @param string                   $topic The page's title and path (for informational searches).
 	 */
-	public static function main_query( ?array $page ): string {
+	public static function main_query( ?array $page, string $topic = '' ): string {
 		$queries = (array) ( $page['gsc']['queries'] ?? [] );
 		if ( [] === $queries ) {
 			return '';
 		}
 		usort( $queries, static fn( $a, $b ) => [ $b['clicks'], $b['impressions'] ] <=> [ $a['clicks'], $a['impressions'] ] );
+		$shown = (int) ( $page['gsc']['impressions'] ?? 0 );
+		foreach ( $queries as $q ) {
+			$query = (string) ( $q['query'] ?? '' );
+			// Enough of the page's traffic to matter: 3 clicks, or a fifth of its impressions.
+			if ( (int) ( $q['clicks'] ?? 0 ) < 3 && ( $shown <= 0 || (int) ( $q['impressions'] ?? 0 ) < 0.2 * $shown ) ) {
+				continue;
+			}
+			$intent = Intent::of( $query );
+			// Never a business's name (this one's or a competitor's), and a learning search only when it is
+			// about what the page is about.
+			if ( 'navigational' === $intent || ( 'informational' === $intent && '' !== $topic && ! Rules::shares_topic( $query, $topic ) ) ) {
+				continue;
+			}
 
-		return (string) $queries[0]['query'];
+			return $query;
+		}
+
+		return '';
 	}
 
 	/**

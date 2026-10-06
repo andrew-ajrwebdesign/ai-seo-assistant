@@ -63,15 +63,19 @@ class Ranking {
 	 */
 	public static function curve(): array {
 		$meta = Page_Data::meta();
-		$key  = $meta['end'] . '|' . $meta['generated_at'];
+		$key  = $meta['end'] . '|' . $meta['generated_at'] . '|buy-only'; // Changed when what the curve is built from changes.
 		$held = get_option( self::CURVE_OPTION, [] );
 		if ( is_array( $held ) && ( $held['key'] ?? '' ) === $key && is_array( $held['curve'] ?? null ) ) {
 			$info = $held['info'];
 		} else {
 			$queries = [];
+			// Calibrated on the searches that buy (comparing or ready to enquire) only: maps, weather and
+			// names are clicked differently and would drag the curve down.
 			foreach ( ( new Page_Data() )->all() as $page ) {
 				foreach ( (array) ( $page['gsc']['queries'] ?? [] ) as $q ) {
-					$queries[] = $q;
+					if ( in_array( Intent::of( (string) ( $q['query'] ?? '' ) ), [ 'commercial', 'lead' ], true ) ) {
+						$queries[] = $q;
+					}
 				}
 			}
 			$info = Opportunity::site_curve( $queries );

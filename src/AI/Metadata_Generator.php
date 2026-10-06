@@ -593,64 +593,24 @@ class Metadata_Generator {
 		return true;
 	}
 
+	/**
+	 * The meaningful words of a text (4+ letters, no common stopwords), simply stemmed (plural -s, -ing),
+	 * for the "does the page already cover this phrase" check. Language-neutral; nothing site-specific.
+	 *
+	 * @param string $text Text.
+	 * @return array<int,string>
+	 */
 	private function extract_content_match_concepts( $text ) {
-		$text = strtolower( preg_replace( '/\s+/', ' ', wp_strip_all_tags( (string) $text ) ) );
-
-		$concepts = [];
-
-		if ( false !== strpos( $text, 'wordpress' ) ) {
-			$concepts[] = 'wordpress';
+		$text  = strtolower( (string) preg_replace( '/[^\p{L}\p{N}]+/u', ' ', wp_strip_all_tags( (string) $text ) ) );
+		$stop  = [ 'with', 'from', 'that', 'this', 'your', 'have', 'will', 'what', 'when', 'where', 'which', 'about', 'into', 'their', 'they', 'them', 'than', 'then', 'there', 'near', 'best' ];
+		$words = [];
+		foreach ( preg_split( '/\s+/', trim( $text ) ) as $word ) {
+			if ( mb_strlen( $word ) < 4 || in_array( $word, $stop, true ) ) {
+				continue;
+			}
+			$words[] = (string) preg_replace( '/(ing|s)$/', '', $word );
 		}
-
-		if (
-			false !== strpos( $text, 'customization' ) ||
-			false !== strpos( $text, 'customisation' ) ||
-			false !== strpos( $text, 'customize' ) ||
-			false !== strpos( $text, 'customise' ) ||
-			false !== strpos( $text, 'anpassung' ) ||
-			false !== strpos( $text, 'anpassungen' ) ||
-			false !== strpos( $text, 'anpassen' ) ||
-			false !== strpos( $text, 'angepasst' )
-		) {
-			$concepts[] = 'customization';
-		}
-
-		if (
-			false !== strpos( $text, 'development' ) ||
-			false !== strpos( $text, 'developer' ) ||
-			false !== strpos( $text, 'entwicklung' ) ||
-			false !== strpos( $text, 'entwickler' )
-		) {
-			$concepts[] = 'development';
-		}
-
-		if (
-			false !== strpos( $text, 'seo' ) ||
-			false !== strpos( $text, 'suchmaschinenoptimierung' )
-		) {
-			$concepts[] = 'seo';
-		}
-
-		if (
-			false !== strpos( $text, 'performance' ) ||
-			false !== strpos( $text, 'optimierung' ) ||
-			false !== strpos( $text, 'geschwindigkeit' ) ||
-			false !== strpos( $text, 'core web vitals' )
-		) {
-			$concepts[] = 'performance';
-		}
-
-		if ( false !== strpos( $text, 'freiburg' ) ) {
-			$concepts[] = 'freiburg';
-		}
-
-		if ( false !== strpos( $text, 'basel' ) ) {
-			$concepts[] = 'basel';
-		}
-
-		if ( false !== strpos( $text, 'mulhouse' ) ) {
-			$concepts[] = 'mulhouse';
-		}
+		$concepts = $words;
 
 		return array_values( array_unique( $concepts ) );
 	}
@@ -1032,17 +992,6 @@ class Metadata_Generator {
 		}
 
 		$banned_fragments = [
-			'unsere dienstleistungen',
-			'maßgeschneiderte lösungen',
-			'massgeschneiderte lösungen',
-			'individuelle lösungen',
-			'spezifische anforderungen',
-			'speziell auf ihre bedürfnisse zugeschnitten',
-			'auf ihre bedürfnisse zugeschnitten',
-			'optimal zu gestalten',
-			'optimal gestalten',
-			'genau nach ihren vorstellungen',
-			'ihre website optimal',
 			'enhance visibility',
 			'improve relevance',
 			'tailored solutions',
@@ -1061,98 +1010,26 @@ class Metadata_Generator {
 		return false;
 	}
 
-	private function get_default_content_placement_location( $content ) {
-		$content = strtolower( wp_strip_all_tags( (string) $content ) );
-
-		if ( false !== strpos( $content, 'wie ich helfen kann' ) ) {
-			return 'In the "Wie ich helfen kann" section, where WordPress support or development is already mentioned.';
-		}
-
-		if ( false !== strpos( $content, 'why work with me' ) || false !== strpos( $content, 'warum mit mir arbeiten' ) ) {
-			return 'In the "Warum mit mir arbeiten?" section, after the first sentence.';
-		}
-
-		return 'In the introduction section, after the first sentence.';
+	/**
+	 * Where to put missing copy when Claude did not say: a neutral default, in English, for any site.
+	 *
+	 * @param string $content Page content (unused: kept for the callers' signature).
+	 */
+	private function get_default_content_placement_location( $content ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.Found -- callers pass the content.
+		return 'In the introduction, after the first sentence.';
 	}
 
-	private function build_safe_content_insertion_copy( $missing_term, $content ) {
+	/**
+	 * When Claude's copy was filler, never write copy for the client (no invented claims, no language
+	 * guessing): ask them to add a sentence about the term in their own words.
+	 *
+	 * @param string $missing_term The search term the page does not cover.
+	 * @param string $content      Page content (unused).
+	 */
+	private function build_safe_content_insertion_copy( $missing_term, $content ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- callers pass the content.
 		$missing_term = trim( sanitize_text_field( (string) $missing_term ) );
-		$content      = wp_strip_all_tags( (string) $content );
 
-		if ( $this->is_likely_german_content( $content ) ) {
-			return $this->build_safe_german_content_insertion_copy( $missing_term );
-		}
-
-		return $this->build_safe_english_content_insertion_copy( $missing_term );
-	}
-
-	private function is_likely_german_content( $content ) {
-		$content = strtolower( wp_strip_all_tags( (string) $content ) );
-
-		$signals = [
-			'ich ',
-			' für ',
-			' und ',
-			' mit ',
-			'unternehmen',
-			'freiburg',
-			'leistungen',
-			'arbeiten',
-			'betreuung',
-			'entwicklung',
-			'anpassung',
-			'optimierung',
-		];
-
-		$matches = 0;
-
-		foreach ( $signals as $signal ) {
-			if ( false !== strpos( $content, $signal ) ) {
-				$matches++;
-			}
-		}
-
-		return $matches >= 3;
-	}
-
-	private function build_safe_german_content_insertion_copy( $missing_term ) {
-		$term = strtolower( $missing_term );
-
-		$location = '';
-
-		if ( false !== strpos( $term, 'freiburg' ) ) {
-			$location = ' in Freiburg';
-		}
-
-		if ( false !== strpos( $term, 'wordpress' ) && ( false !== strpos( $term, 'customization' ) || false !== strpos( $term, 'anpass' ) ) ) {
-			return 'Ich unterstütze Unternehmen' . $location . ' mit individuellen WordPress Anpassungen, technischer WordPress Entwicklung, SEO Analyse und Performance Optimierung für bestehende Websites.';
-		}
-
-		if ( false !== strpos( $term, 'wordpress' ) ) {
-			return 'Ich unterstütze Unternehmen' . $location . ' mit technischer WordPress Unterstützung, klarer Umsetzung und praktischen Verbesserungen für bestehende Websites.';
-		}
-
-		return 'Ich unterstütze Unternehmen' . $location . ' mit klarer technischer Umsetzung, SEO Analyse und praktischen Verbesserungen für bestehende Websites.';
-	}
-
-	private function build_safe_english_content_insertion_copy( $missing_term ) {
-		$term = strtolower( $missing_term );
-
-		$location = '';
-
-		if ( false !== strpos( $term, 'freiburg' ) ) {
-			$location = ' in Freiburg';
-		}
-
-		if ( false !== strpos( $term, 'wordpress' ) && false !== strpos( $term, 'customization' ) ) {
-			return 'I help businesses' . $location . ' with practical WordPress customization, technical improvements, SEO analysis, and performance optimization for existing websites.';
-		}
-
-		if ( false !== strpos( $term, 'wordpress' ) ) {
-			return 'I help businesses' . $location . ' with practical WordPress support, technical improvements, SEO analysis, and performance optimization for existing websites.';
-		}
-
-		return 'I help businesses' . $location . ' with practical technical improvements, SEO analysis, and clearer website performance.';
+		return '' === $missing_term ? '' : sprintf( 'Add one sentence about "%s" in your own words, using only what you actually offer.', $missing_term );
 	}
 
 	private function log_generation( $post_id, $result, $content, $source, $error = '' ) {

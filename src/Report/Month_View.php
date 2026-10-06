@@ -3,7 +3,7 @@
  * Month_View — the Monthly report for the client's billing period (mockup F1–F4, approved 2026-10-06).
  *
  * WHY. It replaces the hand-written monthly retainer report: the figures arrive with a `period: "month"`
- * push for the billing period (Jennifer: the 17th → 17 Sep–16 Oct, never a sum of Monday weeks), the
+ * push for the billing period (billing day 17 → 17 Sep–16 Oct, never a sum of Monday weeks), the
  * plugin adds what it changed and what that achieved (Changes\Change_Log), and Andrew writes only the note.
  * Printable: "Print or save as PDF" uses the print stylesheet (A4, two pages, no wp-admin chrome).
  *

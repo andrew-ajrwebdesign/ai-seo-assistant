@@ -272,6 +272,18 @@ class Opportunity {
 		$curve[50] = min( round( self::CURVE[50] * self::nearest_ratio( $own, 50.0 ), 2 ), $curve[40] );
 		$used      = count( $own );
 
+		// Sanity gate: a site curve whose position 1 is below the built-in position 5 says more about what
+		// the site's searches are (maps, weather, names) than about how its listings are clicked: built-in.
+		if ( $curve[1] < self::CURVE[5] ) {
+			return [
+				'curve'    => self::CURVE,
+				'site'     => false,
+				'searches' => $searches,
+				'buckets'  => $used,
+				'reason'   => 'implausible',
+			];
+		}
+
 		return [
 			'curve'    => $curve,
 			'site'     => true,
@@ -442,11 +454,13 @@ class Opportunity {
 			}
 			$rest_shown = max( 0, $shown - $q_shown );
 			if ( $rest_shown > 0 && $pos > 0 ) {
-				// Searches Google does not name are most likely like the ones it does: the remainder takes their
-				// impressions-weighted intent weight (1 when none is sorted).
+				// Searches Google does not name (and, with a country filter on the search list, foreign ones):
+				// the named searches' intent mix, never above "comparing", × a low weight (0.25, filterable):
+				// they cannot be written for, and many are not the business's customers.
 				$named          = array_filter( $rows, static fn( $r ) => 'unknown' !== $r['intent'] );
 				$shown_named    = array_sum( array_column( $named, 'impressions' ) );
-				$weight         = $shown_named > 0 ? array_sum( array_map( static fn( $r ) => $r['weight'] * $r['impressions'], $named ) ) / $shown_named : Intent::UNKNOWN_WEIGHT;
+				$mix_weight     = $shown_named > 0 ? array_sum( array_map( static fn( $r ) => $r['weight'] * $r['impressions'], $named ) ) / $shown_named : Intent::UNKNOWN_WEIGHT;
+				$weight         = min( $mix_weight, Intent::WEIGHTS['commercial'] ) * self::unnamed_weight();
 				$rest           = self::row( '', $rest_shown, max( 0, min( $rest_shown, $clicks - $q_clicks ) ), $pos, 'unnamed', true );
 				$rest['weight'] = $weight;
 				$rows[]         = $rest + [ 'remain' => true ];
@@ -499,10 +513,45 @@ class Opportunity {
 			'ctr'         => round( $ctr, 2 ),
 			'expected'    => $expected,
 			'missed'      => max( 0.0, $shown * ( $expected - $ctr ) / 100 ) * ( $reach ? self::reach( $position ) : 1.0 ),
-			'prize'       => $position > 3 ? max( 0.0, $shown * ( $at_three - $ctr ) / 100 ) : 0.0,
+			'prize'       => $position > 3 ? max( 0.0, $shown * ( $at_three - $ctr ) / 100 ) * self::feasibility( $position ) : 0.0,
 			'intent'      => $intent,
 			'weight'      => Intent::weight( $intent ),
 		];
+	}
+
+	/**
+	 * How likely a search can be lifted to position 3 at all: 1 from page 1, 0.5 from 11–20, 0.2 from 21–30,
+	 * 0.05 from further down (a page at 45 needs far more than a better listing).
+	 *
+	 * @param float $position Position.
+	 */
+	public static function feasibility( float $position ): float {
+		if ( $position <= 10 ) {
+			return 1.0;
+		}
+		if ( $position <= 20 ) {
+			return 0.5;
+		}
+
+		return $position <= 30 ? 0.2 : 0.05;
+	}
+
+	/**
+	 * The weight of the searches Google does not name (filterable, default 0.25).
+	 */
+	public static function unnamed_weight(): float {
+		$w = 0.25;
+		if ( function_exists( 'apply_filters' ) ) {
+			/**
+			 * Filters the weight of a page's unnamed searches (anonymised, and foreign when the search list is
+			 * country-filtered) in the opportunity value.
+			 *
+			 * @param float $w Weight, 0–1.
+			 */
+			$w = (float) apply_filters( 'ai_seo_assistant_unnamed_weight', $w );
+		}
+
+		return max( 0.0, min( 1.0, $w ) );
 	}
 
 	/**
@@ -641,7 +690,8 @@ class Opportunity {
 	 * @param int $site_visits    Site visits (all pages).
 	 */
 	public static function earns_bump( int $enquiries, int $visits, int $site_enquiries, int $site_visits ): bool {
-		if ( $site_enquiries < 10 || $site_visits <= 0 || $visits <= 0 || $enquiries <= 0 ) {
+		// The site needs 10 tracked enquiries and the page 2 of its own: one enquiry is not a rate.
+		if ( $site_enquiries < 10 || $site_visits <= 0 || $visits <= 0 || $enquiries < 2 ) {
 			return false;
 		}
 

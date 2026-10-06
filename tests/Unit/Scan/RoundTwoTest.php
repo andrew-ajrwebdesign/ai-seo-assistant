@@ -58,16 +58,19 @@ class RoundTwoTest extends TestCase {
 	 */
 	public function test_intent_rules(): void {
 		$rules = Intent::GENERIC;
-		$brand = [ 'Welcome to Boise and Beyond', 'Jennifer Louis' ];
+		$brand = [ 'Example Realty', 'Jane Example' ];
 		$this->assertSame( 'lead', Intent::by_rules( 'boise realtor near me', $rules, $brand ) );
 		$this->assertSame( 'commercial', Intent::by_rules( 'best neighborhoods boise', $rules, $brand ) );
 		$this->assertSame( 'informational', Intent::by_rules( 'boise idaho weather', $rules, $brand ) );
 		$this->assertSame( 'informational', Intent::by_rules( 'cost of living boise', $rules, $brand ), '"cost of living" beats "cost"' );
-		$this->assertSame( 'navigational', Intent::by_rules( 'jennifer louis boise', $rules, $brand ) );
+		$this->assertSame( 'navigational', Intent::by_rules( 'jane example boise', $rules, $brand ) );
 		$this->assertSame( '', Intent::by_rules( 'boise idaho', $rules, $brand ), 'no rule: left for Claude' );
 		$this->assertSame( '', Intent::by_rules( 'bestow gifts', $rules, $brand ), 'whole words only' );
 		$this->assertSame( 3.0, Intent::weight( 'lead' ) );
-		$this->assertSame( 0.5, Intent::weight( 'navigational' ) );
+		$this->assertSame( 0.0, Intent::weight( 'navigational' ), 'looking for a business by name: nothing to win' );
+		$this->assertSame( 'navigational', Intent::by_rules( 'zillow boise', array_merge( $rules, [ 'navigational' => Intent::competitors( 'RealEstateAgent' ) ] ), $brand ), 'a competitor wins over everything' );
+		$this->assertSame( 'navigational', Intent::by_rules( 'cityhall.gov boise minutes', $rules, $brand ), 'a web address' );
+		$this->assertSame( '', Intent::by_rules( 'elementary near me', $rules, $brand ), 'no bare "near me" lead' );
 		$this->assertSame( 1.0, Intent::weight( 'unknown' ), 'unsorted counts as learning, never upwards' );
 	}
 
@@ -115,7 +118,25 @@ class RoundTwoTest extends TestCase {
 		$gsc['impressions'] = 4000;
 		$split              = Opportunity::breakdown( $gsc, static fn( $q ) => false !== strpos( $q, 'realtor' ) ? 'lead' : 'informational' );
 		$rest               = array_values( array_filter( $split['rows'], static fn( $r ) => $r['remain'] ) )[0];
-		$this->assertEqualsWithDelta( ( 3 * 1000 + 1 * 2000 ) / 3000, $rest['weight'], 0.0001 );
+		$this->assertEqualsWithDelta( 0.25 * ( 3 * 1000 + 1 * 2000 ) / 3000, $rest['weight'], 0.0001, 'the named mix × 0.25' );
+		$all_lead = Opportunity::breakdown( $gsc, static fn( $q ) => 'lead' );
+		$rest     = array_values( array_filter( $all_lead['rows'], static fn( $r ) => $r['remain'] ) )[0];
+		$this->assertEqualsWithDelta( 0.25 * 2.0, $rest['weight'], 0.0001, 'never above "comparing"' );
+		$this->assertSame( 1.0, Opportunity::feasibility( 9.0 ) );
+		$this->assertSame( 0.5, Opportunity::feasibility( 15.0 ) );
+		$this->assertSame( 0.2, Opportunity::feasibility( 25.0 ) );
+		$this->assertSame( 0.05, Opportunity::feasibility( 45.0 ) );
+		$far = Opportunity::breakdown(
+			[
+				'impressions' => 1000,
+				'clicks'      => 0,
+				'position'    => 45.0,
+				'queries'     => [ [ 'query' => 'x', 'impressions' => 1000, 'clicks' => 0, 'position' => 45.0 ] ],
+			]
+		);
+		$this->assertEqualsWithDelta( 1000 * 7.2 / 100 * 0.05, $far['prize'], 0.0001, 'a search on page 5 is a long shot' );
+		$this->assertFalse( Opportunity::earns_bump( 1, 10, 20, 2000 ), 'one enquiry is not a rate' );
+		$this->assertTrue( Opportunity::earns_bump( 2, 20, 20, 2000 ) );
 		$this->assertSame( 'unnamed', $rest['intent'] );
 		$this->assertSame( [ 'informational' => 0.667, 'lead' => 0.333 ], $split['mix'] );
 	}
@@ -200,6 +221,66 @@ class RoundTwoTest extends TestCase {
 		$this->assertSame( 'prize', \AJR\SEOAssistant\Scan\Ranking::mode() );
 		$meta = 'everything';
 		$this->assertSame( 'quick', \AJR\SEOAssistant\Scan\Ranking::mode(), 'anything else: the default' );
+	}
+
+	/**
+	 * The main search: real traffic, not a business's name, a learning search only when on topic; and the
+	 * title check ignores stopwords and simple endings.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_main_query_and_title_match(): void {
+		$page = [
+			'gsc' => [
+				'impressions' => 1000,
+				'queries'     => [
+					[ 'query' => 'zillow idaho', 'clicks' => 9, 'impressions' => 400 ],
+					[ 'query' => 'boise weather', 'clicks' => 5, 'impressions' => 300 ],
+					[ 'query' => 'boise plumber', 'clicks' => 4, 'impressions' => 100 ],
+					[ 'query' => 'tiny search', 'clicks' => 1, 'impressions' => 10 ],
+				],
+			],
+		];
+		\WP_Mock::userFunction( 'wp_specialchars_decode' )->andReturnArg( 0 );
+		\WP_Mock::userFunction( 'get_bloginfo' )->andReturn( 'Northfield Plumbing' );
+		\WP_Mock::userFunction( 'home_url' )->andReturn( 'https://northfieldplumbing.example' );
+		\WP_Mock::userFunction( 'wp_parse_url' )->andReturnUsing( fn( $u, $c = -1 ) => parse_url( $u, $c ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- test double.
+		\WP_Mock::onFilter( 'ai_seo_assistant_competitors' )->with( Intent::COMPETITORS[''], '' )->reply( array_merge( Intent::COMPETITORS[''], [ 'zillow' ] ) );
+		$this->assertSame( 'boise plumber', \AJR\SEOAssistant\Scan\Scanner::main_query( $page, 'Emergency Plumber in Boise plumbing' ), 'a competitor and an off-topic learning search skipped' );
+		$this->assertSame( 'boise weather', \AJR\SEOAssistant\Scan\Scanner::main_query( $page, 'Boise Area Weather' ), 'on topic: kept' );
+		$this->assertSame( '', \AJR\SEOAssistant\Scan\Scanner::main_query( [ 'gsc' => [ 'impressions' => 1000, 'queries' => [ [ 'query' => 'tiny search', 'clicks' => 1, 'impressions' => 10 ] ] ] ] ), 'no search with real traffic' );
+
+		$this->assertTrue( \AJR\SEOAssistant\Scan\Rules::contains_query( 'Water Heater Installation in Northfield', 'water heaters installed near me' ) === false, '"installed" is not "installation"' );
+		$this->assertTrue( \AJR\SEOAssistant\Scan\Rules::contains_query( 'Water Heaters | Northfield', 'water heater in northfield' ), 'plural and stopword' );
+		$this->assertTrue( \AJR\SEOAssistant\Scan\Rules::contains_query( 'Home Selling Guide for Boise', 'boise home sellings' ) );
+	}
+
+	/**
+	 * Golden set: 60 real estate-agent searches labelled by hand; rules first, then the cached Haiku
+	 * answers for what the rules leave, must agree on at least 90%.
+	 */
+	public function test_intent_golden_set(): void {
+		$golden = json_decode( (string) file_get_contents( dirname( __DIR__, 2 ) . '/fixtures/intent-golden.json' ), true );
+		$rules  = Intent::GENERIC;
+		foreach ( Intent::BY_TYPE[ $golden['business_type'] ] as $intent => $phrases ) {
+			$rules[ $intent ] = array_merge( $rules[ $intent ] ?? [], $phrases );
+		}
+		$rules['navigational'] = Intent::competitors( $golden['business_type'] );
+		$right                 = 0;
+		$misses                = [];
+		foreach ( $golden['items'] as $item ) {
+			$got = Intent::by_rules( $item['q'], $rules, $golden['brand'] );
+			$got = '' !== $got ? $got : ( $item['cached'] ?? 'unknown' );
+			if ( $got === $item['expect'] ) {
+				++$right;
+			} else {
+				$misses[] = $item['q'] . ' → ' . $got . ' (expected ' . $item['expect'] . ')';
+			}
+		}
+		$accuracy = $right / count( $golden['items'] );
+		fwrite( STDERR, sprintf( "\nIntent golden set: %d of %d right (%.0f%%)%s\n", $right, count( $golden['items'] ), 100 * $accuracy, [] === $misses ? '' : ': ' . implode( '; ', $misses ) ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fwrite -- test output.
+		$this->assertGreaterThanOrEqual( 0.9, $accuracy, implode( '; ', $misses ) );
 	}
 
 	/**

@@ -370,7 +370,7 @@ class Rules {
 
 	/**
 	 * Alt texts the page prints on two or more DIFFERENT images (a builder module's copy-pasted alt, e.g.
-	 * "Moving To Boise Services" on a kitchen and a porch): such an alt describes at most one of them.
+	 * "Our Services" on a kitchen and a porch): such an alt describes at most one of them.
 	 *
 	 * @param array<int,array<string,mixed>> $images Page images.
 	 * @return array<string,true> alt_key() => true.
@@ -550,17 +550,55 @@ class Rules {
 	 * @param string $query Search.
 	 */
 	public static function contains_query( string $title, string $query ): bool {
-		$title = ' ' . self::normalise( $title ) . ' ';
-		foreach ( preg_split( '/\s+/u', self::normalise( $query ) ) as $word ) {
-			if ( mb_strlen( $word ) >= 3 && false === strpos( $title, $word ) ) {
-				// Plurals: "heaters" in the title covers "heater" in the search, and the reverse.
-				if ( false === strpos( $title, rtrim( $word, 's' ) ) ) {
-					return false;
-				}
+		$have = array_flip( self::stems( $title ) );
+		foreach ( self::stems( $query ) as $stem ) {
+			if ( ! isset( $have[ $stem ] ) ) {
+				return false;
 			}
 		}
 
 		return true;
+	}
+
+	/**
+	 * Whether a search is about the page's topic: more than half its meaningful words (stemmed) are in the
+	 * page's title or path. A shared town name alone ("boise weather" on a Boise plumber's page) is not
+	 * enough: an informational search is only the page's main search when it is about what the page is about.
+	 *
+	 * @param string $query Search.
+	 * @param string $topic The page's title and path.
+	 */
+	public static function shares_topic( string $query, string $topic ): bool {
+		$words = self::stems( $query );
+
+		return [] !== $words && count( array_intersect( $words, self::stems( $topic ) ) ) * 2 > count( $words );
+	}
+
+	/**
+	 * A text's meaningful words, simply stemmed: lower case, stopwords out (in, the, near, me…), and
+	 * "heaters", "heating", "sellings" matched as "heater", "heat", "sell".
+	 *
+	 * @param string $text Text.
+	 * @return array<int,string>
+	 */
+	public static function stems( string $text ): array {
+		static $stop = [ 'a', 'an', 'the', 'in', 'on', 'of', 'for', 'to', 'and', 'or', 'at', 'by', 'with', 'from', 'near', 'me', 'my', 'is', 'are', 'it', 'its', 'id', 'how', 'what', 'do', 'does', 'i', 'you', 'your', 'vs' ];
+		$out         = [];
+		foreach ( preg_split( '/\s+/u', self::normalise( $text ) ) as $word ) {
+			if ( '' === $word || mb_strlen( $word ) < 2 || in_array( $word, $stop, true ) ) {
+				continue;
+			}
+			// Plural first ("sellings" → "selling"), then -ing ("selling" → "sell").
+			if ( mb_strlen( $word ) > 3 && str_ends_with( $word, 's' ) && ! str_ends_with( $word, 'ss' ) ) {
+				$word = mb_substr( $word, 0, -1 );
+			}
+			if ( mb_strlen( $word ) > 5 && str_ends_with( $word, 'ing' ) ) {
+				$word = mb_substr( $word, 0, -3 );
+			}
+			$out[] = $word;
+		}
+
+		return array_values( array_unique( $out ) );
 	}
 
 	/**

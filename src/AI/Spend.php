@@ -12,7 +12,7 @@
  * call with a small reserve for the call about to happen, so a site at $9.99 cannot start a 6¢ request.
  * The editor box goes through the same Claude_Client, so it is capped too.
  *
- * BILLING MONTH. The client's own month, anchored on the billing day (Jennifer: the 17th → 17 Sep–16 Oct),
+ * BILLING MONTH. The client's own month, anchored on the billing day (billing day 17 → 17 Sep–16 Oct),
  * because the retainer and its monthly report run on that cycle. The day comes from the push (retainer-scan
  * knows it: weekly-sites.json) when one has arrived, else from the Settings field, else the 1st.
  *

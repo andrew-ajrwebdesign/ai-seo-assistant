@@ -526,9 +526,9 @@ class Scan_Page {
 		$used  = $curve['site']
 			/* translators: %s: number of searches (impressions). */
 			? sprintf( __( 'click curve: this site’s own (from %s searches)', 'ai-seo-assistant' ), number_format_i18n( $curve['searches'] ) )
-			: __( 'click curve: standard', 'ai-seo-assistant' );
+			: ( 'implausible' === ( $curve['reason'] ?? '' ) ? __( 'click curve: standard (this site’s own searches gave an implausible one)', 'ai-seo-assistant' ) : __( 'click curve: standard', 'ai-seo-assistant' ) );
 		/* translators: 1: which click curve, 2: pages shown, 3: pages in all. */
-		echo '<p class="aisa-small">' . esc_html( sprintf( __( 'Tiers scale with this site: High is the few top pages that together hold half of its opportunity, Medium the pages holding the next quarter, Low the rest. Estimates, a year. Quick win = the extra visits a better title and description could bring at today’s position: for each search, impressions × (expected CTR at that position − actual CTR); searches past position 20 add almost nothing. Top-3 prize = the extra visits if each search reached position 3. Each search is weighted by intent (ready to enquire ×3, comparing ×2, learning ×1, looking for you by name ×0.5) and the page by its type (service and contact ×1.5, area ×1.2, articles ×0.6). %1$s. Showing %2$d of %3$d pages.', 'ai-seo-assistant' ), ucfirst( $used ), count( $shown ), $all ) ) . '</p>';
+		echo '<p class="aisa-small">' . esc_html( sprintf( __( 'Tiers scale with this site: High is the few top pages that together hold half of its opportunity, Medium the pages holding the next quarter, Low the rest. Estimates, a year. Quick win = the extra visits a better title and description could bring at today’s position: for each search, impressions × (expected CTR at that position − actual CTR); searches past position 20 add almost nothing. Top-3 prize = the extra visits if each search reached position 3. Each search is weighted by intent (ready to enquire ×3, comparing ×2, learning ×1, looking for a business by name ×0; searches Google does not name ×0.25) and the page by its type (service and contact ×1.5, area ×1.2, articles ×0.6). The prize counts a search on page 2 at half, page 3 at a fifth, further down at a twentieth. These are estimates, not promises. %1$s. Showing %2$d of %3$d pages.', 'ai-seo-assistant' ), ucfirst( $used ), count( $shown ), $all ) ) . '</p>';
 		echo '</section>';
 	}
 
@@ -764,7 +764,7 @@ class Scan_Page {
 			. '<th scope="col" class="aisa-num">' . esc_html__( 'CTR', 'ai-seo-assistant' ) . '</th>'
 			. ( $extra ? '<th scope="col" class="aisa-num"><abbr title="' . esc_attr__( 'Quick win: extra visits a year from a better listing at today’s position', 'ai-seo-assistant' ) . '">' . esc_html__( 'Quick win', 'ai-seo-assistant' ) . '</abbr></th><th scope="col" class="aisa-num"><abbr title="' . esc_attr__( 'Top-3 prize: extra visits a year at position 3', 'ai-seo-assistant' ) . '">' . esc_html__( 'Top 3', 'ai-seo-assistant' ) . '</abbr></th>' : '' )
 			. '</tr></thead><tbody>';
-		$main = Scanner::main_query( $page );
+		$main = Scanner::main_query( $page, (string) ( $r['title'] ?? '' ) . ' ' . str_replace( [ '/', '-' ], ' ', (string) ( $r['path'] ?? '' ) ) );
 		foreach ( $queries as $q ) {
 			$b = $by[ $q['query'] ] ?? null;
 			echo '<tr><th scope="row"' . ( $q['query'] === $main ? ' class="aisa-strong"' : '' ) . '>' . esc_html( $q['query'] ) . ( $extra ? ' ' . self::intent_tag( (string) ( $b['intent'] ?? 'unknown' ) ) : '' ) . '</th>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in intent_tag().
@@ -1442,11 +1442,12 @@ class Scan_Page {
 	protected static function visits_year( float $visits ): string {
 		$n = Opportunity::rounded( $visits );
 		if ( null === $n ) {
-			return __( '< 5 visits a year', 'ai-seo-assistant' );
+			return __( '< 5 visits a year (est.)', 'ai-seo-assistant' );
 		}
 
+		// Always labelled an estimate: a model of what a better listing could bring, never a promise.
 		/* translators: %s: number of visits. */
-		return sprintf( _n( '≈ %s visit a year', '≈ %s visits a year', $n, 'ai-seo-assistant' ), number_format_i18n( $n ) );
+		return sprintf( _n( '≈ %s visit a year (est.)', '≈ %s visits a year (est.)', $n, 'ai-seo-assistant' ), number_format_i18n( $n ) );
 	}
 
 	/**

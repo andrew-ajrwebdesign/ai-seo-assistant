@@ -30,6 +30,7 @@ use AJR\SEOAssistant\Content\Business;
 use AJR\SEOAssistant\Content\Content_Extractor;
 use AJR\SEOAssistant\Core\Utils;
 use AJR\SEOAssistant\Scan\Google_Reads;
+use AJR\SEOAssistant\Scan\Intent;
 use AJR\SEOAssistant\Scan\Opportunity;
 use AJR\SEOAssistant\Scan\Page_Role;
 use AJR\SEOAssistant\Scan\Ranking;
@@ -97,12 +98,12 @@ class Page_Review {
 	/**
 	 * Images on the page that need alt text, with an attachment to write to.
 	 *
-	 * ⛔ NEVER REPLACE A GOOD ALT BLIND (Andrew, 2026-10-06: Claude replaced "Boise's Capitol Building" with
+	 * ⛔ NEVER REPLACE A GOOD ALT BLIND (Andrew, 2026-10-06: Claude replaced a correct landmark alt with
 	 * a guess). Every image is looked at (Claude gets the photo), and its mode decides what Claude may do:
 	 * - 'write': neither the page nor the Media Library has a real alt (empty, one short word, the file
 	 *   name): Claude writes one from the photo, ticked to apply.
 	 * - 'sync':  the page prints something other than the Media Library's alt (a builder module with its own
-	 *   alt field, e.g. Divi printing "Moving To Boise Services" on a kitchen photo): Claude says which is
+	 *   alt field, e.g. Divi printing "Our Services" on a kitchen photo): Claude says which is
 	 *   right for the photo, or corrects both; ticked only when what the page prints is empty or poor.
 	 * - 'check': the page prints the Media Library's good alt: Claude only says whether it is WRONG for the
 	 *   photo (never restyles it); a correction is shown unticked beside the old alt.
@@ -212,7 +213,8 @@ class Page_Review {
 				'permalink'           => (string) get_permalink( $post ),
 				'content'             => $content,
 				'current'             => $current,
-				'queries'             => (array) ( $page['gsc']['queries'] ?? [] ),
+				'queries'             => array_map( static fn( $q ) => $q + [ 'intent' => Intent::of( (string) ( $q['query'] ?? '' ) ) ], (array) ( $page['gsc']['queries'] ?? [] ) ),
+				'main_query'          => Scanner::main_query( $page, wp_strip_all_tags( get_the_title( $post ) ) . ' ' . str_replace( [ '/', '-' ], ' ', (string) $row['path'] ) ),
 				'totals'              => null === $page ? [] : [
 					'clicks'       => (int) $page['gsc']['clicks'],
 					'impressions'  => (int) $page['gsc']['impressions'],
