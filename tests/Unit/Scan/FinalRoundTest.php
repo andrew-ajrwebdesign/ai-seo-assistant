@@ -305,6 +305,43 @@ class FinalRoundTest extends TestCase {
 	}
 
 	/**
+	 * Zero-click searches: Google answers them on the results page (weather at position 2.3 with 0.1% CTR),
+	 * so they are weighted 0.1, flagged, and kept out of the site's click curve. Words alone never decide.
+	 */
+	public function test_zero_click_searches(): void {
+		\WP_Mock::userFunction( 'apply_filters' )->andReturnUsing( fn( $h, $v ) => $v );
+		$o = \AJR\SEOAssistant\Scan\Opportunity::class;
+		$this->assertTrue( $o::zero_click( 'boise idaho weather', 20000, 20, 2.3 ), 'near the top, seen a lot, barely clicked' );
+		$this->assertTrue( $o::zero_click( 'boise population 2026', 500, 3, 2.0 ), 'any search that under-clicks that badly at the top' );
+		$this->assertFalse( $o::zero_click( 'boise realtor', 20000, 1500, 2.3 ), 'a normal click rate' );
+		$this->assertFalse( $o::zero_click( 'boise realtor', 200, 0, 2.3 ), 'too few impressions to judge' );
+		$this->assertFalse( $o::zero_click( 'boise realtor', 1000, 30, 2.0 ), '3% at position 2 under-clicks, but above a sixth of 15%' );
+		$this->assertTrue( $o::zero_click( 'boise realtor', 1000, 24, 2.0 ), '2.4%: under a sixth of 15%' );
+		$this->assertFalse( $o::zero_click( 'boise realtor', 5000, 2, 7.0 ), 'below position 5, without the words: not judged' );
+		$this->assertTrue( $o::zero_click( 'weather in eagle idaho', 150, 0, 7.0 ), 'the words, AND under-clicking' );
+		$this->assertFalse( $o::zero_click( 'weather in eagle idaho', 150, 10, 7.0 ), 'the words alone never decide' );
+		$this->assertFalse( $o::zero_click( 'weatherby homes', 5000, 2, 7.0 ), 'whole words only' );
+
+		$b   = $o::breakdown(
+			[
+				'impressions' => 25000,
+				'clicks'      => 520,
+				'position'    => 3.0,
+				'queries'     => [
+					[ 'query' => 'boise idaho weather', 'impressions' => 20000, 'clicks' => 20, 'position' => 2.3 ],
+					[ 'query' => 'moving to boise', 'impressions' => 5000, 'clicks' => 500, 'position' => 3.5 ],
+				],
+			],
+			static fn( $q ) => false !== strpos( $q, 'weather' ) ? 'informational' : 'commercial'
+		);
+		$by  = array_column( $b['rows'], null, 'query' );
+		$this->assertTrue( $by['boise idaho weather']['zero_click'] );
+		$this->assertSame( 0.1, $by['boise idaho weather']['weight'] );
+		$this->assertFalse( $by['moving to boise']['zero_click'] );
+		$this->assertLessThan( 0.25 * $b['missed'], $b['weighted'], 'the unwinnable weather clicks hardly count' );
+	}
+
+	/**
 	 * Item 18: the noise fixes in the rules.
 	 */
 	public function test_scan_noise(): void {

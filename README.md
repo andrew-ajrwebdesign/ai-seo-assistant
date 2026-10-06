@@ -64,6 +64,8 @@ Opening a page review also rescans that page if it was edited since its last sca
 
 Pages are ranked by the extra visits a year a better listing could win (`src/Scan/Opportunity.php`, `src/Scan/Intent.php`; decisions 2026-10-06).
 
+A search Google answers on the results page itself (weather, time, distances, codes…) is **zero-click**: at position 5 or better, 300+ impressions in 90 days, and clicked under a sixth of what that position earns on the built-in curve. Words such as "weather" or "how far" count only when the search also under-clicks (page 1, 100+ impressions, under a third). A zero-click search weighs 0.1 (filter `ai_seo_assistant_zero_click_weight`), is left out of the site's click curve, and the review says "Google answers this search itself (few clicks possible)".
+
 ```
 quick win (a year) = Σ per top search: impressions × max(0, expected CTR at its position − its CTR) × reach × 365/90
                      + the unnamed rest at the page's average position

@@ -141,6 +141,65 @@ class Opportunity {
 	 */
 	protected static ?array $base = null;
 
+	/** Weight of a search Google answers on the results page itself (filter ai_seo_assistant_zero_click_weight). */
+	public const ZERO_CLICK_WEIGHT = 0.1;
+
+	/**
+	 * Words of searches Google often answers itself (weather, time, distances, codes). A second signal only:
+	 * a search is zero-click by these words alone never, only when it also under-clicks.
+	 */
+	public const ZERO_CLICK_WORDS = [ 'weather', 'forecast', 'temperature', 'time in', 'distance', 'how far', 'population', 'zip code', 'area code', 'sunrise', 'sunset' ];
+
+	/**
+	 * Whether Google answers this search on the results page itself, so its clicks can never be won
+	 * (weather, time, conversions, definitions, scores). Decided from the clicks, against the BUILT-IN curve
+	 * (the site's own could be dragged down by these very searches):
+	 *   - near the top (position ≤ 5), seen enough (≥ 300 impressions in 90 days) and clicked under a sixth
+	 *     of what that position earns; or
+	 *   - its words say so (ZERO_CLICK_WORDS) and it still under-clicks: on page 1, ≥ 100 impressions, under
+	 *     a third of what the position earns. Never by the words alone.
+	 *
+	 * @param string $query    Search.
+	 * @param int    $shown    Impressions (90 days).
+	 * @param int    $clicks   Clicks.
+	 * @param float  $position Position.
+	 */
+	public static function zero_click( string $query, int $shown, int $clicks, float $position ): bool {
+		if ( $shown <= 0 || $position < 1 ) {
+			return false;
+		}
+		$ctr      = 100 * $clicks / $shown;
+		$expected = self::interpolate( self::CURVE, $position );
+		if ( $position <= 5 && $shown >= 300 && $ctr < $expected / 6 ) {
+			return true;
+		}
+		$q = ' ' . strtolower( $query ) . ' ';
+		foreach ( self::ZERO_CLICK_WORDS as $word ) {
+			if ( false !== strpos( $q, ' ' . $word . ' ' ) ) {
+				return $position <= 10 && $shown >= 100 && $ctr < $expected / 3;
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * The zero-click weight (filterable, default 0.1).
+	 */
+	public static function zero_click_weight(): float {
+		$w = self::ZERO_CLICK_WEIGHT;
+		if ( function_exists( 'apply_filters' ) ) {
+			/**
+			 * Filters the weight of a search Google answers itself (few clicks possible).
+			 *
+			 * @param float $w Weight, 0–1.
+			 */
+			$w = (float) apply_filters( 'ai_seo_assistant_zero_click_weight', $w );
+		}
+
+		return max( 0.0, min( 1.0, $w ) );
+	}
+
 	/**
 	 * Use a calibrated curve (site_curve()['curve']) in place of the built-in one; null restores it.
 	 *
@@ -450,7 +509,13 @@ class Opportunity {
 				$q_shown  += $imp;
 				$q_clicks += $clk;
 				$text      = (string) ( $q['query'] ?? '' );
-				$rows[]    = self::row( $text, $imp, $clk, (float) $q['position'], null !== $intent ? (string) $intent( $text ) : 'unknown', true );
+				$row       = self::row( $text, $imp, $clk, (float) $q['position'], null !== $intent ? (string) $intent( $text ) : 'unknown', true );
+				if ( self::zero_click( $text, $imp, $clk, (float) $q['position'] ) ) {
+					// Google answers it on the results page: few of its clicks can ever be won.
+					$row['zero_click'] = true;
+					$row['weight']     = min( $row['weight'], self::zero_click_weight() );
+				}
+				$rows[] = $row;
 			}
 			$rest_shown = max( 0, $shown - $q_shown );
 			if ( $rest_shown > 0 && $pos > 0 ) {
@@ -469,7 +534,10 @@ class Opportunity {
 
 		$mix = [];
 		foreach ( $rows as $i => $row ) {
-			$rows[ $i ]            += [ 'remain' => false ];
+			$rows[ $i ]            += [
+				'remain'     => false,
+				'zero_click' => false,
+			];
 			$out['missed']         += $row['missed'];
 			$out['prize']          += $row['prize'];
 			$out['weighted']       += $row['missed'] * $row['weight'];

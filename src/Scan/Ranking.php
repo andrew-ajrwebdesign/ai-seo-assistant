@@ -63,7 +63,7 @@ class Ranking {
 	 */
 	public static function curve(): array {
 		$meta = Page_Data::meta();
-		$key  = $meta['end'] . '|' . $meta['generated_at'] . '|buy-only'; // Changed when what the curve is built from changes.
+		$key  = $meta['end'] . '|' . $meta['generated_at'] . '|buy-only|no-zero-click'; // Changed when what the curve is built from changes.
 		$held = get_option( self::CURVE_OPTION, [] );
 		if ( is_array( $held ) && ( $held['key'] ?? '' ) === $key && is_array( $held['curve'] ?? null ) ) {
 			$info = $held['info'];
@@ -73,7 +73,9 @@ class Ranking {
 			// names are clicked differently and would drag the curve down.
 			foreach ( ( new Page_Data() )->all() as $page ) {
 				foreach ( (array) ( $page['gsc']['queries'] ?? [] ) as $q ) {
-					if ( in_array( Intent::of( (string) ( $q['query'] ?? '' ) ), [ 'commercial', 'lead' ], true ) ) {
+					// Nor searches Google answers itself: their few clicks say nothing about a listing's.
+					$zero = Opportunity::zero_click( (string) ( $q['query'] ?? '' ), (int) ( $q['impressions'] ?? 0 ), (int) ( $q['clicks'] ?? 0 ), (float) ( $q['position'] ?? 0 ) );
+					if ( ! $zero && in_array( Intent::of( (string) ( $q['query'] ?? '' ) ), [ 'commercial', 'lead' ], true ) ) {
 						$queries[] = $q;
 					}
 				}

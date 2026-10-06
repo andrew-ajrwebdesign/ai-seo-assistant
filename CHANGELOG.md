@@ -69,6 +69,7 @@ The product cut (decision 2026-10-06, `work/coding-projects/ai-seo-assistant/dec
   - Caches are primed in one query.
   - admin-ajax builds the admin stack only for this plugin's actions.
   - A page that crashes a step is skipped.
+- **Zero-click searches** (weather, time, distances…): detected from the clicks (top 5, 300+ impressions, under a sixth of the expected CTR), with a word list as a second signal that never decides alone. They weigh 0.1 (filterable), stay out of the site's click curve, and are labelled in the review's searches table.
 - **Fix:** the bulk bar's "Generate for selected (3)" label is no longer written into the button's icon span.
 
 ### Removed

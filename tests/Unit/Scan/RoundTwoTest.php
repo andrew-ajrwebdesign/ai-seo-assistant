@@ -97,19 +97,19 @@ class RoundTwoTest extends TestCase {
 	public function test_quick_win_and_prize(): void {
 		$gsc   = [
 			'impressions' => 3000,
-			'clicks'      => 10,
+			'clicks'      => 120,
 			'position'    => 8.0,
 			'queries'     => [
-				[ 'query' => 'boise realtor', 'impressions' => 1000, 'clicks' => 10, 'position' => 4.0 ],
-				[ 'query' => 'boise weather', 'impressions' => 2000, 'clicks' => 0, 'position' => 2.0 ],
+				[ 'query' => 'boise realtor', 'impressions' => 1000, 'clicks' => 20, 'position' => 4.0 ],
+				[ 'query' => 'boise weather', 'impressions' => 2000, 'clicks' => 100, 'position' => 2.0 ], // 5%: under-clicked, not zero-click.
 			],
 		];
 		$split = Opportunity::breakdown( $gsc, static fn( $q ) => false !== strpos( $q, 'realtor' ) ? 'lead' : 'informational' );
 		$by    = array_column( $split['rows'], null, 'query' );
-		$this->assertEqualsWithDelta( 1000 * ( 6.3 - 1.0 ) / 100, $by['boise realtor']['missed'], 0.001 );
-		$this->assertEqualsWithDelta( 1000 * ( 7.2 - 1.0 ) / 100, $by['boise realtor']['prize'], 0.001, 'at position 3: 7.2%' );
+		$this->assertEqualsWithDelta( 1000 * ( 6.3 - 2.0 ) / 100, $by['boise realtor']['missed'], 0.001 );
+		$this->assertEqualsWithDelta( 1000 * ( 7.2 - 2.0 ) / 100, $by['boise realtor']['prize'], 0.001, 'at position 3: 7.2%' );
 		$this->assertSame( 0.0, $by['boise weather']['prize'], 'already above position 3: no prize' );
-		$this->assertEqualsWithDelta( 53.0 * 3 + 300.0 * 1, $split['weighted'], 0.01 );
+		$this->assertEqualsWithDelta( 43.0 * 3 + 200.0 * 1, $split['weighted'], 0.01 );
 		$this->assertSame( [ 'informational' => 0.667, 'lead' => 0.333 ], $split['mix'] );
 		$this->assertSame( 'boise weather', $split['rows'][0]['query'], 'largest weighted quick win first' );
 		$this->assertEqualsWithDelta( 365.0, Opportunity::yearly( 90.0 ), 0.0001 );
