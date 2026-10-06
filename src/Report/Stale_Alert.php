@@ -33,8 +33,15 @@ class Stale_Alert {
 	/** Option holding the alert address (empty = the site admin email). */
 	public const ADDRESS = 'ai_seo_assistant_report_alert_email';
 
-	/** Days after a week's update was due before it counts as late — one rule, shared with the report. */
-	public const LATE_AFTER_DAYS = Report_View::LATE_AFTER_DAYS;
+	/**
+	 * Days after a week's update was due before it counts as late — one rule, shared with the report.
+	 *
+	 * Defined HERE, and Report_View points at it, not the other way round: this class is built on every
+	 * request (for its cron hook), and PHP resolves a constant that names another class's constant the
+	 * first time the class is used, so the old direction loaded the whole report renderer on every
+	 * visitor's page view (4.4.0, measured with get_included_files()).
+	 */
+	public const LATE_AFTER_DAYS = 8;
 
 	/**
 	 * Storage.
