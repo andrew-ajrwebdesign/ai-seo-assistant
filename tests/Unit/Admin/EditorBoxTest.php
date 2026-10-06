@@ -64,6 +64,16 @@ class EditorBoxTest extends TestCase {
 	}
 
 	/**
+	 * "Copy" copies the quoted text (the heading, the link words), else the instruction without "Fix:".
+	 */
+	public function test_copy_text(): void {
+		$this->assertSame( 'Meet Your Boise Relocation Specialist', Editor_Box::copy_text( [ 'detail' => 'Change “Meet Your Boise Relocation Specialist” from H4 to H3.', 'text' => 'x' ] ) );
+		$this->assertSame( 'Boise schools', Editor_Box::copy_text( [ 'detail' => 'Link here with "Boise schools".', 'text' => 'x' ] ) );
+		$this->assertSame( 'make it an H3.', Editor_Box::copy_text( [ 'detail' => 'Fix: make it an H3.', 'text' => 'x' ] ) );
+		$this->assertSame( 'Add a paragraph on enrolment dates.', Editor_Box::copy_text( [ 'detail' => '', 'text' => 'Add a paragraph on enrolment dates.' ] ) );
+	}
+
+	/**
 	 * Done before the last scan and still found: open again with a note. Done after it: collapsed until the
 	 * next scan. A finding the scan no longer reports is simply not listed.
 	 */

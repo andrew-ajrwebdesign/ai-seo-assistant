@@ -101,8 +101,10 @@ class Editor_Box {
 				'ajax'  => admin_url( 'admin-ajax.php' ),
 				'nonce' => wp_create_nonce( self::DONE ),
 				'i18n'  => [
-					'saving' => __( 'Saving…', 'ai-seo-assistant' ),
-					'failed' => __( 'Not saved. Try again.', 'ai-seo-assistant' ),
+					'saving'     => __( 'Saving…', 'ai-seo-assistant' ),
+					'failed'     => __( 'Not saved. Try again.', 'ai-seo-assistant' ),
+					'copied'     => __( 'Copied', 'ai-seo-assistant' ),
+					'copyFailed' => __( 'Select and copy', 'ai-seo-assistant' ),
 				],
 			]
 		);
@@ -158,8 +160,11 @@ class Editor_Box {
 				if ( '' !== $item['note'] ) {
 					echo '<span class="aisa-todo__detail">' . esc_html( $item['note'] ) . '</span>';
 				}
+				$copy = self::copy_text( $item );
+				/* translators: %s: the text copied. */
+				echo '<span class="aisa-todo__actions"><button type="button" class="button button-small" data-aisa-todo-copy="' . esc_attr( $copy ) . '" aria-label="' . esc_attr( sprintf( __( 'Copy: %s', 'ai-seo-assistant' ), $copy ) ) . '">' . esc_html__( 'Copy', 'ai-seo-assistant' ) . '</button> ';
 				/* translators: %s: the to-do. */
-				echo '<button type="button" class="button button-small" data-aisa-todo-done aria-label="' . esc_attr( sprintf( __( 'Mark done: %s', 'ai-seo-assistant' ), $item['text'] ) ) . '">' . esc_html__( 'Done', 'ai-seo-assistant' ) . '</button>';
+				echo '<button type="button" class="button button-small" data-aisa-todo-done aria-label="' . esc_attr( sprintf( __( 'Mark done: %s', 'ai-seo-assistant' ), $item['text'] ) ) . '">' . esc_html__( 'Done', 'ai-seo-assistant' ) . '</button></span>';
 			}
 			echo '</li>';
 		}
@@ -242,6 +247,21 @@ class Editor_Box {
 		}
 
 		return $out;
+	}
+
+	/**
+	 * What a to-do's "Copy" button copies: the text it quotes (the heading to change, the words to link
+	 * with), else the whole instruction.
+	 *
+	 * @param array<string,mixed> $item items() entry.
+	 */
+	public static function copy_text( array $item ): string {
+		$text = '' !== (string) $item['detail'] ? (string) $item['detail'] : (string) $item['text'];
+		if ( preg_match( '/[“"]([^”"]{2,200})[”"]/u', $text, $m ) ) {
+			return trim( $m[1] );
+		}
+
+		return trim( (string) preg_replace( '/^Fix:\s*/', '', $text ) );
 	}
 
 	/**

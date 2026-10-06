@@ -1,23 +1,125 @@
 /**
- * AI SEO Assistant — the editor's "SEO to-do for this page" box: the "Done" tick.
+ * AI SEO Assistant — the editor's "SEO to-do for this page" box: "Done" ticks, "Copy" buttons, and
+ * Ctrl+C / Ctrl+A that work inside the box.
  *
- * Posts the tick to admin-ajax (its own nonce; the server checks the tools capability and edit_post),
- * then collapses the item to "Done <date>" and updates the count. Nodes only, never an HTML string.
- * Vanilla JS, no dependencies; without it the box still links to the full review.
+ * WHY THE KEY HANDLER. Divi's backend builder listens for Ctrl+C on the window (to copy modules) and calls
+ * preventDefault, so selecting a to-do and pressing Ctrl+C copied nothing (Andrew, 2026-10-06; reproduced on
+ * a Divi page's edit screen). A capture listener on the window runs before Divi's: when the selection is in
+ * one of our panels it writes the selected text to the clipboard itself and stops the event there. Outside
+ * our panels it does nothing, so Divi's own shortcuts keep working.
+ *
+ * Nodes only, never an HTML string. Vanilla JS, no dependencies; without it the box still links to the
+ * full review and its text can be selected as usual.
  */
 ( function () {
 	'use strict';
 
-	const cfg = window.aisaEditor;
+	const cfg = window.aisaEditor || { i18n: {} };
+	const PANEL = '[data-aisa-todo-box], .aisa-tool';
+
+	/**
+	 * Put text on the clipboard: the async API, else a hidden textarea and execCommand.
+	 *
+	 * @param {string} text Text.
+	 * @return {Promise<boolean>} Whether it worked.
+	 */
+	async function copyText( text ) {
+		try {
+			if ( navigator.clipboard && window.isSecureContext ) {
+				await navigator.clipboard.writeText( text );
+				return true;
+			}
+		} catch ( e ) {
+			// Fall through to the textarea.
+		}
+		const area = document.createElement( 'textarea' );
+		area.value = text;
+		area.setAttribute( 'readonly', '' );
+		area.style.position = 'fixed';
+		area.style.insetInlineStart = '-9999px';
+		document.body.append( area );
+		area.select();
+		let ok = false;
+		try {
+			ok = document.execCommand( 'copy' );
+		} catch ( e ) {
+			ok = false;
+		}
+		area.remove();
+		return ok;
+	}
+
+	/**
+	 * The panel of ours a node is in, or null.
+	 *
+	 * @param {Node|null} node Node.
+	 * @return {Element|null} Panel.
+	 */
+	function panelOf( node ) {
+		const el = node && ( 1 === node.nodeType ? node : node.parentElement );
+		return el ? el.closest( PANEL ) : null;
+	}
+
+	// Ctrl/Cmd+C and Ctrl/Cmd+A inside our panels, before any other window listener (Divi's) sees them.
+	window.addEventListener(
+		'keydown',
+		( event ) => {
+			if ( ! ( event.ctrlKey || event.metaKey ) || event.altKey ) {
+				return;
+			}
+			const key = String( event.key ).toLowerCase();
+			const sel = window.getSelection();
+			if ( 'c' === key ) {
+				const text = sel ? sel.toString() : '';
+				if ( '' === text || ! panelOf( sel.anchorNode ) || ! panelOf( sel.focusNode ) ) {
+					return; // Not ours: leave it to the page (Divi's own copy keeps working).
+				}
+				event.stopImmediatePropagation();
+				copyText( text );
+				event.preventDefault(); // The text is already on its way to the clipboard.
+				return;
+			}
+			if ( 'a' === key ) {
+				const active = document.activeElement;
+				const item = active && active.closest ? active.closest( '[data-aisa-todo-box] [data-key]' ) : null;
+				const inPanel = sel && panelOf( sel.anchorNode );
+				const target = item || ( inPanel && sel.anchorNode && ( 1 === sel.anchorNode.nodeType ? sel.anchorNode : sel.anchorNode.parentElement ).closest( '[data-key]' ) );
+				if ( ! target ) {
+					return;
+				}
+				event.stopImmediatePropagation();
+				event.preventDefault();
+				const range = document.createRange();
+				range.selectNodeContents( target.querySelector( '.aisa-todo__text' ) || target );
+				sel.removeAllRanges();
+				sel.addRange( range );
+			}
+		},
+		true
+	);
+
 	const box = document.querySelector( '[data-aisa-todo-box]' );
-	if ( ! cfg || ! box ) {
+	if ( ! box ) {
 		return;
 	}
 	const live = box.querySelector( '[data-aisa-todo-live]' );
 
 	box.addEventListener( 'click', async ( event ) => {
+		const copy = event.target.closest( '[data-aisa-todo-copy]' );
+		if ( copy ) {
+			const ok = await copyText( copy.dataset.aisaTodoCopy || '' );
+			const label = copy.textContent;
+			copy.textContent = ok ? cfg.i18n.copied : cfg.i18n.copyFailed;
+			if ( live ) {
+				live.textContent = copy.textContent;
+			}
+			setTimeout( () => {
+				copy.textContent = label;
+			}, 1500 );
+			return;
+		}
 		const button = event.target.closest( '[data-aisa-todo-done]' );
-		if ( ! button ) {
+		if ( ! button || ! cfg.ajax ) {
 			return;
 		}
 		const item = button.closest( '[data-key]' );
@@ -37,7 +139,7 @@
 		}
 		// Collapse to the area, the to-do and "Done <date>".
 		item.classList.add( 'is-done' );
-		item.querySelectorAll( '.aisa-todo__detail' ).forEach( ( el ) => el.remove() );
+		item.querySelectorAll( '.aisa-todo__detail, [data-aisa-todo-copy]' ).forEach( ( el ) => el.remove() );
 		const when = document.createElement( 'span' );
 		when.className = 'aisa-todo__when';
 		when.textContent = res.data.label;

@@ -54,8 +54,18 @@
 	color: var(--aisa-todo-muted);
 }
 
-.aisa-todo__item .button {
-	justify-self: start;
+.aisa-todo__actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px;
+}
+
+/* The to-do text is plain text to select and copy (block editor panels can turn selection off). */
+.aisa-todo__text,
+.aisa-todo__detail {
+	-webkit-user-select: text;
+	user-select: text;
+	cursor: text;
 }
 
 .aisa-todo__item.is-done .aisa-todo__text {
