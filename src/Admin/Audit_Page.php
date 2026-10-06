@@ -19,6 +19,13 @@ class Audit_Page {
 	private $gsc_client;
 	private $screen_hook = '';
 
+	/**
+	 * Whether the last list query hit Utils::LIST_CAP.
+	 *
+	 * @var bool
+	 */
+	protected $truncated = false;
+
 	public function __construct( $tsf_adapter, $logger, $content_extractor, $local_seo_context, $gsc_client = null ) {
 		$this->tsf_adapter       = $tsf_adapter;
 		$this->logger            = $logger;
@@ -85,6 +92,12 @@ class Audit_Page {
 		?>
 		<div class="wrap">
 			<h1>Metadata Audit</h1>
+
+			<?php
+			if ( $this->truncated ) {
+				Utils::render_list_cap_notice();
+			}
+			?>
 
 			<p>
 				Review SEO titles, meta descriptions, indexing status, Local SEO/SEO Focus content match, and cached Google Search Console data.
@@ -276,20 +289,23 @@ class Audit_Page {
 		$items = [];
 
 		$query = new \WP_Query(
-			[
-				'post_type'      => $post_types,
-				'post_status'    => [ 'publish', 'draft', 'pending', 'private' ],
-				'posts_per_page' => -1,
-				'orderby'        => 'menu_order title',
-				'order'          => 'ASC',
-			]
+			Utils::capped_list_args(
+				[
+					'post_type'   => $post_types,
+					'post_status' => [ 'publish', 'draft', 'pending', 'private' ],
+					'orderby'     => 'menu_order title',
+					'order'       => 'ASC',
+				]
+			)
 		);
+
+		$this->truncated = count( $query->posts ) > Utils::LIST_CAP;
 
 		if ( ! $query->have_posts() ) {
 			return $items;
 		}
 
-		while ( $query->have_posts() ) {
+		while ( $query->have_posts() && $query->current_post + 1 < Utils::LIST_CAP ) {
 			$query->the_post();
 
 			$post_id = get_the_ID();
