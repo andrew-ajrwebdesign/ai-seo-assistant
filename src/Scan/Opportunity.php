@@ -33,7 +33,8 @@
  * "position 1 gets 28%" studies (Advanced Web Ranking's 2024–26 CTR curves, Backlinko 2023) from position 3
  * down, because a local service search shows a map pack and ads first; positions 1–2 follow the studies.
  * When the push carries enough of the site's own searches, site_curve() replaces it bucket by bucket with
- * the site's real CTR (a bucket needs 1,000 impressions, else the built-in value stays), smoothed so the
+ * the site's real CTR (a bucket needs 1,000 impressions, else the built-in value is scaled by the site's
+ * own ÷ built-in ratio at the nearest calibrated bucket), smoothed so the
  * curve never rises as position falls. Points between positions are interpolated in a straight line; past
  * 50 it is the last point. The `ai_seo_assistant_expected_ctr` filter still has the last word.
  *
@@ -194,10 +195,11 @@ class Opportunity {
 	 *
 	 * Searches are bucketed by rounded position (1 to 10 each, then 11–15, 16–20, 21–30, 31–50); a bucket with
 	 * at least MIN_BUCKET_IMPRESSIONS impressions sets its point to the impressions-weighted CTR (clicks ÷
-	 * impressions), any other keeps the built-in value. The points are then smoothed so the curve never rises
-	 * as position falls (weighted pool-adjacent-violators: a bucket out of order is averaged with its
-	 * neighbour, by impressions). A built-in point weighs 1, so where it disagrees with the site's own figures
-	 * it moves to them, never the other way round.
+	 * impressions). Any other bucket takes the built-in value scaled by own ÷ built-in at the nearest
+	 * calibrated bucket (decision 2026-10-06: a site whose position 2 gets 0.9%, not 15%, does not get 28% at
+	 * position 1 either). The points are then smoothed so the curve never rises as position falls (weighted
+	 * pool-adjacent-violators: a bucket out of order is averaged with its neighbour, by impressions). A scaled
+	 * point weighs 1, so where it disagrees with the site's own figures it moves to them.
 	 *
 	 * @param array<int,array<string,mixed>> $queries Rows with impressions, clicks (or ctr) and position.
 	 * @return array{curve:array<int,float>,site:bool,searches:int,buckets:int}
@@ -220,22 +222,15 @@ class Opportunity {
 			}
 		}
 
-		$values   = [];
-		$weights  = [];
-		$used     = 0;
+		$own      = [];
 		$searches = 0;
 		foreach ( self::BUCKETS as $i => $bucket ) {
 			if ( $shown[ $i ] >= self::MIN_BUCKET_IMPRESSIONS ) {
-				$values[]  = 100 * $clicks[ $i ] / $shown[ $i ];
-				$weights[] = (float) $shown[ $i ];
-				++$used;
+				$own[ $i ] = 100 * $clicks[ $i ] / $shown[ $i ];
 				$searches += $shown[ $i ];
-			} else {
-				$values[]  = self::interpolate( self::CURVE, (float) $bucket[2] );
-				$weights[] = 1.0;
 			}
 		}
-		if ( 0 === $used ) {
+		if ( [] === $own ) {
 			return [
 				'curve'    => self::CURVE,
 				'site'     => false,
@@ -243,12 +238,27 @@ class Opportunity {
 				'buckets'  => 0,
 			];
 		}
+
+		// A bucket without enough of the site's own searches takes the standard value scaled by the ratio
+		// own ÷ standard at the nearest calibrated bucket, so the whole curve sits at the site's level.
+		$values  = [];
+		$weights = [];
+		foreach ( self::BUCKETS as $i => $bucket ) {
+			if ( isset( $own[ $i ] ) ) {
+				$values[]  = $own[ $i ];
+				$weights[] = (float) $shown[ $i ];
+			} else {
+				$values[]  = self::interpolate( self::CURVE, (float) $bucket[2] ) * self::nearest_ratio( $own, (float) $bucket[2] );
+				$weights[] = 1.0;
+			}
+		}
 		$values = self::non_increasing( $values, $weights );
 		$curve  = [];
 		foreach ( self::BUCKETS as $i => $bucket ) {
 			$curve[ $bucket[2] ] = round( $values[ $i ], 2 );
 		}
-		$curve[50] = min( self::CURVE[50], $curve[40] );
+		$curve[50] = min( round( self::CURVE[50] * self::nearest_ratio( $own, 50.0 ), 2 ), $curve[40] );
+		$used      = count( $own );
 
 		return [
 			'curve'    => $curve,
@@ -256,6 +266,30 @@ class Opportunity {
 			'searches' => $searches,
 			'buckets'  => $used,
 		];
+	}
+
+	/**
+	 * The ratio own ÷ standard at the calibrated bucket nearest a position (the earlier one on a tie).
+	 *
+	 * @param array<int,float> $own      Calibrated CTR by bucket index.
+	 * @param float            $position Position.
+	 */
+	protected static function nearest_ratio( array $own, float $position ): float {
+		$best = null;
+		$gap  = INF;
+		foreach ( $own as $i => $value ) {
+			$at = (float) self::BUCKETS[ $i ][2];
+			if ( abs( $at - $position ) < $gap ) {
+				$gap  = abs( $at - $position );
+				$best = $i;
+			}
+		}
+		if ( null === $best ) {
+			return 1.0;
+		}
+		$standard = self::interpolate( self::CURVE, (float) self::BUCKETS[ $best ][2] );
+
+		return $standard > 0 ? $own[ $best ] / $standard : 1.0;
 	}
 
 	/**

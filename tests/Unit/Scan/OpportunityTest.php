@@ -147,7 +147,7 @@ class OpportunityTest extends TestCase {
 		$this->assertSame( 2, $out['buckets'] );
 		$this->assertSame( 4200, $out['searches'] );
 		$this->assertSame( 10.0, $out['curve'][1], 'bucket 1: 120 ÷ 1,200' );
-		$this->assertSame( 10.0, $out['curve'][2], 'built-in 15% at 2 is above the site’s 10% at 1: it moves to the site’s figure' );
+		$this->assertSame( 5.36, $out['curve'][2], 'thin bucket 2: built-in 15% × (10 ÷ 28) from the nearest calibrated bucket (1)' );
 		$this->assertSame( 1.0, $out['curve'][13], 'bucket 11–15: 30 ÷ 3,000' );
 		$this->assertLessThanOrEqual( $out['curve'][40], $out['curve'][50] );
 
@@ -156,6 +156,24 @@ class OpportunityTest extends TestCase {
 		for ( $i = 1; $i < $count; $i++ ) {
 			$this->assertLessThanOrEqual( $values[ $i - 1 ] + 1e-9, $values[ $i ], 'never rises with position' );
 		}
+	}
+
+	/**
+	 * A thin top bucket is scaled to the site's level, not left at the built-in 28% (decision 2026-10-06):
+	 * a site whose position 2 gets 0.91% expects about 28 × 0.91 ÷ 15 ≈ 1.7% at position 1.
+	 */
+	public function test_uncalibrated_bucket_scaled_by_nearest(): void {
+		$out = Opportunity::site_curve(
+			[
+				[ 'impressions' => 500, 'clicks' => 100, 'position' => 1.0 ],  // Too few: not calibrated.
+				[ 'impressions' => 10000, 'clicks' => 91, 'position' => 2.0 ], // 0.91%.
+			]
+		);
+		$this->assertSame( 1, $out['buckets'] );
+		$this->assertEqualsWithDelta( 28 * 0.91 / 15, $out['curve'][1], 0.01 );
+		$this->assertSame( 0.91, $out['curve'][2] );
+		$this->assertEqualsWithDelta( 7.2 * 0.91 / 15, $out['curve'][3], 0.01, 'every thin bucket scaled by the same nearest ratio' );
+		$this->assertLessThan( 0.1, $out['curve'][50] );
 	}
 
 	/**
@@ -223,6 +241,24 @@ class OpportunityTest extends TestCase {
 
 		$this->assertEqualsWithDelta( 100 * 1.5, Opportunity::weighted( 100.0, 0, 1.5 ), 0.0001 );
 		$this->assertGreaterThan( Opportunity::weighted( 100.0, 0, 0.6 ), Opportunity::weighted( 60.0, 0, 1.5 ), 'a money page with fewer missed clicks outranks a guide' );
+	}
+
+	/**
+	 * Money-page detection: form plugins' shortcodes and blocks, and form or booking embeds.
+	 */
+	public function test_holds_form(): void {
+		$hosts = array_merge( Page_Role::SERVICE_HOSTS, [ 'book.example-salon.com' ] );
+		$this->assertTrue( Page_Role::holds_form( '[gravityform id="1"]', $hosts ) );
+		$this->assertTrue( Page_Role::holds_form( '<!-- wp:wpforms/form-selector {"formId":"7"} /-->', $hosts ) );
+		$this->assertTrue( Page_Role::holds_form( '[contact-form-7 id="12"]', $hosts ) );
+		$this->assertTrue( Page_Role::holds_form( '<!-- wp:ajr-forms/form {"id":3} -->', $hosts ) );
+		$this->assertTrue( Page_Role::holds_form( '[et_pb_contact_form email="x"]', $hosts ), 'Divi contact form' );
+		$this->assertTrue( Page_Role::holds_form( '<div data-url="https://calendly.com/jen/30min"></div><script src="https://assets.calendly.com/assets/external/widget.js"></script>', $hosts ), 'Calendly embed (Jennifer’s /schedule/ and /home-value/)' );
+		$this->assertTrue( Page_Role::holds_form( '<script src="//js.hsforms.net/forms/embed/v2.js"></script>', $hosts ), 'HubSpot form' );
+		$this->assertTrue( Page_Role::holds_form( '<a href="https://book.example-salon.com/new">Book</a>', $hosts ), 'AJR Core booking domain' );
+		$this->assertFalse( Page_Role::holds_form( '<p>We use calendly.com for bookings.</p>', $hosts ), 'a mention is not an embed' );
+		$this->assertFalse( Page_Role::holds_form( '<iframe src="https://notcalendly.com/x"></iframe>', $hosts ), 'look-alike host' );
+		$this->assertFalse( Page_Role::holds_form( '[et_pb_text]Hello[/et_pb_text]', $hosts ) );
 	}
 
 	/**
