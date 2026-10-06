@@ -98,7 +98,7 @@ class Snapshot_V2 extends Snapshot {
 			return null;
 		}
 
-		$pages = self::pages( $raw['pages'] ?? null, $enquiries['sources'] );
+		$pages = self::pages( $raw['pages'] ?? null, $enquiries['sources'], strtolower( $site ) );
 		$clean = [
 			'schema'       => self::SCHEMA_V2,
 			'period'       => $period,
@@ -162,6 +162,13 @@ class Snapshot_V2 extends Snapshot {
 	 * @return array<string,mixed>
 	 */
 	protected static function enquiries_v2( $raw, array &$errors ): array {
+		// A label is the agency's config, not Google's: one that is too long is a config error, refused.
+		foreach ( self::rows( is_array( $raw ) ? ( $raw['sources'] ?? null ) : null, self::MAX_SOURCES ) as $row ) {
+			if ( is_string( $row['label'] ?? null ) && mb_strlen( self::text( $row['label'], 1000 ) ) > 60 ) {
+				$errors[] = 'enquiries source labels must be 60 characters or fewer';
+				break;
+			}
+		}
 		$base = self::enquiries( $raw, $errors );
 		$meta = [];
 		foreach ( self::rows( is_array( $raw ) ? ( $raw['sources'] ?? null ) : null, self::MAX_SOURCES ) as $row ) {
@@ -260,7 +267,7 @@ class Snapshot_V2 extends Snapshot {
 		$max    = 'week' === $period ? self::MAX_SERIES : self::MAX_DAYS;
 		$clicks = self::points( $series['clicks'] ?? null, $max );
 		$shown  = self::points( $series['impressions'] ?? null, $max );
-		$base   = self::gsc( [ 'top_queries' => $raw['top_queries'] ?? [] ] );
+		$base   = self::gsc( [ 'top_queries' => self::query_rows( $raw['top_queries'] ?? null, self::MAX_ROWS ) ] );
 		$out    = [
 			'week'        => [
 				'clicks'      => self::metric( $totals['clicks'] ?? null, 100000000 ),
@@ -291,6 +298,18 @@ class Snapshot_V2 extends Snapshot {
 			return null;
 		}
 		$raw['week'] = $raw['totals'] ?? null;
+		// Text rules: a page whose path fails is dropped (v1 kept it without a path); an empty title shows the path.
+		$pages = [];
+		foreach ( self::rows( $raw['top_pages'] ?? null, self::MAX_ROWS ) as $row ) {
+			$path = self::path( $row['path'] ?? null );
+			if ( '' === $path ) {
+				continue;
+			}
+			$title    = self::text( $row['title'] ?? null, 120 );
+			$row['title'] = '' !== $title ? $title : $path;
+			$pages[]  = $row;
+		}
+		$raw['top_pages'] = $pages;
 
 		return self::ga4( $raw );
 	}
@@ -302,7 +321,7 @@ class Snapshot_V2 extends Snapshot {
 	 * @param array<int,array<string,mixed>> $sources Clean enquiry sources (for in_total and labels).
 	 * @return array{items:array<string,array<string,mixed>>,range:array<string,mixed>}
 	 */
-	protected static function pages( $raw, array $sources ): array {
+	protected static function pages( $raw, array $sources, string $site = '' ): array {
 		$empty = [
 			'items' => [],
 			'range' => [],
@@ -314,17 +333,30 @@ class Snapshot_V2 extends Snapshot {
 		foreach ( $sources as $s ) {
 			$by_key[ $s['key'] ] = $s;
 		}
+		$rows  = self::rows( $raw['items'] ?? null, self::MAX_PAGES );
+		$hosts = self::url_hosts( $rows, $site );
+
 		$series_start = self::date( $raw['series_start'] ?? null );
 		$items        = [];
-		foreach ( self::rows( $raw['items'] ?? null, self::MAX_PAGES ) as $row ) {
+		$dropped      = 0;
+		foreach ( $rows as $row ) {
 			$path = self::path( $row['path'] ?? null );
 			$key  = '/' === $path ? '/' : rtrim( $path, '/' );
 			if ( '' === $path || isset( $items[ $key ] ) ) {
+				++$dropped;
 				continue;
 			}
-			// The address Search Console reported: the live domain, even on a local copy, so it is kept for
-			// reference only (https, capped) and never printed as a link; pages are matched by path.
-			$url = is_string( $row['url'] ?? null ) && preg_match( '#^https://[a-z0-9.-]+(/[^\s<>"\']{0,200})?$#i', $row['url'] ) ? $row['url'] : '';
+			// The address Search Console reported (the live domain, even on a local copy): https on the
+			// property's own host with a valid path, else the page is dropped. Kept for reference only and
+			// never printed as a link; pages are matched to posts by path.
+			$url = '';
+			if ( is_array( $row['gsc'] ?? null ) ) {
+				$url = self::page_url( $row['url'] ?? null, $hosts );
+				if ( '' === $url ) {
+					++$dropped;
+					continue;
+				}
+			}
 			$items[ $key ] = [
 				'path' => $path,
 				'url'  => $url,
@@ -346,7 +378,7 @@ class Snapshot_V2 extends Snapshot {
 				'end'            => self::date( $range['end'] ?? null ),
 				'previous_start' => self::date( $prev['start'] ?? null ),
 				'previous_end'   => self::date( $prev['end'] ?? null ),
-				'available'      => self::count( $raw['available'] ?? null ) ?? count( $out ),
+				'available'      => max( count( $out ), ( self::count( $raw['available'] ?? null ) ?? count( $out ) ) - $dropped ),
 				'truncated'      => true === ( $raw['truncated'] ?? false ),
 			],
 		];
@@ -387,7 +419,7 @@ class Snapshot_V2 extends Snapshot {
 			}
 		}
 		$queries = [];
-		foreach ( self::rows( $raw['top_queries'] ?? null, self::MAX_ROWS ) as $q ) {
+		foreach ( self::query_rows( $raw['top_queries'] ?? null, self::MAX_ROWS ) as $q ) {
 			$query = self::text( $q['query'] ?? null, 120 );
 			$c     = self::count( $q['clicks'] ?? null );
 			if ( '' === $query || null === $c ) {
@@ -501,6 +533,7 @@ class Snapshot_V2 extends Snapshot {
 		$maps   = is_string( $raw['maps_url'] ?? null ) && preg_match( '#^https://(www\.)?google\.[a-z.]+/maps[^\s<>"\']{0,400}$|^https://maps\.google\.[a-z.]+/[^\s<>"\']{0,400}$#', $raw['maps_url'] ) ? $raw['maps_url'] : '';
 
 		return [
+			'reason'     => self::text( $raw['reason'] ?? null, 200 ),
 			'checked'    => true === ( $raw['checked'] ?? false ),
 			'checked_at' => is_string( $raw['checked_at'] ?? null ) ? (int) strtotime( $raw['checked_at'] ) : 0,
 			'maps_url'   => $maps,
@@ -512,6 +545,74 @@ class Snapshot_V2 extends Snapshot {
 			'fields'     => $fields,
 			'problems'   => count( array_filter( $fields, static fn( $f ) => in_array( $f['status'], [ 'mismatch', 'missing_on_site', 'missing_on_google' ], true ) && 'info' !== $f['severity'] ) ),
 		];
+	}
+
+	/**
+	 * Query rows that pass the text rules: plain text of 1–120 characters, else the row is DROPPED (a query
+	 * cut short is a different query).
+	 *
+	 * @param mixed $raw Raw list.
+	 * @param int   $max Most rows.
+	 * @return array<int,array<string,mixed>>
+	 */
+	protected static function query_rows( $raw, int $max ): array {
+		$out = [];
+		foreach ( self::rows( $raw, 50 ) as $row ) {
+			$query = self::text( $row['query'] ?? null, 100000 );
+			if ( '' === $query || mb_strlen( $query ) > 120 ) {
+				continue;
+			}
+			$row['query'] = $query;
+			$out[]        = $row;
+			if ( count( $out ) >= $max ) {
+				break;
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * The hosts a page URL may be on: the snapshot's site, and the host most page URLs share (the Search
+	 * Console property's host, which differs from `site` when a live site's figures are pushed to a local
+	 * copy). A lone URL on another host (evil.example) is therefore dropped.
+	 *
+	 * @param array<int,array<string,mixed>> $rows Page rows.
+	 * @param string                         $site Snapshot site.
+	 * @return array<string,true>
+	 */
+	protected static function url_hosts( array $rows, string $site ): array {
+		$count = [];
+		foreach ( $rows as $row ) {
+			if ( is_string( $row['url'] ?? null ) && preg_match( '#^https://([a-z0-9.-]+)/#i', $row['url'], $m ) ) {
+				$host           = strtolower( $m[1] );
+				$count[ $host ] = ( $count[ $host ] ?? 0 ) + 1;
+			}
+		}
+		arsort( $count );
+		$hosts = '' !== $site ? [ preg_replace( '/^www\./', '', $site ) => true ] : [];
+		$top   = array_key_first( $count );
+		if ( null !== $top && $count[ $top ] * 2 > array_sum( $count ) ) {
+			$hosts[ preg_replace( '/^www\./', '', $top ) ] = true;
+		}
+
+		return $hosts;
+	}
+
+	/**
+	 * A page's reported URL when it is https on an allowed host with a valid path, else ''.
+	 *
+	 * @param mixed              $url   Raw URL.
+	 * @param array<string,true> $hosts Allowed hosts (no "www.").
+	 */
+	public static function page_url( $url, array $hosts ): string {
+		if ( ! is_string( $url ) || ! preg_match( '#^https://([a-z0-9.-]+)(/.*)$#i', $url, $m ) ) {
+			return '';
+		}
+		$host = (string) preg_replace( '/^www\./', '', strtolower( $m[1] ) );
+		$path = (string) strtok( $m[2], '?#' );
+
+		return isset( $hosts[ $host ] ) && '' !== self::path( $path ) ? $url : '';
 	}
 
 	/**

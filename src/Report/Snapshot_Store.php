@@ -70,7 +70,10 @@ class Snapshot_Store {
 		if ( is_array( $listing ) ) {
 			update_option( self::LISTING, $listing + [ 'received' => $now ], false );
 		}
-		if ( is_array( $pages ) && [] !== $pages ) {
+		// The freshest 90-day window wins: a month push (its window ends on the month's last Sunday) must not
+		// replace the newer window a weekly push brought.
+		$held = \AJR\SEOAssistant\Search\Page_Data::meta();
+		if ( is_array( $pages ) && [] !== $pages && (string) ( $range['end'] ?? '' ) >= $held['end'] ) {
 			( new \AJR\SEOAssistant\Search\Page_Data() )->replace_all( $pages, is_array( $range ) ? $range : [], (int) $snapshot['generated_at'] );
 		}
 

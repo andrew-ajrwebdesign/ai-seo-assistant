@@ -63,6 +63,8 @@ class Scan_Store {
 		foreach ( $issues as $issue ) {
 			$kinds[ $issue['kind'] ] = ( $kinds[ $issue['kind'] ] ?? 0 ) + 1;
 		}
+		// How many of them the page review can fix (the rest are "do in the editor"), for the list's wording.
+		$kinds['_claude'] = count( array_filter( $issues, static fn( $i ) => 'claude' === ( $i['who'] ?? '' ) ) );
 		$csv = implode( ',', array_map( static fn( $k, $n ) => $k . ':' . $n, array_keys( $kinds ), $kinds ) );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the plugin's own table.
 		$wpdb->update(
@@ -129,6 +131,8 @@ class Scan_Store {
 				[ $k, $n ]   = array_pad( explode( ':', $pair ), 2, '0' );
 				$kinds[ $k ] = (int) $n;
 			}
+			$row['claude_fixable']           = (int) ( $kinds['_claude'] ?? $row['issue_count'] );
+			unset( $kinds['_claude'] );
 			$row['kinds']                    = $kinds;
 			$row['post_id']                  = (int) $row['post_id'];
 			$row['issue_count']              = (int) $row['issue_count'];

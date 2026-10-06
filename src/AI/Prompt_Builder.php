@@ -181,7 +181,8 @@ class Prompt_Builder {
 		$p[] = 'Rules for the focus keyphrase:';
 		$p[] = '- The main search the page should rank for, lower case, 2 to 5 words, usually the top query. It must appear in your title.';
 		$p[] = 'Rules for alt text:';
-		$p[] = '- Describe what the photo shows in plain words, under 125 characters, no "image of" or "photo of", no keyword lists. Use the place or service only if the photo or page makes it clear.';
+		$p[] = '- Look at each attached photo and describe what is actually in it, in plain words, under 125 characters. Name a recognisable landmark when you can see one (a capitol dome, a clock tower, a named river or mountain). No "image of" or "photo of", no keyword lists, nothing the photo does not show.';
+		$p[] = '- If you cannot tell what a photo shows, return an empty alt and say so in the why; never guess from the file name or the page.';
 		$p[] = '- Return one entry per attached image, using its image_id. A purely decorative image gets an empty alt and a why that says so.';
 		$p[] = 'Rules for editor advice:';
 		$p[] = '- Only what the scan findings or the page support; one specific sentence each (which heading to change to what, which page should link here and with what words). Skip an area with nothing useful to say.';
@@ -233,9 +234,13 @@ class Prompt_Builder {
 			$p[] = '';
 		}
 		if ( ! empty( $args['images'] ) ) {
-			$p[] = 'Images needing alt text (attached above in this order where a file was available):';
+			$p[] = 'Attached photos (each introduced by its image_id above):';
 			foreach ( (array) $args['images'] as $img ) {
-				$p[] = sprintf( '- image_id %d, file %s, alt now "%s"', $img['id'], $img['file'], $img['alt'] ?? '' );
+				if ( 'check' === ( $img['mode'] ?? 'write' ) ) {
+					$p[] = sprintf( '- image_id %d (file %s) already has the alt "%s". CHECK ONLY: if that alt matches what the photo shows, return it unchanged; only if it is clearly wrong (describes something not in the photo), return a corrected alt and say in the why what is wrong. Never reword a correct alt.', $img['id'], $img['file'], $img['alt'] ?? '' );
+				} else {
+					$p[] = sprintf( '- image_id %d (file %s) has no useful alt (now "%s"): write one from what the photo shows.', $img['id'], $img['file'], $img['alt'] ?? '' );
+				}
 			}
 			$p[] = '';
 		}

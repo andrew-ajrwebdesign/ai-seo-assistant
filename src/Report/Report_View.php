@@ -246,11 +246,14 @@ class Report_View {
 		$rows            .= '<li class="aisa-source aisa-source--total"><div class="aisa-source__line"><span class="aisa-source__label">' . esc_html__( 'Total', 'ai-seo-assistant' ) . '</span>'
 			. '<span class="aisa-source__count">' . esc_html( number_format_i18n( $total ) ) . '</span>' . self::change_html( self::since( Format::change( $total, $prev ), $since ) ) . '</div></li>';
 		foreach ( $taps as $s ) {
-			$by    = '' !== (string) ( $s['counted_by'] ?? '' ) ? ' · ' . self::counted_by( (string) $s['counted_by'] ) : '';
+			$by     = '' !== (string) ( $s['counted_by'] ?? '' ) ? ' · ' . self::counted_by( (string) $s['counted_by'] ) : '';
+			$change = self::since( Format::change( $s['count'], $s['previous'] ), $since );
+			// A tap is not an enquiry, so its change is never shown as good or bad news.
+			$change['tone'] = 'flat';
 			$rows .= '<li class="aisa-source aisa-source--tap"><div class="aisa-source__line"><span class="aisa-source__label">' . esc_html( $s['label'] )
 				. '<span class="aisa-source__by">' . esc_html( __( 'Not added: most become the calls above', 'ai-seo-assistant' ) . $by ) . '</span></span>'
 				. '<span class="aisa-source__count">' . esc_html( number_format_i18n( $s['count'] ) ) . '</span>'
-				. self::change_html( self::since( Format::change( $s['count'], $s['previous'] ), $since ), 'aisa-source__change aisa-tone--flat' ) . '</div></li>';
+				. self::change_html( $change ) . '</div></li>';
 		}
 
 		return $rows;

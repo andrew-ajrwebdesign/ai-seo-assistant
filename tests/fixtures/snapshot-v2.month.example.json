@@ -1,0 +1,442 @@
+{
+  "schema": 2,
+  "period": "month",
+  "site": "northfieldplumbing.example",
+  "month": {
+    "start": "2026-09-17",
+    "end": "2026-10-16",
+    "billing_day": 17,
+    "data_end": "2026-10-16",
+    "complete": true,
+    "compared_with": {
+      "start": "2026-08-17",
+      "end": "2026-09-16"
+    }
+  },
+  "generated_at": "2026-10-19T07:12:00+00:00",
+  "enquiries": {
+    "sources": [
+      {
+        "key": "ads_calls",
+        "label": "Calls from Google Ads",
+        "kind": "call",
+        "counted_by": "Google Ads",
+        "in_total": true,
+        "count": 21,
+        "previous": 17
+      },
+      {
+        "key": "gbp_call_taps",
+        "label": "Taps on Call on your Google listing",
+        "kind": "tap",
+        "counted_by": "Google",
+        "in_total": false,
+        "count": 26,
+        "previous": 20
+      },
+      {
+        "key": "form",
+        "label": "Website form",
+        "kind": "form",
+        "counted_by": "Google Analytics",
+        "in_total": true,
+        "count": 18,
+        "previous": 16
+      },
+      {
+        "key": "booking",
+        "label": "Online bookings",
+        "kind": "booking",
+        "counted_by": "Google Analytics",
+        "in_total": true,
+        "count": 8,
+        "previous": 9
+      },
+      {
+        "key": "phone_taps",
+        "label": "Taps on your phone number on the website",
+        "kind": "tap",
+        "counted_by": "Google Analytics",
+        "in_total": false,
+        "count": 24,
+        "previous": 23
+      }
+    ],
+    "history": [
+      {
+        "start": "2025-10-17",
+        "end": "2025-11-16",
+        "total": 30
+      },
+      {
+        "start": "2025-11-17",
+        "end": "2025-12-16",
+        "total": 29
+      },
+      {
+        "start": "2025-12-17",
+        "end": "2026-01-16",
+        "total": 31
+      },
+      {
+        "start": "2026-01-17",
+        "end": "2026-02-16",
+        "total": 33
+      },
+      {
+        "start": "2026-02-17",
+        "end": "2026-03-16",
+        "total": 33
+      },
+      {
+        "start": "2026-03-17",
+        "end": "2026-04-16",
+        "total": 35
+      },
+      {
+        "start": "2026-04-17",
+        "end": "2026-05-16",
+        "total": 37
+      },
+      {
+        "start": "2026-05-17",
+        "end": "2026-06-16",
+        "total": 35
+      },
+      {
+        "start": "2026-06-17",
+        "end": "2026-07-16",
+        "total": 38
+      },
+      {
+        "start": "2026-07-17",
+        "end": "2026-08-16",
+        "total": 40
+      },
+      {
+        "start": "2026-08-17",
+        "end": "2026-09-16",
+        "total": 42
+      },
+      {
+        "start": "2026-09-17",
+        "end": "2026-10-16",
+        "total": 47
+      }
+    ],
+    "note": "Calls are counted by the service that connected them. Taps are people tapping your number on the website or the Call button on your Google listing; they are shown apart and not added."
+  },
+  "note": {
+    "did": [
+      "Rewrote the water heater page's Google title and description."
+    ],
+    "next": [
+      "Check the boiler repair change once 4 weeks of data are in."
+    ],
+    "author": "Andrew Ryan",
+    "date": "2026-10-19"
+  },
+  "gsc": {
+    "totals": {
+      "clicks": {
+        "value": 1786,
+        "previous": 1639
+      },
+      "impressions": {
+        "value": 79400,
+        "previous": 74900
+      },
+      "ctr": {
+        "value": 2.2,
+        "previous": 2.1
+      },
+      "position": {
+        "value": 11.1,
+        "previous": 11.5
+      }
+    },
+    "series": {
+      "unit": "day",
+      "start": "2026-09-17",
+      "clicks": [
+        50,
+        63,
+        59,
+        55,
+        51,
+        64,
+        60,
+        56,
+        52,
+        65,
+        61,
+        57,
+        53,
+        66,
+        62,
+        58,
+        54,
+        50,
+        63,
+        59,
+        55,
+        51,
+        64,
+        60,
+        56,
+        52,
+        65,
+        61,
+        57,
+        53
+      ],
+      "impressions": [
+        2500,
+        2597,
+        2694,
+        2791,
+        2888,
+        2985,
+        3082,
+        3179,
+        3276,
+        3373,
+        2570,
+        2667,
+        2764,
+        2861,
+        2958,
+        3055,
+        3152,
+        3249,
+        3346,
+        2543,
+        2640,
+        2737,
+        2834,
+        2931,
+        3028,
+        3125,
+        3222,
+        3319,
+        2516,
+        2613
+      ]
+    },
+    "top_queries": [
+      {
+        "query": "emergency plumber northfield",
+        "clicks": 262,
+        "change": 48
+      },
+      {
+        "query": "water heater replacement",
+        "clicks": 96,
+        "change": -5
+      }
+    ]
+  },
+  "ga4": {
+    "totals": {
+      "visits": {
+        "value": 5412,
+        "previous": 5058
+      },
+      "key_events": {
+        "value": 50,
+        "previous": 47
+      },
+      "engaged": {
+        "value": 61,
+        "previous": 62
+      }
+    },
+    "top_pages": [
+      {
+        "title": "Emergency plumbing",
+        "path": "/emergency-plumber/",
+        "visits": 1318
+      },
+      {
+        "title": "Home",
+        "path": "/",
+        "visits": 1204
+      }
+    ]
+  },
+  "ads": {
+    "currency": "USD",
+    "budget": 3000,
+    "spend": {
+      "value": 2644,
+      "previous": 2580.5
+    },
+    "clicks": {
+      "value": 802,
+      "previous": 764
+    },
+    "conversions": {
+      "value": 39,
+      "previous": 33
+    },
+    "calls": {
+      "value": 21,
+      "previous": 17
+    }
+  },
+  "pages": {
+    "range": {
+      "start": "2026-07-13",
+      "end": "2026-10-11"
+    },
+    "previous_range": {
+      "start": "2026-04-13",
+      "end": "2026-07-12"
+    },
+    "series_start": "2026-07-13",
+    "cap": 500,
+    "available": 2,
+    "truncated": false,
+    "items": [
+      {
+        "path": "/water-heater-installation/",
+        "url": "https://northfieldplumbing.example/water-heater-installation/",
+        "gsc": {
+          "clicks": {
+            "value": 44,
+            "previous": 50
+          },
+          "impressions": {
+            "value": 7310,
+            "previous": 6706
+          },
+          "ctr": {
+            "value": 0.6,
+            "previous": 0.7
+          },
+          "position": {
+            "value": 8.9,
+            "previous": 9.3
+          },
+          "series": {
+            "clicks": [
+              2,
+              4,
+              6,
+              3,
+              5,
+              2,
+              4,
+              6,
+              3,
+              5,
+              2,
+              4,
+              6
+            ],
+            "impressions": [
+              540,
+              542,
+              544,
+              541,
+              543,
+              540,
+              542,
+              544,
+              541,
+              543,
+              540,
+              542,
+              544
+            ],
+            "position": [
+              9.4,
+              9.1,
+              9.2,
+              8.8,
+              9,
+              8.9,
+              8.7,
+              9.1,
+              8.8,
+              8.6,
+              8.9,
+              8.8,
+              8.7
+            ]
+          },
+          "query_count": 64,
+          "top_queries": [
+            {
+              "query": "water heater installation northfield",
+              "clicks": 18,
+              "impressions": 1240,
+              "ctr": 1.5,
+              "position": 4.1,
+              "change": 3
+            },
+            {
+              "query": "water heater installation near me",
+              "clicks": 9,
+              "impressions": 2310,
+              "ctr": 0.4,
+              "position": 9.8,
+              "change": -2
+            },
+            {
+              "query": "water heater installation cost",
+              "clicks": 0,
+              "impressions": 280,
+              "ctr": 0,
+              "position": 15.1,
+              "change": 0
+            }
+          ]
+        },
+        "ga4": {
+          "visits": 312,
+          "google_organic_visits": 181,
+          "engaged": 58,
+          "engagement_time": 72,
+          "enquiries": [
+            {
+              "key": "phone_taps",
+              "count": 2
+            },
+            {
+              "key": "form",
+              "count": 1
+            }
+          ]
+        }
+      },
+      {
+        "path": "/book-online/",
+        "url": null,
+        "gsc": null,
+        "ga4": {
+          "visits": 391,
+          "google_organic_visits": 0,
+          "engaged": 71,
+          "engagement_time": 95,
+          "enquiries": [
+            {
+              "key": "booking",
+              "count": 8
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "business_profile_check": {
+    "version": 1,
+    "checked": false,
+    "reason": "no Places key readable from places-scan-key.txt",
+    "checked_at": "2026-10-19T07:11:40.000Z",
+    "page": null,
+    "place_id": "ChIJExampleNorthfieldPlumbing00",
+    "summary": null,
+    "fields": []
+  }
+}

@@ -58,6 +58,7 @@ class Ui {
 					/* translators: 1: page number, 2: pages in all. */
 					'writing'    => __( 'Writing suggestions: page %1$d of %2$d', 'ai-seo-assistant' ),
 					'written'    => __( 'Suggestions written. Reloading…', 'ai-seo-assistant' ),
+					'writingField' => __( 'Writing…', 'ai-seo-assistant' ),
 					/* translators: 1: page count, 2: estimated cost, e.g. "$0.09". */
 					'generateN'  => __( 'Generate for selected (%1$d), about %2$s', 'ai-seo-assistant' ),
 					/* translators: %d: page count. */

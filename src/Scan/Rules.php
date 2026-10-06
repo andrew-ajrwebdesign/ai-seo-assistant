@@ -281,18 +281,39 @@ class Rules {
 	 * @return array<int,array<string,mixed>>
 	 */
 	protected static function images( array $facts, array $ctx ): array {
-		$images  = (array) ( $facts['images'] ?? [] );
-		$missing = 0;
-		$weak    = [];
+		$images    = (array) ( $facts['images'] ?? [] );
+		$missing   = 0;
+		$weak      = [];
+		$unprinted = [];
 		foreach ( $images as $img ) {
-			$alt = $img['alt'] ?? null;
+			$alt    = $img['alt'] ?? null;
+			$file   = (string) ( $img['file'] ?? '' );
+			$stored = trim( (string) ( $img['stored_alt'] ?? '' ) );
+			$poor   = null === $alt || '' === trim( (string) $alt ) || self::weak_alt( (string) $alt, $file );
+			if ( $poor && '' !== $stored && ! self::weak_alt( $stored, $file ) ) {
+				$unprinted[] = $file; // The Media Library has a good alt the page does not print.
+				continue;
+			}
 			if ( null === $alt || '' === trim( (string) $alt ) ) {
 				++$missing;
-			} elseif ( self::weak_alt( (string) $alt, (string) ( $img['file'] ?? '' ) ) ) {
+			} elseif ( self::weak_alt( (string) $alt, $file ) ) {
 				$weak[] = (string) $alt;
 			}
 		}
 		$out = [];
+		if ( [] !== $unprinted ) {
+			$out[] = self::issue(
+				'alt',
+				'alt_unprinted',
+				/* translators: %d: number of images. */
+				sprintf( _n( '%d image has good alt text the page does not show', '%d images have good alt text the page does not show', count( $unprinted ), 'ai-seo-assistant' ), count( $unprinted ) ),
+				/* translators: %s: file names. */
+				sprintf( __( 'The Media Library describes %s, but the page prints the image without it (a builder module with its own empty alt field).', 'ai-seo-assistant' ), implode( ', ', array_slice( $unprinted, 0, 3 ) ) ),
+				__( 'Fix: copy the alt text into the image module, or set the module to use the Media Library’s alt.', 'ai-seo-assistant' ),
+				'editor',
+				[ 'files' => $unprinted ]
+			);
+		}
 		if ( $missing > 0 || [] !== $weak ) {
 			$total = count( $images );
 			/* translators: 1: images without alt text, 2: images on the page. */
@@ -388,6 +409,9 @@ class Rules {
 	 * @return array<int,array<string,mixed>>
 	 */
 	protected static function indexing( array $facts, array $ctx ): array {
+		if ( ! empty( $ctx['discouraged'] ) ) {
+			return []; // "Discourage search engines" is on (a staging or local copy): every page says noindex.
+		}
 		$in_map    = $ctx['in_sitemap'] ?? null;
 		$noindex   = ! empty( $facts['noindex'] );
 		$canonical = (string) ( $facts['canonical'] ?? '' );

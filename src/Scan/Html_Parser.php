@@ -69,7 +69,7 @@ class Html_Parser {
 		$facts['h1']       = [];
 		foreach ( $xp->query( './/h1|.//h2|.//h3|.//h4|.//h5|.//h6', $content ) as $h ) {
 			$level = (int) substr( strtolower( $h->nodeName ), 1 );
-			$text  = self::clean( $h->textContent );
+			$text  = self::clean( self::visible_text( $h ) );
 			if ( 1 === $level ) {
 				$facts['h1'][] = $text;
 			}
@@ -83,7 +83,7 @@ class Html_Parser {
 		// An H1 printed by the theme outside the content area (a page-title band) still counts.
 		if ( [] === $facts['h1'] ) {
 			foreach ( $xp->query( '//body//h1' ) as $h ) {
-				$facts['h1'][] = self::clean( $h->textContent );
+				$facts['h1'][] = self::clean( self::visible_text( $h ) );
 			}
 			if ( [] !== $facts['h1'] ) {
 				array_unshift(

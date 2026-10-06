@@ -693,6 +693,17 @@ a.aisa-pagecell__title:hover {
 	font-size: 12px;
 }
 
+.aisa-alt__now {
+	color: var(--aisa-ink);
+	font-weight: 600;
+}
+
+.aisa-alt--check {
+	padding: 10px;
+	border-radius: 8px;
+	background-color: var(--aisa-warning-bg);
+}
+
 .aisa-alt__tick {
 	inline-size: 20px;
 	block-size: 20px;
@@ -994,6 +1005,22 @@ a.aisa-pagecell__title:hover {
 /* ---- Wider screens ------------------------------------------------------------------------------- */
 
 @media (min-width: 782px) {
+
+	/* Accept / Edit / Skip sit on the field's heading row (C1). */
+	fieldset.aisa-sfield {
+		position: relative;
+	}
+
+	fieldset.aisa-sfield > .aisa-seg {
+		position: absolute;
+		inset-block-start: 10px;
+		inset-inline-end: 16px;
+	}
+
+	fieldset.aisa-sfield > .aisa-sfield__head {
+		min-block-size: 34px;
+		padding-inline-end: 190px;
+	}
 
 	.aisa-setrow {
 		grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);

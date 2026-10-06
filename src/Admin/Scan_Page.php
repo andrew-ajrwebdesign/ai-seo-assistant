@@ -86,7 +86,7 @@ class Scan_Page {
 			$sub = sprintf( __( '%1$d published pages checked %2$s. Search and visitor data have not arrived yet, so pages are not ranked.', 'ai-seo-assistant' ), $pages, wp_date( 'D j M, g:ia', (int) ( $meta['finished_at'] ?? time() ) ) );
 		}
 
-		$actions = '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="aisa-inline" data-aisa-scan>'
+		$actions = '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="aisa-inline" data-aisa-scan' . ( null !== $queue ? ' data-running="1"' : '' ) . '>'
 			. wp_nonce_field( Tools_Actions::RESCAN, '_wpnonce', true, false )
 			. '<input type="hidden" name="action" value="' . esc_attr( Tools_Actions::RESCAN ) . '">'
 			. '<button type="submit" class="aisa-btn aisa-btn--dark">' . Ui::icon( 'update' ) . esc_html__( 'Rescan now', 'ai-seo-assistant' ) . '</button></form>'
@@ -146,7 +146,7 @@ class Scan_Page {
 		/* translators: %s: date. */
 		echo Ui::card_head( 'aisa-listing-h', 'location', __( 'Google listing', 'ai-seo-assistant' ), $when > 0 ? sprintf( __( 'Business Profile against this site · checked %s', 'ai-seo-assistant' ), wp_date( 'D j M', $when ) ) : '' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		if ( empty( $listing['checked'] ) ) {
-			echo '<p class="aisa-pending">' . esc_html__( 'Google listing not checked: the push could not read the Business Profile this time. Nothing is known about whether it matches.', 'ai-seo-assistant' ) . '</p></section>';
+			echo '<p class="aisa-pending">' . esc_html__( 'Google listing not checked: the push could not read the Business Profile this time. Nothing is known about whether it matches.', 'ai-seo-assistant' ) . ( '' !== (string) ( $listing['reason'] ?? '' ) ? ' ' . esc_html( (string) $listing['reason'] ) : '' ) . '</p></section>';
 			return;
 		}
 		$rows = array_filter( (array) $listing['fields'], static fn( $f ) => 'match' !== $f['status'] && 'not_compared' !== $f['status'] );
@@ -251,6 +251,9 @@ class Scan_Page {
 		echo Ui::card_head( 'aisa-issues', 'search', __( 'Issues found', 'ai-seo-assistant' ), sprintf( __( '%1$s issues on %2$s pages · scanned %3$s', 'ai-seo-assistant' ), number_format_i18n( $total ), number_format_i18n( count( $rows ) ), wp_date( 'D j M', (int) ( $meta['finished_at'] ?? time() ) ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		echo '<ul class="aisa-chips">' . $chips . '</ul>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above.
 		echo '<p class="aisa-small">' . esc_html__( 'Checked against the rendered page: title width in pixels, duplicates, headings, image alt text and weight, internal links in and out, broken links and links through redirects, noindex and canonical against the sitemap, schema for the page type, sharing image, word count.', 'ai-seo-assistant' ) . '</p>';
+		if ( ! empty( $meta['discouraged'] ) ) {
+			echo '<p class="aisa-small aisa-tone--warn">' . esc_html__( 'Search engines are discouraged on this site (Settings › Reading), as on a staging or local copy, so every page says noindex: indexing and sitemap checks are skipped.', 'ai-seo-assistant' ) . '</p>';
+		}
 		if ( $fallback > 0 ) {
 			/* translators: %d: number of pages. */
 			echo '<p class="aisa-small aisa-tone--bad">' . esc_html( sprintf( _n( '%d page could not be loaded as Google sees it, so it was checked from its post content and SEO fields; it is marked in the list.', '%d pages could not be loaded as Google sees them, so they were checked from their post content and SEO fields; they are marked in the list.', $fallback, 'ai-seo-assistant' ), $fallback ) ) . '</p>';
@@ -385,7 +388,7 @@ class Scan_Page {
 				. '<td class="aisa-num">' . esc_html( $r['position'] > 0 ? number_format_i18n( $r['position'], 1 ) : '–' ) . '</td>'
 				. '<td class="aisa-num">' . esc_html( Ui::pct( $r['ctr'] ) . ' / ' . Ui::pct( $r['expected'] ) ) . ( null !== $below ? '<br><span class="aisa-small ' . ( $below >= 1 ? 'aisa-tone--bad' : 'aisa-tone--flat' ) . '">' . esc_html( $below > 0 ? sprintf( /* translators: %s: percentage points. */ __( '%s below', 'ai-seo-assistant' ), number_format_i18n( $below, 1 ) ) : __( 'at or above', 'ai-seo-assistant' ) ) . '</span>' : '' ) . '</td>'
 				. '<td class="aisa-num">' . esc_html( number_format_i18n( $r['enquiries'] ) ) . '</td>'
-				. '<td class="aisa-num aisa-strong">' . esc_html( (string) $r['issue_count'] ) . '</td>'
+				. '<td class="aisa-num"><strong>' . esc_html( (string) $r['issue_count'] ) . '</strong>' . ( $r['issue_count'] > 0 && 0 === $r['claude_fixable'] ? '<br><span class="aisa-small aisa-tone--flat">' . esc_html__( 'do in the editor', 'ai-seo-assistant' ) . '</span>' : '' ) . '</td>'
 				. '<td class="aisa-col-action"><a class="aisa-btn aisa-btn--small" href="' . esc_url( $this->url( [ 'post' => $id ] ) ) . '">' . esc_html__( 'Review', 'ai-seo-assistant' ) . '<span class="screen-reader-text"> ' . esc_html( $r['title'] ) . '</span></a></td>'
 				. '</tr>';
 		}
@@ -499,7 +502,19 @@ class Scan_Page {
 	 * @param int $post_id Post ID.
 	 */
 	protected function review( int $post_id ): void {
+		// After an apply or undo, the page is rescanned here, in a fresh request (see Page_Review::rescan()).
+		if ( false !== get_transient( Page_Review::RESCAN_FLAG . $post_id ) ) {
+			( new Page_Review( new Claude_Client() ) )->rescan_if_flagged( $post_id );
+		}
 		$row  = ( new Scan_Store() )->get( $post_id );
+		// Edited since its last scan (the on-save cron event may not have run yet): rescan it now, one page.
+		$edited = get_post( $post_id );
+		if ( null !== $row && $edited instanceof \WP_Post && $edited->post_modified_gmt > (string) $row['scanned_at'] ) {
+			$scanner = new Scanner();
+			$scanner->scan_page( $post_id );
+			$scanner->finalize();
+			$row = ( new Scan_Store() )->get( $post_id );
+		}
 		$post = get_post( $post_id );
 		if ( null === $row || ! $post instanceof \WP_Post ) {
 			echo Ui::notice( 'warning', '<p>' . esc_html__( 'This page has not been scanned yet. Run a scan first.', 'ai-seo-assistant' ) . '</p><p><a href="' . esc_url( $this->url( [] ) ) . '">' . esc_html__( 'Back to SEO scan', 'ai-seo-assistant' ) . '</a></p>' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped piecewise.
@@ -514,8 +529,17 @@ class Scan_Page {
 			/* translators: 1: score, 2: rank (ordinal number), 3: page count. */
 			$sub[] = sprintf( __( 'Opportunity %1$d, %2$s of %3$d pages', 'ai-seo-assistant' ), $r['score'], self::ordinal( (int) $r['rank'] ), count( $ranked ) );
 		}
-		/* translators: %d: issues. */
-		$sub[]   = sprintf( _n( '%d issue', '%d issues', $row['issue_count'], 'ai-seo-assistant' ), $row['issue_count'] );
+		$fixable = count( array_filter( (array) $row['issues'], static fn( $i ) => 'claude' === ( $i['who'] ?? '' ) ) );
+		$applied = is_array( $row['suggestions'] ) && ! empty( $row['suggestions']['applied']['batch'] );
+		if ( $applied && 0 === $fixable && $row['issue_count'] > 0 ) {
+			/* translators: %d: issues left. */
+			$sub[] = sprintf( _n( 'Applied · %d left, do in the editor', 'Applied · %d left, do in the editor', $row['issue_count'], 'ai-seo-assistant' ), $row['issue_count'] );
+		} elseif ( $applied && 0 === $row['issue_count'] ) {
+			$sub[] = __( 'Applied · no issues left', 'ai-seo-assistant' );
+		} else {
+			/* translators: %d: issues. */
+			$sub[] = sprintf( _n( '%d issue', '%d issues', $row['issue_count'], 'ai-seo-assistant' ), $row['issue_count'] );
+		}
 		$builder = self::builder( $post_id );
 		if ( '' !== $builder ) {
 			/* translators: %s: page builder name. */
@@ -690,7 +714,7 @@ class Scan_Page {
 		$capped  = ! Spend::allows( $spend['usd'], Spend::cap(), 'review' );
 		$per     = Page_Review::estimate( $this->past_costs(), $claude->get_model() );
 
-		echo '<section class="aisa-card aisa-card--claude" aria-labelledby="aisa-claude" data-aisa-panel data-writing="' . esc_attr__( 'Claude is reading the page, its searches and how visitors use it. Usually about 20 seconds; you can leave this screen.', 'ai-seo-assistant' ) . '">';
+		echo '<section class="aisa-card aisa-card--claude" aria-labelledby="aisa-claude" data-aisa-panel data-writing="' . esc_attr__( 'Claude is reading the page, its searches and how visitors use it. Usually about 20 seconds; you can leave this screen.', 'ai-seo-assistant' ) . '" data-fields="' . esc_attr( implode( '|', [ __( 'SEO title', 'ai-seo-assistant' ), __( 'Meta description', 'ai-seo-assistant' ), __( 'Focus keyphrase', 'ai-seo-assistant' ), __( 'Image alt text', 'ai-seo-assistant' ) ] ) ) . '">';
 		$source = is_array( $s )
 			/* translators: 1: date and time, 2: cost. */
 			? sprintf( __( 'Written %1$s · cost %2$s', 'ai-seo-assistant' ), wp_date( 'D j M, g:ia', (int) $s['generated_at'] ), Spend::money( (float) $s['cost'] ) )
@@ -725,7 +749,7 @@ class Scan_Page {
 		foreach ( $row['issues'] as $issue ) {
 			$issues[ $issue['code'] ] = $issue;
 		}
-		$title_flag = isset( $issues['title_wide'] ) ? __( 'Too wide', 'ai-seo-assistant' ) : ( isset( $issues['title_duplicate'] ) ? __( 'Duplicate', 'ai-seo-assistant' ) : ( isset( $issues['title_missing'] ) ? __( 'Missing', 'ai-seo-assistant' ) : '' ) );
+		$title_flag = isset( $issues['title_wide'] ) ? __( 'Too wide', 'ai-seo-assistant' ) : ( isset( $issues['title_duplicate'] ) ? __( 'Duplicate', 'ai-seo-assistant' ) : ( isset( $issues['title_missing'] ) ? __( 'Missing', 'ai-seo-assistant' ) : ( isset( $issues['title_no_query'] ) ? __( 'Misses the main search', 'ai-seo-assistant' ) : '' ) ) );
 		$desc_flag  = isset( $issues['desc_duplicate'] ) ? __( 'Duplicate', 'ai-seo-assistant' ) : ( isset( $issues['desc_missing'] ) ? __( 'Missing', 'ai-seo-assistant' ) : ( isset( $issues['desc_long'] ) ? __( 'Too long', 'ai-seo-assistant' ) : ( isset( $issues['desc_short'] ) ? __( 'Too short', 'ai-seo-assistant' ) : '' ) ) );
 		$key_flag   = isset( $issues['title_no_query'] ) ? __( 'Missing main search', 'ai-seo-assistant' ) : '';
 
@@ -830,11 +854,14 @@ class Scan_Page {
 		foreach ( $alts as $alt ) {
 			$id    = (int) $alt['id'];
 			$thumb = wp_get_attachment_image( $id, [ 56, 56 ], false, [ 'class' => 'aisa-alt__img', 'alt' => '' ] );
+			$check = 'check' === ( $alt['mode'] ?? 'write' );
 			$now   = '' === (string) $alt['now'] ? __( 'Now: no alt text', 'ai-seo-assistant' ) : sprintf( /* translators: %s: current alt. */ __( 'Now: “%s”', 'ai-seo-assistant' ), (string) $alt['now'] );
-			echo '<li class="aisa-alt">' . ( $thumb ? $thumb : '<span class="aisa-alt__img" aria-hidden="true"></span>' ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- core-built image tag.
-				. '<div class="aisa-alt__body"><label for="aisa-alt-' . esc_attr( (string) $id ) . '"><strong>' . esc_html( (string) $alt['file'] ) . '</strong> <span class="aisa-tone--bad">' . esc_html( $now ) . '</span></label>'
-				. '<textarea id="aisa-alt-' . esc_attr( (string) $id ) . '" name="alt[' . esc_attr( (string) $id ) . '][value]" rows="2">' . esc_textarea( (string) $alt['value'] ) . '</textarea></div>'
-				. '<input type="checkbox" class="aisa-alt__tick" name="alt[' . esc_attr( (string) $id ) . '][apply]" value="1"' . checked( '' !== (string) $alt['value'], true, false ) . ' aria-label="' . esc_attr( sprintf( /* translators: %s: file name. */ __( 'Apply the alt text for %s', 'ai-seo-assistant' ), (string) $alt['file'] ) ) . '"></li>';
+			echo '<li class="aisa-alt' . ( $check ? ' aisa-alt--check' : '' ) . '">' . ( $thumb ? $thumb : '<span class="aisa-alt__img" aria-hidden="true"></span>' ) // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- core-built image tag.
+				. '<div class="aisa-alt__body"><label for="aisa-alt-' . esc_attr( (string) $id ) . '"><strong>' . esc_html( (string) $alt['file'] ) . '</strong> <span class="' . ( $check ? 'aisa-alt__now' : 'aisa-tone--bad' ) . '">' . esc_html( $now ) . '</span></label>'
+				. ( $check ? '<p class="aisa-small aisa-tone--warn">' . esc_html__( 'Claude looked at the photo and thinks the current alt is wrong. Not ticked: keep the current one unless you agree.', 'ai-seo-assistant' ) . '</p>' : '' )
+				. '<textarea id="aisa-alt-' . esc_attr( (string) $id ) . '" name="alt[' . esc_attr( (string) $id ) . '][value]" rows="2">' . esc_textarea( (string) $alt['value'] ) . '</textarea>'
+				. ( '' !== (string) ( $alt['why'] ?? '' ) ? '<p class="aisa-small">' . esc_html( sprintf( /* translators: %s: reason. */ __( 'Why: %s', 'ai-seo-assistant' ), (string) $alt['why'] ) ) . '</p>' : '' ) . '</div>'
+				. '<input type="checkbox" class="aisa-alt__tick" name="alt[' . esc_attr( (string) $id ) . '][apply]" value="1"' . checked( ! $check && '' !== (string) $alt['value'], true, false ) . ' aria-label="' . esc_attr( sprintf( /* translators: %s: file name. */ __( 'Apply the alt text for %s', 'ai-seo-assistant' ), (string) $alt['file'] ) ) . '"></li>';
 		}
 		echo '</ul></fieldset>';
 	}
@@ -875,6 +902,9 @@ class Scan_Page {
 	protected function applied_notice( array $applied, array $changes ): void {
 		$user = get_userdata( (int) $applied['user'] );
 		$live = count( array_filter( $changes, static fn( $c ) => null === $c['undone_at'] ) );
+		if ( 0 === $live ) {
+			return; // All undone: the panel says so, with "Start a new review".
+		}
 		/* translators: 1: number of changes, 2: date and time, 3: who. */
 		$head = sprintf( _n( '%1$d change applied · %2$s by %3$s', '%1$d changes applied · %2$s by %3$s', $live, 'ai-seo-assistant' ), $live, wp_date( 'D j M, g:ia', (int) $applied['at'] ), $user ? $user->display_name : '' );
 		/* translators: %s: date measuring starts. */
@@ -904,7 +934,7 @@ class Scan_Page {
 			if ( 'alt' === $c['field'] ) {
 				continue;
 			}
-			echo '<div class="aisa-sfield"><p class="aisa-sfield__head"><strong>' . esc_html( $labels[ $c['field'] ] ?? $c['field'] ) . '</strong>' . ( null === $c['undone_at'] ? Ui::pill( __( 'Applied', 'ai-seo-assistant' ), 'good' ) : Ui::pill( __( 'Undone', 'ai-seo-assistant' ), 'muted' ) ) . $this->undo_button( [ (int) $c['id'] ], __( 'Undo', 'ai-seo-assistant' ), null !== $c['undone_at'] ) . '</p>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui / undo_button().
+			echo '<div class="aisa-sfield"><div class="aisa-sfield__head"><strong>' . esc_html( $labels[ $c['field'] ] ?? $c['field'] ) . '</strong>' . ( null === $c['undone_at'] ? Ui::pill( __( 'Applied', 'ai-seo-assistant' ), 'good' ) : Ui::pill( __( 'Undone', 'ai-seo-assistant' ), 'muted' ) ) . $this->undo_button( [ (int) $c['id'] ], __( 'Undo', 'ai-seo-assistant' ), null !== $c['undone_at'] ) . '</div>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui / undo_button().
 				. '<p class="aisa-sfield__label">' . esc_html__( 'Before', 'ai-seo-assistant' ) . '</p><p class="aisa-before">' . esc_html( '' !== $c['before_value'] ? (string) $c['before_value'] : __( '(empty)', 'ai-seo-assistant' ) ) . '</p>'
 				/* translators: %s: SEO plugin. */
 				. '<p class="aisa-sfield__label aisa-tone--good">' . esc_html( sprintf( __( 'After · now live in %s', 'ai-seo-assistant' ), $adapter->get_name() ) ) . '</p><p class="aisa-after">' . esc_html( (string) $c['after_value'] ) . '</p></div>';

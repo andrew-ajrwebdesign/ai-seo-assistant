@@ -885,6 +885,11 @@
 	display: none;
 }
 
+/* The 12-period bars keep their drawn size (labels stay small) instead of stretching to the column. */
+.aisa-chart--bars {
+	max-inline-size: 440px;
+}
+
 /* ---- Print: the Monthly report on A4 (F3a/F3b), the Weekly report plainly -------------------- */
 
 @media print {

@@ -92,31 +92,54 @@ class Page_Review {
 	}
 
 	/**
-	 * Images on the page that need alt text (missing or weak), with an attachment to write to.
+	 * Images on the page that need alt text, with an attachment to write to.
 	 *
-	 * @param array<string,mixed> $facts Facts.
+	 * ⛔ NEVER REPLACE A GOOD ALT (Andrew, 2026-10-06: Claude replaced "Boise's Capitol Building" with a
+	 * guess). An image qualifies only when BOTH what the page prints and what the Media Library holds are
+	 * missing or poor (empty, one short word, the file name). A page that does not print a good Media
+	 * Library alt (a builder module with its own empty alt field) is a "do in the editor" finding, not a
+	 * rewrite: see Rules::images().
+	 *
+	 * @param array<string,mixed> $facts Facts (images carry `alt` as printed and `stored_alt` from the Media Library).
 	 * @return array<int,array<string,mixed>>
 	 */
 	public static function images_needing_alt( array $facts ): array {
 		$out  = [];
 		$seen = [];
 		foreach ( (array) ( $facts['images'] ?? [] ) as $img ) {
-			$id  = (int) ( $img['id'] ?? 0 );
-			$alt = $img['alt'] ?? null;
+			$id = (int) ( $img['id'] ?? 0 );
 			if ( $id <= 0 || isset( $seen[ $id ] ) ) {
 				continue;
 			}
-			if ( null === $alt || '' === trim( (string) $alt ) || Rules::weak_alt( (string) $alt, (string) ( $img['file'] ?? '' ) ) ) {
-				$seen[ $id ] = true;
-				$out[]       = [
-					'id'   => $id,
-					'file' => (string) ( $img['file'] ?? '' ),
-					'alt'  => null === $alt ? '' : (string) $alt,
-				];
-			}
+			$seen[ $id ] = true;
+			$file        = (string) ( $img['file'] ?? '' );
+			$printed     = trim( (string) ( $img['alt'] ?? '' ) );
+			$stored      = trim( (string) ( $img['stored_alt'] ?? '' ) );
+			$good        = self::good_alt( $stored, $file ) ? $stored : ( self::good_alt( $printed, $file ) ? $printed : '' );
+			// 'write': no real alt anywhere, Claude writes one from the photo. 'check': a descriptive alt exists;
+			// Claude only looks at the photo to say whether it is WRONG (never to restyle it), and a correction
+			// is shown unticked beside the old alt, for the agency to decide.
+			$out[] = [
+				'id'   => $id,
+				'file' => $file,
+				'alt'  => '' !== $good ? $good : ( '' !== $stored ? $stored : $printed ),
+				'mode' => '' !== $good ? 'check' : 'write',
+			];
 		}
+		// Missing alts first; the cap keeps the cost of a page review predictable.
+		usort( $out, static fn( $a, $b ) => ( 'write' === $a['mode'] ? 0 : 1 ) <=> ( 'write' === $b['mode'] ? 0 : 1 ) );
 
 		return array_slice( $out, 0, self::MAX_IMAGES );
+	}
+
+	/**
+	 * Whether an alt text is a real description (not empty, not one short word, not the file name).
+	 *
+	 * @param string $alt  Alt text.
+	 * @param string $file File name.
+	 */
+	public static function good_alt( string $alt, string $file ): bool {
+		return '' !== trim( $alt ) && ! Rules::weak_alt( $alt, $file );
 	}
 
 	/**
@@ -136,7 +159,10 @@ class Page_Review {
 		}
 		$facts   = $row['facts'];
 		$page    = ( new Page_Data() )->get( (string) ( $facts['url'] ?? get_permalink( $post ) ) );
-		$images  = self::images_needing_alt( $facts );
+		// Only images Claude can SEE are sent for alt text: one that cannot be loaded is left out, never guessed.
+		$blocks  = self::image_blocks( self::images_needing_alt( $facts ) );
+		$ids     = array_column( $blocks, 'id' );
+		$images  = array_values( array_filter( self::images_needing_alt( $facts ), static fn( $i ) => in_array( $i['id'], $ids, true ) ) );
 		$content = Utils::trim_to_length( (string) ( new Content_Extractor() )->get_content( $post_id ), 8000 );
 		$current = [
 			'title'       => (string) ( $facts['title'] ?? '' ),
@@ -169,7 +195,7 @@ class Page_Review {
 			]
 		);
 
-		$reply = $this->claude->generate_json( $prompt, ( new Prompt_Builder() )->review_schema(), 'review', self::image_blocks( $images ) );
+		$reply = $this->claude->generate_json( $prompt, ( new Prompt_Builder() )->review_schema(), 'review', $blocks );
 		if ( is_wp_error( $reply ) ) {
 			return $reply;
 		}
@@ -180,12 +206,17 @@ class Page_Review {
 		}
 		$alts = [];
 		foreach ( $images as $img ) {
-			$s      = $by_id[ $img['id'] ] ?? null;
+			$s     = $by_id[ $img['id'] ] ?? null;
+			$value = null === $s ? '' : sanitize_text_field( (string) $s['alt'] );
+			if ( 'check' === $img['mode'] && ( '' === $value || $value === $img['alt'] ) ) {
+				continue; // The existing alt matches the photo: nothing to suggest.
+			}
 			$alts[] = [
 				'id'    => $img['id'],
 				'file'  => $img['file'],
 				'now'   => $img['alt'],
-				'value' => null === $s ? '' : sanitize_text_field( (string) $s['alt'] ),
+				'mode'  => $img['mode'],
+				'value' => $value,
 				'why'   => null === $s ? '' : sanitize_text_field( (string) $s['why'] ),
 			];
 		}
@@ -220,28 +251,31 @@ class Page_Review {
 		return $suggestions;
 	}
 
+	/** Largest image sent to Claude, in bytes. */
+	public const MAX_IMAGE_BYTES = 1572864;
+
 	/**
-	 * Small base64 copies of the images Claude should describe (the "medium" size when there is one).
+	 * Base64 copies of the images Claude should describe, at a size it can read the scene in (the
+	 * "medium_large" size, 768px, about 500 input tokens on Opus 5; then "large", then "medium").
+	 *
+	 * Read from the uploads folder; when the file is not on disk (a local copy whose uploads are served from
+	 * the live site, an offloaded media library) it is fetched from the site's OWN address only. An image
+	 * that cannot be loaded is left out, so it is never described blind.
 	 *
 	 * @param array<int,array<string,mixed>> $images images_needing_alt().
-	 * @return array<int,array<string,mixed>>
+	 * @return array<int,array<string,mixed>> [ id, media_type, data ].
 	 */
 	protected static function image_blocks( array $images ): array {
 		$blocks = [];
 		foreach ( $images as $img ) {
-			$file = self::small_file( (int) $img['id'] );
-			if ( '' === $file ) {
-				continue;
-			}
-			$type = (string) wp_check_filetype( $file )['type'];
-			$size = (int) filesize( $file );
-			if ( ! in_array( $type, self::IMAGE_TYPES, true ) || $size <= 0 || $size > 1048576 ) {
+			$bytes = self::image_bytes( (int) $img['id'] );
+			if ( null === $bytes ) {
 				continue;
 			}
 			$blocks[] = [
 				'id'         => (int) $img['id'],
-				'media_type' => $type,
-				'data'       => base64_encode( (string) file_get_contents( $file ) ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode,WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- the API takes images as base64; a local upload, not a URL.
+				'media_type' => $bytes['type'],
+				'data'       => base64_encode( $bytes['body'] ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- the API takes images as base64.
 			];
 		}
 
@@ -249,27 +283,71 @@ class Page_Review {
 	}
 
 	/**
-	 * Path of an attachment's medium (or smallest available) size, '' when none is on disk.
+	 * One attachment's image, at the size Claude reads it: from disk, else from this site's own URL.
 	 *
 	 * @param int $id Attachment ID.
+	 * @return array{type:string,body:string}|null
 	 */
-	protected static function small_file( int $id ): string {
-		$full = (string) get_attached_file( $id );
-		if ( '' === $full || ! is_readable( $full ) ) {
-			return '';
-		}
-		$meta = wp_get_attachment_metadata( $id );
-		foreach ( [ 'medium', 'medium_large', 'thumbnail' ] as $size ) {
-			$name = is_array( $meta ) ? ( $meta['sizes'][ $size ]['file'] ?? '' ) : '';
-			if ( '' !== $name ) {
-				$path = path_join( dirname( $full ), $name );
-				if ( is_readable( $path ) ) {
-					return $path;
+	protected static function image_bytes( int $id ): ?array {
+		foreach ( [ 'medium_large', 'large', 'medium' ] as $size ) {
+			$src = wp_get_attachment_image_src( $id, $size );
+			if ( ! is_array( $src ) || empty( $src[0] ) ) {
+				continue;
+			}
+			$url  = (string) $src[0];
+			$type = (string) wp_check_filetype( (string) wp_parse_url( $url, PHP_URL_PATH ) )['type'];
+			if ( ! in_array( $type, self::IMAGE_TYPES, true ) ) {
+				return null;
+			}
+			$path = self::upload_path( $url );
+			if ( '' !== $path && is_readable( $path ) && filesize( $path ) <= self::MAX_IMAGE_BYTES ) {
+				return [
+					'type' => $type,
+					'body' => (string) file_get_contents( $path ), // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- a local upload, not a URL.
+				];
+			}
+			if ( ! \AJR\SEOAssistant\Scan\Page_Fetcher::is_own( $url ) ) {
+				continue; // Never fetch an address off this site.
+			}
+			$response = wp_remote_get(
+				$url,
+				[
+					'timeout'             => 8,
+					'redirection'         => 2,
+					'sslverify'           => (bool) apply_filters( 'https_local_ssl_verify', false ),
+					'limit_response_size' => self::MAX_IMAGE_BYTES,
+				]
+			);
+			$got      = is_wp_error( $response ) ? '' : (string) wp_remote_retrieve_header( $response, 'content-type' );
+			if ( ! is_wp_error( $response ) && 200 === (int) wp_remote_retrieve_response_code( $response ) && 0 === strpos( $got, 'image/' ) ) {
+				$body = (string) wp_remote_retrieve_body( $response );
+				if ( '' !== $body && strlen( $body ) < self::MAX_IMAGE_BYTES ) {
+					return [
+						'type' => in_array( strtok( $got, ';' ), self::IMAGE_TYPES, true ) ? (string) strtok( $got, ';' ) : $type,
+						'body' => $body,
+					];
 				}
 			}
 		}
 
-		return $full;
+		return null;
+	}
+
+	/**
+	 * The uploads-folder path of an uploads URL ('' when it is not one).
+	 *
+	 * @param string $url Image URL.
+	 */
+	protected static function upload_path( string $url ): string {
+		$uploads = wp_get_upload_dir();
+		$base    = (string) preg_replace( '#^https?:#', '', (string) $uploads['baseurl'] );
+		$plain   = (string) preg_replace( '#^https?:#', '', strtok( $url, '?' ) );
+		if ( '' === $base || 0 !== strpos( $plain, $base ) ) {
+			return '';
+		}
+		$rel = substr( $plain, strlen( $base ) );
+
+		return false !== strpos( $rel, '..' ) ? '' : $uploads['basedir'] . $rel;
 	}
 
 	/**
@@ -331,7 +409,13 @@ class Page_Review {
 			'count' => $count,
 		];
 		$this->store->save_suggestions( $post_id, $s );
-		$this->rescan( $post_id );
+		$this->rescan(
+			$post_id,
+			[
+				'title'       => $this->read( 'title', $post_id ),
+				'description' => $this->read( 'description', $post_id ),
+			]
+		);
 
 		return [
 			'batch'   => $batch,
@@ -370,7 +454,13 @@ class Page_Review {
 			++$undone;
 		}
 		foreach ( array_keys( $pages ) as $post_id ) {
-			$this->rescan( (int) $post_id );
+			$this->rescan(
+				(int) $post_id,
+				[
+					'title'       => $this->read( 'title', (int) $post_id ),
+					'description' => $this->read( 'description', (int) $post_id ),
+				]
+			);
 		}
 
 		return [
@@ -417,12 +507,40 @@ class Page_Review {
 		clean_post_cache( $post_id );
 	}
 
+	/** Transient prefix: a page whose rescan is due on its next review-screen load. */
+	public const RESCAN_FLAG = 'aisa_rescan_';
+
 	/**
-	 * Rescan a page right after an apply or undo, so its issues reflect the change.
+	 * Rescan a page straight after an apply or undo, in this request (WP-Cron is off or slow on many hosts,
+	 * and the review must not show the old issues after an Apply).
+	 *
+	 * One page, short loopback. Yoast rebuilds what it prints in the title tag from the changed meta only at
+	 * the END of this request, so the page fetched now still shows the old title and description: the values
+	 * just written are known, so they replace the fetched ones ($known). The page is also flagged, so its
+	 * review screen's next load rescans it plainly from the fresh render, and a deferred cron event covers a
+	 * fetch that failed.
+	 *
+	 * @param int                  $post_id Post ID.
+	 * @param array<string,string> $known   title / description values now stored ('' = not known).
+	 */
+	protected function rescan( int $post_id, array $known = [] ): void {
+		$scanner = new Scanner( $this->store );
+		$scanner->scan_page( $post_id, array_filter( $known, static fn( $v ) => '' !== $v && false === strpos( $v, '%%' ) ) );
+		$scanner->finalize();
+		set_transient( self::RESCAN_FLAG . $post_id, 1, HOUR_IN_SECONDS );
+		wp_schedule_single_event( time() + MINUTE_IN_SECONDS, \AJR\SEOAssistant\Scan\Scheduler::POST_HOOK, [ $post_id ] );
+	}
+
+	/**
+	 * Run a flagged rescan (called by the review screen on load, a new request).
 	 *
 	 * @param int $post_id Post ID.
 	 */
-	protected function rescan( int $post_id ): void {
+	public function rescan_if_flagged( int $post_id ): void {
+		if ( false === get_transient( self::RESCAN_FLAG . $post_id ) ) {
+			return;
+		}
+		delete_transient( self::RESCAN_FLAG . $post_id );
 		$scanner = new Scanner( $this->store );
 		$scanner->scan_page( $post_id );
 		$scanner->finalize();
@@ -443,6 +561,6 @@ class Page_Review {
 		$opus  = Spend::PRICES['claude-opus-5']['out'];
 		$price = Spend::PRICES[ Spend::base_model( $model ) ]['out'] ?? $opus;
 
-		return 0.03 * $price / $opus;
+		return 0.04 * $price / $opus; // Measured Opus 5 page review with photos, 2026-10-06: about 4–5¢.
 	}
 }

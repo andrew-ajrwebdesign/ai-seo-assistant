@@ -76,7 +76,7 @@ class Month_View extends Report_View {
 		$headline             = [] === $snap['enquiries']['sources'] ? __( 'Your website this month', 'ai-seo-assistant' ) : self::month_headline( $total, $previous );
 		$m                    = $snap['month'];
 		$sub                  = esc_html( (string) $context['business'] ) . ' · ' . esc_html( self::range_long( $m ) )
-			. ' ' . esc_html( $m['complete'] ? __( '(your billing month)', 'ai-seo-assistant' ) : sprintf( /* translators: %s: last day included. */ __( '(your billing month, figures to %s so far)', 'ai-seo-assistant' ), self::date( 'j F', (int) strtotime( $m['data_end'] . ' 12:00 UTC' ) ) ) );
+			. ' ' . esc_html( self::state( $m ) );
 		$nav                  = '<nav class="aisa-weeks" aria-label="' . esc_attr__( 'Other months', 'ai-seo-assistant' ) . '">'
 			. self::week_link( (string) ( $context['prev_url'] ?? '' ), __( 'Previous month', 'ai-seo-assistant' ), 'arrow-left-alt2', true )
 			. self::week_link( (string) ( $context['next_url'] ?? '' ), __( 'Next month', 'ai-seo-assistant' ), 'arrow-right-alt2', false )
@@ -91,6 +91,24 @@ class Month_View extends Report_View {
 			. '<h1 class="aisa-hero__headline" id="aisa-headline">' . esc_html( $headline ) . '</h1>'
 			. '<p class="aisa-hero__sub">' . $sub . '</p>'
 			. $nav . '</header>';
+	}
+
+	/**
+	 * "(your billing month)", or why the figures are not final yet: a part month, or a month just ended
+	 * whose figures are still settling (Search Console runs about 2 days behind; Ads conversions land late).
+	 *
+	 * @param array<string,mixed> $m Month.
+	 */
+	public static function state( array $m ): string {
+		if ( ! empty( $m['complete'] ) ) {
+			return __( '(your billing month)', 'ai-seo-assistant' );
+		}
+		if ( (string) $m['data_end'] < (string) $m['end'] ) {
+			/* translators: %s: last day included. */
+			return sprintf( __( '(your billing month, figures to %s so far)', 'ai-seo-assistant' ), self::date( 'j F', (int) strtotime( $m['data_end'] . ' 12:00 UTC' ) ) );
+		}
+
+		return __( '(your billing month; figures still settling, final in a few days)', 'ai-seo-assistant' );
 	}
 
 	/**

@@ -77,7 +77,7 @@ class Spend {
 	public const RESERVE = [
 		'metadata'        => 0.04,
 		'recommendations' => 0.08,
-		'review'          => 0.10,
+		'review'          => 0.12,
 		'test'            => 0.01,
 	];
 

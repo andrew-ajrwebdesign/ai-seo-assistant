@@ -117,10 +117,13 @@ class Scanner {
 	/**
 	 * Phase 1: read and store one page's facts.
 	 *
-	 * @param int $post_id Post ID.
+	 * @param int                  $post_id Post ID.
+	 * @param array<string,string> $known   Title / description known to be stored now, which replace the
+	 *                                      fetched ones (Page_Review: Yoast prints a changed title only from
+	 *                                      the next request on).
 	 * @return string 'rendered' | 'content' | 'skipped'
 	 */
-	public function scan_page( int $post_id ): string {
+	public function scan_page( int $post_id, array $known = [] ): string {
 		$post = get_post( $post_id );
 		if ( ! $post instanceof \WP_Post || 'publish' !== $post->post_status || ! in_array( $post->post_type, self::post_types(), true ) ) {
 			$this->store->delete( $post_id );
@@ -135,6 +138,11 @@ class Scanner {
 			$facts                = $this->from_content( $post );
 			$facts['fetch_error'] = $fetched['error'];
 			$source               = 'content';
+		}
+		foreach ( [ 'title', 'description' ] as $field ) {
+			if ( isset( $known[ $field ] ) && '' !== $known[ $field ] ) {
+				$facts[ $field ] = Html_Parser::clean( $known[ $field ] );
+			}
 		}
 		$facts['url']      = $url;
 		$facts['images']   = $this->resolve_images( (array) $facts['images'] );
@@ -199,6 +207,8 @@ class Scanner {
 				$kb   = is_readable( $file ) ? (int) round( filesize( $file ) / 1024 ) : 0;
 			}
 			$images[ $i ]['kb'] = $kb;
+			// The Media Library's own alt, so a good one is never replaced and a builder that does not print it is flagged.
+			$images[ $i ]['stored_alt'] = ! empty( $images[ $i ]['id'] ) ? mb_substr( trim( (string) get_post_meta( (int) $images[ $i ]['id'], '_wp_attachment_image_alt', true ) ), 0, 200 ) : '';
 		}
 
 		return $images;
@@ -247,6 +257,7 @@ class Scanner {
 		$services   = self::service_names();
 		$schema_on  = self::custom_schema_on();
 		$front      = (int) get_option( 'page_on_front' );
+		$discourage = '0' === (string) get_option( 'blog_public', '1' );
 		$popular    = self::popular_paths( $data );
 
 		$total    = 0;
@@ -271,6 +282,7 @@ class Scanner {
 				'is_utility'       => (bool) preg_match( '#/(contact|privacy|terms|cookie|thank|accessibility|sitemap|login|account|cart|checkout)#i', $path ),
 				'is_service'       => 'page' === $row['post_type'] && self::matches_service( $f, $path, $services ),
 				'custom_schema_on' => $schema_on,
+				'discouraged'      => $discourage,
 				'heavy'            => [],
 			];
 			foreach ( array_unique( array_column( (array) ( $f['links'] ?? [] ), 'p' ) ) as $target ) {
@@ -299,6 +311,7 @@ class Scanner {
 			'rendered'    => $rendered,
 			'fallback'    => count( $rows ) - $rendered,
 			'sitemap'     => null !== $sitemap,
+			'discouraged' => $discourage,
 		];
 		update_option( Scan_Store::META_OPTION, $summary, false );
 

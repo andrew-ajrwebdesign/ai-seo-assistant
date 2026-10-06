@@ -80,6 +80,11 @@
 			event.preventDefault();
 			runScan( true );
 		} );
+		// A scan queued by a push or a save is waiting: work through it while the screen is open (where
+		// WP-Cron is off, this is what finishes it).
+		if ( scanForm.dataset.running ) {
+			runScan( false );
+		}
 	}
 
 	/* ---- Bulk generate ------------------------------------------------------------------------- */
@@ -151,6 +156,30 @@
 			event.preventDefault();
 			const panel = document.querySelector( '[data-aisa-panel]' );
 			const id = form.dataset.aisaGenerateOne;
+			if ( panel && ! panel.querySelector( 'textarea' ) && panel.dataset.fields ) {
+				// First suggestions for this page: show the fields being written (C2).
+				Array.from( panel.children ).slice( 1 ).forEach( ( el ) => {
+					el.hidden = true;
+				} );
+				panel.dataset.fields.split( '|' ).forEach( ( label ) => {
+					const box = document.createElement( 'div' );
+					box.className = 'aisa-sfield';
+					const head = document.createElement( 'p' );
+					head.className = 'aisa-sfield__head';
+					const strong = document.createElement( 'strong' );
+					strong.textContent = label;
+					const pill = document.createElement( 'span' );
+					pill.className = 'aisa-pill aisa-push';
+					pill.textContent = t.writingField;
+					head.append( strong, pill );
+					const a = document.createElement( 'span' );
+					a.className = 'aisa-skeleton';
+					const b = document.createElement( 'span' );
+					b.className = 'aisa-skeleton aisa-skeleton--short';
+					box.append( head, a, b );
+					panel.append( box );
+				} );
+			}
 			if ( panel ) {
 				panel.querySelectorAll( 'textarea' ).forEach( ( area ) => {
 					const sk = document.createElement( 'span' );
