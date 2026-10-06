@@ -1,0 +1,1626 @@
+/**
+ * AI SEO Assistant 5.0 — the agency screens: SEO scan, page review, Search Console, Changes, Settings.
+ *
+ * Built from the approved mockup (Figma cWMjcUjT9snr4r3cYhTsx1). Loaded after weekly-report.css, whose
+ * tokens (declared once on .aisa-report and .aisa-tool) every colour here uses; nothing below types one.
+ * Mobile first: one column, then side by side from 782px (wp-admin's own breakpoint) and 1100px.
+ * Motion: state changes only (150–200ms), and none under prefers-reduced-motion.
+ */
+
+/* ---- Header -------------------------------------------------------------------------------------- */
+
+.aisa-hero--tool {
+	gap: 10px;
+}
+
+.aisa-hero__title {
+	margin-block-start: 6px;
+	color: var(--aisa-on-dark);
+	font-family: var(--aisa-serif);
+	font-size: clamp(26px, 3vw, 34px);
+	font-weight: 600;
+	line-height: 1.15;
+	text-wrap: balance;
+}
+
+.aisa-hero__actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+	margin-block-start: 6px;
+}
+
+.aisa-hero__note {
+	color: var(--aisa-muted-light);
+	font-size: 12px;
+}
+
+/* The scan's progress bar, in the header (Rescan now, or a scan already running). */
+.aisa-progress {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) auto;
+	align-items: center;
+	gap: 6px 12px;
+	inline-size: 100%;
+	max-inline-size: 640px;
+}
+
+.aisa-progress[hidden] {
+	display: none;
+}
+
+.aisa-progress__track {
+	grid-column: 1 / -1;
+	block-size: 8px;
+	overflow: hidden;
+	border-radius: 999px;
+	background: var(--aisa-dark-lift);
+}
+
+.aisa-progress__fill {
+	display: block;
+	block-size: 100%;
+	inline-size: 0;
+	border-radius: inherit;
+	background: var(--aisa-accent-light);
+}
+
+.aisa-progress__text {
+	margin: 0;
+	color: var(--aisa-on-dark);
+	font-size: 13px;
+	font-variant-numeric: tabular-nums;
+}
+
+.aisa-btn--ghost-dark {
+	border-color: var(--aisa-muted-light);
+	background: transparent;
+	color: var(--aisa-on-dark);
+}
+
+.aisa-btn--ghost-dark:hover,
+.aisa-btn--ghost-dark:focus {
+	border-color: var(--aisa-on-dark);
+	color: var(--aisa-on-dark);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+	.aisa-progress__fill {
+		transition: inline-size 200ms ease-out;
+	}
+}
+
+/* "N pages have a suggested page type" and its review list. */
+.aisa-typebar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	margin: 0 0 12px;
+	padding: 10px 12px;
+	border-radius: var(--aisa-radius);
+	background: var(--aisa-accent-bg);
+	color: var(--aisa-primary-ink);
+}
+
+.aisa-typereview {
+	margin: 0 0 16px;
+	padding: 12px;
+	border: 1px solid var(--aisa-border);
+	border-radius: var(--aisa-radius);
+}
+
+.aisa-typereview fieldset {
+	margin: 0;
+	padding: 0;
+	border: 0;
+}
+
+.aisa-typereview ul {
+	display: grid;
+	gap: 6px;
+	margin: 10px 0;
+	padding: 0;
+	list-style: none;
+}
+
+.aisa-back {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	color: var(--aisa-accent-light);
+	font-size: 12px;
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.aisa-back:hover,
+.aisa-back:focus {
+	color: var(--aisa-on-dark);
+}
+
+/* ---- Buttons ------------------------------------------------------------------------------------- */
+
+.aisa-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	min-block-size: 36px;
+	padding: 6px 14px;
+	border: 1px solid var(--aisa-primary);
+	border-radius: 8px;
+	background-color: var(--aisa-bg);
+	color: var(--aisa-primary);
+	cursor: pointer;
+	font-family: inherit;
+	font-size: 13px;
+	font-weight: 600;
+	line-height: 1.2;
+	text-decoration: none;
+	transition: background-color 150ms ease-out, color 150ms ease-out;
+}
+
+.aisa-btn:hover {
+	background-color: var(--aisa-accent-bg);
+	color: var(--aisa-primary-ink);
+}
+
+.aisa-btn:focus-visible,
+.aisa-linkbtn:focus-visible,
+.aisa-chip:focus-visible,
+.aisa-sc__row > summary:focus-visible,
+.aisa-replace > summary:focus-visible {
+	outline: 2px solid var(--aisa-primary);
+	outline-offset: 2px;
+	box-shadow: none;
+}
+
+.aisa-btn[disabled] {
+	border-color: var(--aisa-border);
+	background-color: var(--aisa-surface);
+	color: var(--aisa-muted);
+	cursor: not-allowed;
+}
+
+.aisa-btn--primary {
+	background-color: var(--aisa-primary);
+	color: var(--aisa-on-dark);
+}
+
+.aisa-btn--primary:hover {
+	background-color: var(--aisa-primary-ink);
+	color: var(--aisa-on-dark);
+}
+
+.aisa-btn--dark {
+	border-color: var(--aisa-dark-lift);
+	background-color: var(--aisa-dark-lift);
+	color: var(--aisa-on-dark);
+}
+
+.aisa-btn--dark:hover,
+.aisa-btn--dark:focus {
+	border-color: var(--aisa-accent-light);
+	background-color: var(--aisa-dark-lift);
+	color: var(--aisa-on-dark);
+}
+
+.aisa-btn--dark:focus-visible {
+	outline-color: var(--aisa-accent-light);
+}
+
+.aisa-btn--small {
+	min-block-size: 32px;
+	padding: 4px 12px;
+	font-size: 12px;
+}
+
+.aisa-btn--danger {
+	border-color: var(--aisa-bad);
+	color: var(--aisa-bad);
+}
+
+.aisa-btn--danger:hover {
+	background-color: var(--aisa-bad-bg);
+	color: var(--aisa-bad);
+}
+
+.aisa-btn--danger-outline {
+	border-color: var(--aisa-bad);
+	color: var(--aisa-bad);
+}
+
+.aisa-btn--danger-outline:hover {
+	background-color: var(--aisa-bad-bg);
+	color: var(--aisa-bad);
+}
+
+.aisa-btn.is-busy {
+	cursor: progress;
+}
+
+.aisa-linkbtn {
+	padding: 0;
+	border: 0;
+	background: none;
+	color: var(--aisa-info);
+	cursor: pointer;
+	font: inherit;
+	font-size: 13px;
+	font-weight: 600;
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+
+.aisa-inline {
+	display: inline-flex;
+	margin: 0;
+}
+
+/* The display above would otherwise beat the hidden attribute (the Rescan button while the bar runs). */
+.aisa-inline[hidden],
+.aisa-hero__note[hidden] {
+	display: none;
+}
+
+.aisa-push {
+	margin-inline-start: auto;
+}
+
+.aisa-actions {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+/* ---- Notices ------------------------------------------------------------------------------------- */
+
+.aisa-notice {
+	display: flex;
+	gap: 12px;
+	padding: 14px var(--aisa-pad);
+	border: 1px solid var(--aisa-border);
+	border-radius: var(--aisa-radius);
+	background-color: var(--aisa-bg);
+}
+
+.aisa-notice > div {
+	display: grid;
+	gap: 4px;
+}
+
+.aisa-notice--warning {
+	border-color: var(--aisa-warning-edge);
+	background-color: var(--aisa-warning-bg);
+}
+
+.aisa-notice--warning .aisa-icon {
+	color: var(--aisa-warning-edge);
+}
+
+.aisa-notice--success {
+	border-color: var(--aisa-good);
+	background-color: var(--aisa-good-bg);
+}
+
+.aisa-notice--success .aisa-icon {
+	color: var(--aisa-good);
+}
+
+.aisa-notice--error {
+	border-color: var(--aisa-bad);
+	background-color: var(--aisa-bad-bg);
+}
+
+.aisa-notice--info {
+	border-color: var(--aisa-info);
+	background-color: var(--aisa-info-bg);
+}
+
+.aisa-notice--info .aisa-icon {
+	color: var(--aisa-info);
+}
+
+.aisa-notice a {
+	color: var(--aisa-info);
+	font-weight: 600;
+}
+
+.aisa-tone--warn {
+	color: var(--aisa-warning-ink);
+}
+
+/* ---- Chips, filters, meters ---------------------------------------------------------------------- */
+
+.aisa-chips {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.aisa-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-block-size: 36px;
+	padding: 6px 14px;
+	border: 1px solid var(--aisa-border);
+	border-radius: 999px;
+	color: var(--aisa-ink);
+	font-size: 13px;
+	text-decoration: none;
+}
+
+.aisa-chip span {
+	color: var(--aisa-primary);
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+.aisa-chip:hover {
+	border-color: var(--aisa-primary);
+	color: var(--aisa-ink);
+}
+
+.aisa-chip.is-current {
+	border-color: var(--aisa-dark);
+	background-color: var(--aisa-dark);
+	color: var(--aisa-on-dark);
+}
+
+.aisa-chip.is-current span {
+	color: var(--aisa-accent-light);
+}
+
+.aisa-filters {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+}
+
+.aisa-field {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	min-inline-size: 0;
+}
+
+.aisa-field select,
+.aisa-field input[type="search"] {
+	/* A select is as wide as its longest option (a long page title): never wider than the screen. A
+	   percentage would resolve against the label, which is itself sized by the select. */
+	max-inline-size: min(25rem, calc(100vw - 48px));
+	min-inline-size: 8rem;
+	padding-inline-end: 32px; /* The arrow sits here; the text never runs into it. */
+	text-overflow: ellipsis;
+	min-block-size: 38px;
+	border-color: var(--aisa-border);
+	border-radius: 8px;
+}
+
+.aisa-field--search {
+	position: relative;
+	flex: 1 1 260px;
+}
+
+.aisa-field--search .aisa-icon {
+	position: absolute;
+	inset-inline-start: 10px;
+	color: var(--aisa-muted);
+}
+
+.aisa-field--search input {
+	inline-size: 100%;
+	padding-inline-start: 36px;
+}
+
+.aisa-check {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	font-size: 13px;
+}
+
+.aisa-spend {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 8px;
+	color: var(--aisa-muted);
+}
+
+.aisa-spend__value {
+	color: var(--aisa-ink);
+	font-size: 28px;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+}
+
+.aisa-meter--spend {
+	block-size: 8px;
+	background-color: var(--aisa-border);
+}
+
+.aisa-meter--spend.is-capped .aisa-meter__value {
+	background-color: var(--aisa-warning-edge);
+}
+
+/* ---- Bulk bar and the pages table ---------------------------------------------------------------- */
+
+.aisa-bulk {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px 16px;
+	padding: 12px 16px;
+	border-radius: 10px;
+	background-color: var(--aisa-surface);
+}
+
+.aisa-bulk.is-active {
+	background-color: var(--aisa-accent-bg);
+}
+
+.aisa-bulk__note {
+	margin-inline-start: auto;
+	font-size: 13px;
+}
+
+.aisa-bulk__status:empty {
+	display: none;
+}
+
+.aisa-bulk__status {
+	flex-basis: 100%;
+	font-size: 13px;
+}
+
+.aisa-table--pages tbody tr.is-selected {
+	background-color: var(--aisa-accent-bg);
+}
+
+.aisa-table--pages td,
+.aisa-table--pages th {
+	vertical-align: middle;
+}
+
+.aisa-col-check {
+	inline-size: 32px;
+}
+
+.aisa-col-action {
+	text-align: end;
+}
+
+.aisa-pagecell {
+	display: grid;
+	gap: 2px;
+	min-inline-size: 180px;
+	font-weight: 400;
+}
+
+.aisa-pagecell__title {
+	color: var(--aisa-ink);
+	font-weight: 600;
+	text-decoration: none;
+}
+
+a.aisa-pagecell__title:hover {
+	color: var(--aisa-primary);
+	text-decoration: underline;
+}
+
+.aisa-pagecell__meta {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+
+.aisa-path {
+	color: var(--aisa-muted);
+	font-size: 12px;
+	overflow-wrap: anywhere;
+}
+
+.aisa-tool input.regular-text {
+	max-inline-size: 100%;
+}
+
+/* Role tag: a select dressed as a small pill, one click to change. */
+.aisa-tool select.aisa-roletag {
+	min-block-size: 22px;
+	padding: 0 22px 0 8px;
+	border: 1px solid var(--aisa-border);
+	border-radius: 999px;
+	background-color: var(--aisa-surface);
+	background-position: right 4px center;
+	background-size: 14px;
+	color: var(--aisa-muted);
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 20px;
+	cursor: pointer;
+}
+
+.aisa-tool select.aisa-roletag--money {
+	border-color: var(--aisa-primary);
+	background-color: var(--aisa-accent-bg);
+	color: var(--aisa-primary-ink);
+}
+
+.aisa-tool select.aisa-roletag--location {
+	background-color: var(--aisa-info-bg);
+	color: var(--aisa-info);
+}
+
+.aisa-tool select.aisa-roletag:not(.is-set) {
+	border-style: dashed;
+}
+
+.aisa-tool select.aisa-roletag:focus-visible {
+	outline: 2px solid var(--aisa-primary);
+	outline-offset: 1px;
+}
+
+.aisa-bulk__role {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+}
+
+/* ---- Phone: the pages list and the Changes log as stacked cards (no sideways scrolling) ------------ */
+
+@media (max-width: 600px) {
+	.aisa-tablewrap:has(.aisa-table--pages),
+	.aisa-tablewrap:has(.aisa-table--log) {
+		overflow-x: visible;
+	}
+
+	.aisa-table--pages,
+	.aisa-table--pages tbody,
+	.aisa-table--log,
+	.aisa-table--log tbody {
+		display: block;
+		inline-size: 100%;
+	}
+
+	/* The column names stay for screen readers; each card labels its own figures. */
+	.aisa-table--pages thead,
+	.aisa-table--log thead {
+		position: absolute;
+		inline-size: 1px;
+		block-size: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+	}
+
+	.aisa-table--pages tr,
+	.aisa-table--log tr {
+		display: grid;
+		grid-template-columns: auto minmax(0, 1fr) auto;
+		gap: 6px 10px;
+		padding-block: 14px;
+		border-block-end: 1px solid var(--aisa-border);
+	}
+
+	.aisa-table--pages td,
+	.aisa-table--pages th,
+	.aisa-table--log td {
+		display: block;
+		padding: 0;
+		border: 0;
+		text-align: start;
+	}
+
+	.aisa-table--pages .aisa-col-check {
+		grid-column: 1;
+		grid-row: 1 / span 2;
+		inline-size: auto;
+	}
+
+	.aisa-table--pages .aisa-pagecell {
+		grid-column: 2 / 4;
+		min-inline-size: 0;
+	}
+
+	.aisa-table--pages .aisa-col-opp {
+		grid-column: 2 / 4;
+	}
+
+	.aisa-table--pages .aisa-col-shown,
+	.aisa-table--pages .aisa-col-ctr,
+	.aisa-table--pages .aisa-col-issues {
+		text-align: start;
+	}
+
+	.aisa-table--pages .aisa-col-shown,
+	.aisa-table--pages .aisa-col-ctr {
+		grid-column: 2 / 4;
+		font-size: 12px;
+	}
+
+	.aisa-table--pages .aisa-col-shown br,
+	.aisa-table--pages .aisa-col-ctr br {
+		display: none;
+	}
+
+	.aisa-table--pages .aisa-col-shown .aisa-small,
+	.aisa-table--pages .aisa-col-ctr .aisa-small {
+		margin-inline-start: 6px;
+	}
+
+	.aisa-table--pages .aisa-col-issues {
+		grid-column: 2;
+		align-self: center;
+	}
+
+	.aisa-table--pages .aisa-col-action,
+	.aisa-table--log .aisa-col-action {
+		grid-column: 3;
+		align-self: center;
+		text-align: end;
+	}
+
+	.aisa-table--pages [data-label]::before,
+	.aisa-table--log [data-label]::before {
+		content: attr(data-label) ": ";
+		color: var(--aisa-muted);
+		font-size: 12px;
+	}
+
+	.aisa-table--log .aisa-col-date {
+		grid-column: 1 / 4;
+	}
+
+	.aisa-table--log td {
+		grid-column: 1 / 4;
+		min-inline-size: 0;
+		overflow-wrap: anywhere;
+	}
+
+	.aisa-table--log .aisa-col-action {
+		grid-column: 1 / 4;
+		text-align: start;
+	}
+
+	.aisa-opp__line {
+		white-space: normal;
+	}
+
+	/* Figure tables (searches): the search on its own line, its figures labelled underneath. */
+	.aisa-tablewrap:has(.aisa-table--stack) {
+		overflow-x: visible;
+	}
+
+	.aisa-table--stack,
+	.aisa-table--stack tbody,
+	.aisa-table--stack tr,
+	.aisa-table--stack th {
+		display: block;
+		inline-size: 100%;
+	}
+
+	.aisa-table--stack thead {
+		position: absolute;
+		inline-size: 1px;
+		block-size: 1px;
+		overflow: hidden;
+		clip-path: inset(50%);
+	}
+
+	.aisa-table--stack tr {
+		padding-block: 10px;
+		border-block-end: 1px solid var(--aisa-border);
+	}
+
+	.aisa-table--stack th,
+	.aisa-table--stack td {
+		padding: 0;
+		border: 0;
+		text-align: start;
+	}
+
+	.aisa-table--stack td {
+		display: inline-block;
+		margin-inline-end: 12px;
+		font-size: 12px;
+	}
+
+	.aisa-table--stack td[data-label]::before {
+		content: attr(data-label) " ";
+		color: var(--aisa-muted);
+	}
+}
+
+/* ---- Opportunity v3: tier chip, yearly estimates, intent tags --------------------------------------- */
+
+.aisa-opp {
+	display: grid;
+	gap: 2px;
+	justify-items: start;
+	min-inline-size: 150px;
+}
+
+.aisa-tier {
+	padding: 1px 10px;
+	border-radius: 999px;
+	font-size: 12px;
+	font-weight: 700;
+	line-height: 20px;
+}
+
+.aisa-tier--high {
+	background-color: var(--aisa-primary);
+	color: var(--aisa-on-dark);
+}
+
+.aisa-tier--medium {
+	background-color: var(--aisa-accent-bg);
+	color: var(--aisa-primary-ink);
+}
+
+.aisa-tier--low,
+.aisa-tier--none {
+	background-color: var(--aisa-surface);
+	color: var(--aisa-muted);
+	box-shadow: inset 0 0 0 1px var(--aisa-border);
+}
+
+.aisa-opp__line {
+	font-size: 12px;
+	white-space: nowrap;
+}
+
+.aisa-modes-row {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px 14px;
+}
+
+.aisa-modes-row p {
+	margin: 0;
+}
+
+.aisa-modes {
+	display: inline-flex;
+	padding: 3px;
+	border-radius: 10px;
+	background-color: var(--aisa-surface);
+	box-shadow: inset 0 0 0 1px var(--aisa-border);
+}
+
+.aisa-modes__item {
+	padding: 6px 14px;
+	border-radius: 8px;
+	color: var(--aisa-muted);
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.aisa-modes__item:hover {
+	color: var(--aisa-ink);
+}
+
+.aisa-modes__item.is-current {
+	background-color: var(--aisa-dark);
+	color: var(--aisa-on-dark);
+}
+
+.aisa-modes__item:focus-visible {
+	outline: 2px solid var(--aisa-primary);
+	outline-offset: 1px;
+}
+
+.aisa-opp-sum {
+	margin: 0;
+}
+
+.aisa-intent {
+	display: inline-block;
+	padding: 0 8px;
+	border-radius: 999px;
+	background-color: var(--aisa-surface);
+	color: var(--aisa-muted);
+	font-size: 11px;
+	font-weight: 600;
+	line-height: 20px;
+	white-space: nowrap;
+}
+
+.aisa-table th .aisa-intent {
+	display: table;
+	margin-block-start: 3px;
+}
+
+.aisa-intent--lead {
+	background-color: var(--aisa-accent-bg);
+	color: var(--aisa-primary-ink);
+}
+
+.aisa-intent--commercial {
+	background-color: var(--aisa-info-bg);
+	color: var(--aisa-info);
+}
+
+/* ---- Google listing (J1) ---------------------------------------------------------------------------- */
+
+.aisa-listing {
+	display: grid;
+	gap: 10px;
+	padding: 16px;
+	border: 1px solid var(--aisa-warning-edge);
+	border-radius: 10px;
+	background-color: var(--aisa-warning-bg);
+}
+
+.aisa-listing p {
+	margin: 0;
+}
+
+.aisa-listing--kept {
+	border-color: transparent;
+	background-color: var(--aisa-surface);
+}
+
+.aisa-listing__pair {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	gap: 10px;
+}
+
+.aisa-listing__value {
+	display: grid;
+	gap: 2px;
+	padding: 10px 12px;
+	border: 1px solid var(--aisa-border);
+	border-radius: 8px;
+	background-color: var(--aisa-bg);
+}
+
+.aisa-listing__value span {
+	color: var(--aisa-muted);
+	font-size: 12px;
+}
+
+.aisa-listing__fix {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+.aisa-chip--listing {
+	border-color: var(--aisa-warning-edge);
+}
+
+/* ---- What Google reads on this page (I1 / I1b) -------------------------------------------------------- */
+
+.aisa-greads {
+	gap: 14px;
+}
+
+.aisa-greads p {
+	margin: 0;
+}
+
+.aisa-greads__type,
+.aisa-greads__biz,
+.aisa-greads__found {
+	display: grid;
+	gap: 8px;
+	padding-block-start: 12px;
+	border-block-start: 1px solid var(--aisa-border);
+}
+
+.aisa-greads__type {
+	padding-block-start: 0;
+	border-block-start: 0;
+}
+
+.aisa-greads__label {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+}
+
+.aisa-greads__form {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+
+.aisa-greads__form select {
+	flex: 1 1 200px;
+	min-inline-size: 0;
+}
+
+.aisa-greads__suggest {
+	display: grid;
+	gap: 8px;
+	padding: 12px;
+	border-radius: 8px;
+	background-color: var(--aisa-accent-bg);
+}
+
+.aisa-greads__suggest form {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+.aisa-greads__types dl {
+	display: grid;
+	grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+	gap: 4px 12px;
+	margin: 8px 0 0;
+	font-size: 12px;
+}
+
+.aisa-greads__types dt {
+	font-weight: 600;
+}
+
+.aisa-greads__types dd {
+	margin: 0;
+	color: var(--aisa-muted);
+}
+
+.aisa-chips--plain .aisa-chip {
+	background-color: var(--aisa-good-bg);
+	color: var(--aisa-good);
+	cursor: default;
+}
+
+.aisa-greads__actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+/* ---- Alt text: page / Media Library / suggested ------------------------------------------------------- */
+
+.aisa-alt__rows {
+	display: grid;
+	grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+	gap: 2px 10px;
+	margin: 2px 0 6px;
+	font-size: 12px;
+}
+
+.aisa-alt__rows dt {
+	color: var(--aisa-muted);
+}
+
+.aisa-alt__rows dd {
+	margin: 0;
+	overflow-wrap: anywhere;
+}
+
+.aisa-alt__label {
+	margin: 0;
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.aisa-table__rest th {
+	color: var(--aisa-muted);
+	font-style: italic;
+	font-weight: 400;
+}
+
+.aisa-row-status {
+	font-size: 12px;
+}
+
+.aisa-empty {
+	padding: 24px 0;
+	color: var(--aisa-muted);
+	text-align: center;
+}
+
+.aisa-pager {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+}
+
+.aisa-steps {
+	display: grid;
+	gap: 12px;
+}
+
+.aisa-step {
+	display: grid;
+	gap: 6px;
+	padding: 14px 16px;
+	border-radius: 10px;
+	background-color: var(--aisa-surface);
+}
+
+.aisa-step__head {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+/* ---- Page review --------------------------------------------------------------------------------- */
+
+.aisa-review {
+	display: grid;
+	gap: var(--aisa-gap);
+	align-items: start;
+}
+
+.aisa-review__main,
+.aisa-review__side {
+	display: grid;
+	gap: var(--aisa-gap);
+	min-inline-size: 0;
+}
+
+.aisa-card--claude {
+	border: 2px solid var(--aisa-primary);
+}
+
+.aisa-lead {
+	display: flex;
+	gap: 6px;
+}
+
+.aisa-issues {
+	display: grid;
+}
+
+.aisa-issue {
+	display: grid;
+	gap: 4px;
+	padding-block: 14px;
+	border-block-end: 1px solid var(--aisa-border);
+}
+
+.aisa-issue:last-child {
+	border-block-end: 0;
+}
+
+.aisa-issue__head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+.aisa-issue__head .aisa-pill {
+	margin-inline-start: auto;
+}
+
+.aisa-issue__detail {
+	color: var(--aisa-muted);
+}
+
+.aisa-tag {
+	padding: 1px 8px;
+	border: 1px solid var(--aisa-border);
+	border-radius: 6px;
+	color: var(--aisa-muted);
+	font-size: 12px;
+}
+
+.aisa-sfield {
+	display: grid;
+	gap: 6px;
+	min-inline-size: 0;
+	margin: 0;
+	padding: 14px 16px;
+	border: 1px solid var(--aisa-border);
+	border-radius: 10px;
+}
+
+.aisa-sfield__head {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+	float: inline-start; /* A legend only lays out as a flex row when floated. */
+	inline-size: 100%;
+	padding: 0;
+	font-size: 14px;
+}
+
+.aisa-sfield__label {
+	color: var(--aisa-muted);
+	font-size: 12px;
+}
+
+.aisa-sfield__now {
+	font-size: 13px;
+}
+
+.aisa-sfield textarea,
+.aisa-alt textarea {
+	inline-size: 100%;
+	padding: 8px 10px;
+	border: 1px solid var(--aisa-border);
+	border-radius: 8px;
+	font-size: 13px;
+	resize: vertical;
+}
+
+.aisa-sfield textarea:focus,
+.aisa-alt textarea:focus {
+	border-color: var(--aisa-primary);
+	box-shadow: 0 0 0 1px var(--aisa-primary);
+}
+
+/* Accept / Edit / Skip: real radio buttons, drawn as one segmented control. */
+.aisa-seg {
+	display: inline-flex;
+	margin-inline-start: auto;
+	border: 1px solid var(--aisa-border);
+	border-radius: 8px;
+	overflow: hidden;
+}
+
+.aisa-seg label {
+	position: relative;
+}
+
+.aisa-seg input {
+	position: absolute;
+	opacity: 0;
+}
+
+.aisa-seg span {
+	display: inline-flex;
+	align-items: center;
+	min-block-size: 32px;
+	padding: 4px 12px;
+	cursor: pointer;
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.aisa-seg label + label span {
+	border-inline-start: 1px solid var(--aisa-border);
+}
+
+.aisa-seg input:checked + span {
+	background-color: var(--aisa-primary);
+	color: var(--aisa-on-dark);
+}
+
+.aisa-seg input:focus-visible + span {
+	outline: 2px solid var(--aisa-primary);
+	outline-offset: -2px;
+}
+
+.aisa-sfield:has(input[value="skip"]:checked) :where(textarea, .aisa-fit, .aisa-sfield__label, .aisa-small) {
+	opacity: 0.45;
+}
+
+.aisa-fit {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	font-size: 12px;
+}
+
+.aisa-fit__bar {
+	flex: 0 0 140px;
+	block-size: 4px;
+	border-radius: 2px;
+	background-color: var(--aisa-border);
+	overflow: hidden;
+}
+
+.aisa-fit__bar span {
+	display: block;
+	block-size: 100%;
+	background-color: var(--aisa-good);
+}
+
+.aisa-fit.is-bad {
+	color: var(--aisa-bad);
+}
+
+.aisa-fit.is-bad .aisa-fit__bar span {
+	background-color: var(--aisa-bad);
+}
+
+.aisa-fit.is-good {
+	color: var(--aisa-good);
+}
+
+.aisa-alts {
+	display: grid;
+	gap: 12px;
+}
+
+.aisa-alt {
+	display: grid;
+	grid-template-columns: 56px minmax(0, 1fr) auto;
+	align-items: start;
+	gap: 12px;
+}
+
+.aisa-alt__img {
+	display: block;
+	inline-size: 56px;
+	block-size: 56px;
+	border-radius: 6px;
+	background-color: var(--aisa-border);
+	object-fit: cover;
+}
+
+.aisa-alt__body {
+	display: grid;
+	gap: 4px;
+	font-size: 12px;
+}
+
+.aisa-alt--check {
+	padding: 10px;
+	border-radius: 8px;
+	background-color: var(--aisa-warning-bg);
+}
+
+.aisa-alt__tick {
+	inline-size: 20px;
+	block-size: 20px;
+}
+
+.aisa-editorbox {
+	display: grid;
+	gap: 8px;
+	padding: 14px 16px;
+	border-radius: 10px;
+	background-color: var(--aisa-warning-bg);
+}
+
+.aisa-editorbox__head {
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.aisa-editorbox__head strong {
+	display: inline-flex;
+	gap: 6px;
+}
+
+.aisa-editorbox dl {
+	display: grid;
+	grid-template-columns: 88px minmax(0, 1fr);
+	gap: 10px 12px;
+	font-size: 13px;
+}
+
+.aisa-editorbox dt {
+	font-weight: 600;
+}
+
+.aisa-editorbox dd {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	gap: 4px 12px;
+}
+
+.aisa-editorbox a {
+	color: var(--aisa-info);
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.aisa-panel-foot {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding-block-start: 14px;
+	border-block-start: 1px solid var(--aisa-border);
+}
+
+.aisa-before {
+	color: var(--aisa-muted);
+	text-decoration: line-through;
+}
+
+.aisa-after {
+	font-weight: 600;
+}
+
+/* "Writing…": the panel's fields while Claude works (C2). */
+.aisa-skeleton {
+	display: block;
+	block-size: 10px;
+	margin-block: 6px;
+	border-radius: 5px;
+	background-color: var(--aisa-border);
+	animation: aisa-pulse 1.4s ease-in-out infinite;
+}
+
+.aisa-skeleton--short {
+	inline-size: 55%;
+}
+
+@keyframes aisa-pulse {
+
+	50% {
+		opacity: 0.45;
+	}
+}
+
+/* ---- Search Console rows (D1) -------------------------------------------------------------------- */
+
+.aisa-sc {
+	display: grid;
+}
+
+.aisa-sc__head,
+.aisa-sc__row > summary {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) repeat(2, minmax(56px, auto));
+	gap: 6px 14px;
+	align-items: center;
+	padding-block: 10px;
+	border-block-end: 1px solid var(--aisa-border);
+	font-size: 13px;
+}
+
+.aisa-sc__head {
+	color: var(--aisa-muted);
+	font-size: 12px;
+}
+
+.aisa-sc__head > :nth-child(n+4),
+.aisa-sc__row > summary > :nth-child(n+4) {
+	display: none;
+}
+
+.aisa-sc__row > summary {
+	list-style: none;
+	cursor: pointer;
+}
+
+.aisa-sc__row > summary::-webkit-details-marker {
+	display: none;
+}
+
+.aisa-sc__row[open] > summary {
+	background-color: var(--aisa-accent-bg);
+}
+
+.aisa-sc__row[open] > summary .dashicons-arrow-down-alt2 {
+	transform: rotate(180deg);
+}
+
+.aisa-sc__detail {
+	display: grid;
+	gap: 8px;
+	margin-block: 4px 12px;
+	padding: 14px 16px;
+	border-inline-start: 2px solid var(--aisa-primary);
+	background-color: var(--aisa-surface);
+}
+
+.aisa-sc__detail-head {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: space-between;
+	gap: 8px;
+}
+
+.aisa-sc__detail-head a {
+	color: var(--aisa-info);
+	font-weight: 600;
+}
+
+/* ---- Settings (G1) ------------------------------------------------------------------------------- */
+
+.aisa-settings {
+	display: grid;
+	gap: var(--aisa-gap);
+}
+
+.aisa-setrow {
+	display: grid;
+	gap: 8px;
+	padding-block: 14px;
+	border-block-start: 1px solid var(--aisa-border);
+}
+
+.aisa-setrow__head label,
+.aisa-setrow__label {
+	font-weight: 600;
+}
+
+.aisa-setrow__field {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 6px;
+	min-inline-size: 0;
+}
+
+.aisa-setrow__field textarea,
+.aisa-setrow__field select,
+.aisa-readonly input,
+.aisa-code {
+	inline-size: 100%;
+	max-inline-size: 760px;
+	border-color: var(--aisa-border);
+	border-radius: 8px;
+}
+
+.aisa-readonly {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+}
+
+.aisa-readonly input[readonly] {
+	background-color: var(--aisa-surface);
+	color: var(--aisa-ink);
+}
+
+.aisa-keyrow {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 10px;
+}
+
+.aisa-secret {
+	display: inline-flex;
+	align-items: center;
+	gap: 8px;
+	min-block-size: 36px;
+	padding: 4px 12px;
+	border: 1px solid var(--aisa-border);
+	border-radius: 8px;
+	background-color: var(--aisa-surface);
+}
+
+.aisa-secret--empty {
+	color: var(--aisa-muted);
+}
+
+.aisa-replace {
+	display: inline-grid;
+	gap: 8px;
+}
+
+.aisa-replace > summary {
+	list-style: none;
+}
+
+.aisa-replace > summary::-webkit-details-marker {
+	display: none;
+}
+
+.aisa-replace input {
+	min-inline-size: min(100%, 320px);
+}
+
+.aisa-money {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.aisa-usage {
+	display: grid;
+	gap: 6px;
+	max-inline-size: 760px;
+}
+
+.aisa-people {
+	display: grid;
+	gap: 4px;
+}
+
+.aisa-people li {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.aisa-received {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+
+.aisa-savebar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px;
+}
+
+/* ---- Change log (E1) ----------------------------------------------------------------------------- */
+
+.aisa-table--log td {
+	vertical-align: top;
+}
+
+.aisa-ba {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	gap: 4px 10px;
+	min-inline-size: 220px;
+}
+
+.aisa-ba dt {
+	color: var(--aisa-muted);
+	font-size: 12px;
+	font-weight: 600;
+}
+
+.aisa-ba .aisa-before {
+	text-decoration: none;
+}
+
+/* ---- Wider screens ------------------------------------------------------------------------------- */
+
+@media (min-width: 782px) {
+
+	/* Accept / Edit / Skip sit on the field's heading row (C1). */
+	fieldset.aisa-sfield {
+		position: relative;
+	}
+
+	fieldset.aisa-sfield > .aisa-seg {
+		position: absolute;
+		inset-block-start: 10px;
+		inset-inline-end: 16px;
+	}
+
+	fieldset.aisa-sfield > .aisa-sfield__head {
+		min-block-size: 34px;
+		padding-inline-end: 190px;
+	}
+
+	.aisa-setrow {
+		grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+		gap: 24px;
+	}
+
+	.aisa-steps {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+
+	.aisa-sc__head,
+	.aisa-sc__row > summary {
+		grid-template-columns: minmax(0, 2.4fr) repeat(5, minmax(56px, 0.6fr)) minmax(0, 1.6fr) 20px;
+	}
+
+	.aisa-sc__head > :nth-child(n+4),
+	.aisa-sc__row > summary > :nth-child(n+4) {
+		display: block;
+	}
+}
+
+@media (min-width: 1100px) {
+
+	.aisa-review {
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+	.aisa-btn,
+	.aisa-skeleton {
+		transition: none;
+		animation: none;
+	}
+}

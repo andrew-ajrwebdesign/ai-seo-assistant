@@ -131,6 +131,7 @@ class SecretStoreTest extends TestCase {
 		\WP_Mock::userFunction( 'wp_json_encode' )->andReturnUsing( fn( $v ) => json_encode( $v ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- test double.
 		// Request context: a visitor's page view by default; tests switch it.
 		\WP_Mock::userFunction( 'is_admin' )->andReturnUsing( fn() => $this->context['admin'] );
+		\WP_Mock::userFunction( 'is_user_logged_in' )->andReturnUsing( fn() => $this->context['logged_in'] ?? true );
 		\WP_Mock::userFunction( 'wp_doing_cron' )->andReturnUsing( fn() => $this->context['cron'] );
 		\WP_Mock::userFunction( 'current_user_can' )->andReturnUsing( fn( $cap ) => in_array( $cap, $this->context['caps'], true ) );
 		$this->context = [
@@ -239,6 +240,75 @@ class SecretStoreTest extends TestCase {
 	}
 
 	/**
+	 * A fake $wpdb for the 5.0 upgrade step: the 4.x redirects table is absent unless told otherwise.
+	 *
+	 * @param string|null $table      What SHOW TABLES answers.
+	 * @param int         $enabled    Enabled rules in it.
+	 */
+	protected function fake_db( ?string $table = null, int $enabled = 0 ): object {
+		$wpdb = new class( $table, $enabled ) {
+			/** @var string */
+			public $prefix = 'wp_';
+			/** @var int */
+			public $checks = 0;
+			/** @var string|null */
+			public $table;
+			/** @var int */
+			public $enabled;
+			/** @var array<int,string> */
+			public $queries = [];
+			public function __construct( $table, $enabled ) {
+				$this->table   = $table;
+				$this->enabled = $enabled;
+			}
+			public function esc_like( $s ) {
+				return $s;
+			}
+			public function prepare( $q, ...$a ) {
+				return $q;
+			}
+			public function get_charset_collate() {
+				return '';
+			}
+			public function get_var( $q ) {
+				++$this->checks;
+				return $this->table;
+			}
+			public function get_col( $q ) {
+				return array_fill( 0, $this->enabled, '/old/' );
+			}
+			public function query( $q ) {
+				$this->queries[] = $q;
+				return true;
+			}
+		};
+		$GLOBALS['wpdb'] = $wpdb; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test double.
+
+		return $wpdb;
+	}
+
+	/**
+	 * Google's revoke endpoint, recorded.
+	 *
+	 * @var array<int,array<string,mixed>>
+	 */
+	protected array $revoked = [];
+
+	/**
+	 * Mock the HTTP calls the 5.0 step makes (the Google revoke).
+	 */
+	protected function fake_http(): void {
+		\WP_Mock::userFunction( 'wp_remote_post' )->andReturnUsing(
+			function ( $url, $args ) {
+				$this->revoked[] = [ $url, $args ];
+				return [ 'response' => [ 'code' => 200 ] ];
+			}
+		);
+		\WP_Mock::userFunction( 'is_wp_error' )->andReturn( false );
+		\WP_Mock::userFunction( 'wp_remote_retrieve_response_code' )->andReturn( 200 );
+	}
+
+	/**
 	 * The plain-text rows of 4.3.x are sealed in place, once; the plain text is gone; the value is kept.
 	 */
 	public function test_migration_from_plaintext(): void {
@@ -248,7 +318,8 @@ class SecretStoreTest extends TestCase {
 			'ai_seo_assistant_gsc_token_data'    => [ 'refresh_token' => '1//r' ],
 			'ai_seo_assistant_settings_version'  => '4.0.0',
 		];
-		\WP_Mock::onFilter( 'ai_seo_assistant_core_owns_redirects' )->with( false )->reply( false );
+		$this->fake_db();
+		$this->fake_http();
 
 		$results = Upgrade::run();
 
@@ -256,13 +327,17 @@ class SecretStoreTest extends TestCase {
 		$this->assertSame( 'migrated', $results['ai_seo_assistant_report_key'] );
 		$this->assertSame( 'migrated', $results['ai_seo_assistant_gsc_token_data'] );
 		$this->assertSame( 'absent', $results['ai_seo_assistant_gsc_client_secret'] );
-		foreach ( [ 'ai_seo_assistant_anthropic_api_key', 'ai_seo_assistant_report_key', 'ai_seo_assistant_gsc_token_data' ] as $option ) {
+		foreach ( [ 'ai_seo_assistant_anthropic_api_key', 'ai_seo_assistant_report_key' ] as $option ) {
 			$this->assertTrue( Secret_Store::is_envelope( $this->options[ $option ] ), $option . ' sealed' );
 			$this->assertFalse( $this->autoload[ $option ], $option . ' not autoloaded' );
 		}
 		$this->assertStringNotContainsString( 'TESTONLY', serialize( $this->options ) ); // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.serialize_serialize -- the whole fake table.
 		$this->assertSame( self::CLAUDE, Secret_Store::get( 'ai_seo_assistant_anthropic_api_key' ) );
-		$this->assertSame( [ 'refresh_token' => '1//r' ], Secret_Store::get_array( 'ai_seo_assistant_gsc_token_data' ) );
+		// 5.0: the Search Console grant was revoked at Google (with the sealed refresh token) and deleted.
+		$this->assertSame( Upgrade::REVOKE_URL, $this->revoked[0][0] ?? '' );
+		$this->assertSame( '1//r', $this->revoked[0][1]['body']['token'] ?? '' );
+		$this->assertLessThanOrEqual( 3, $this->revoked[0][1]['timeout'] );
+		$this->assertArrayNotHasKey( 'ai_seo_assistant_gsc_token_data', $this->options );
 		$this->assertSame( Upgrade::LEVEL, $this->options[ Upgrade::OPTION ] );
 		$this->assertSame( [], $this->options['ai_seo_assistant_agency_users'], 'agency option created, autoloaded' );
 		$this->assertTrue( $this->autoload['ai_seo_assistant_agency_users'] );
@@ -274,30 +349,55 @@ class SecretStoreTest extends TestCase {
 	}
 
 	/**
-	 * Settings field: a blank submit keeps the stored value; a new key is returned sealed; a non-key is
-	 * refused and the old one kept; "Clear" empties it; an envelope passes through (add_option's second
-	 * sanitize pass).
+	 * Settings (5.0, Settings_Page::save()): a blank submit keeps the stored key; a non-key is refused and the
+	 * old one kept; a new key is stored sealed; "Clear" removes it.
 	 */
 	public function test_settings_field_is_write_only(): void {
-		\WP_Mock::userFunction( 'sanitize_text_field' )->andReturnArg( 0 );
-		\WP_Mock::userFunction( 'add_settings_error' );
-		\WP_Mock::userFunction( '__' )->andReturnArg( 0 );
-		$admin = new Admin( null, null, null, null, new Claude_Client() );
+		\WP_Mock::userFunction( 'sanitize_text_field' )->andReturnUsing( fn( $s ) => trim( (string) $s ) );
+		\WP_Mock::userFunction( 'wp_unslash' )->andReturnArg( 0 );
+		\WP_Mock::userFunction( 'check_admin_referer' )->andReturn( 1 );
+		\WP_Mock::userFunction( 'admin_url' )->andReturnArg( 0 );
+		$code = '';
+		\WP_Mock::userFunction( 'add_query_arg' )->andReturnUsing(
+			function ( $args ) use ( &$code ) {
+				$code = (string) ( $args['aisa'] ?? '' );
+				return 'url';
+			}
+		);
+		\WP_Mock::userFunction( 'wp_safe_redirect' )->andReturnUsing(
+			static function () {
+				throw new \RuntimeException( 'redirect' );
+			}
+		);
+		$this->context['caps'] = [ 'manage_options', \AJR\SEOAssistant\Report\Access::TOOLS_CAP ];
+		$save = function ( array $post ) {
+			$_POST = $post;
+			try {
+				( new \AJR\SEOAssistant\Admin\Settings_Page() )->save();
+			} catch ( \RuntimeException $e ) {
+				unset( $e );
+			} finally {
+				$_POST = [];
+			}
+		};
 
 		Secret_Store::set( Claude_Client::OPTION_API_KEY, self::CLAUDE );
 		$stored = $this->options[ Claude_Client::OPTION_API_KEY ];
 
-		$this->assertSame( $stored, $admin->sanitize_api_key( '' ), 'empty submit keeps the stored value' );
-		$this->assertSame( $stored, $admin->sanitize_api_key( 'not-a-key' ), 'a non-key keeps the stored value' );
+		$save( [ 'api_key' => '' ] );
+		$this->assertSame( $stored, $this->options[ Claude_Client::OPTION_API_KEY ], 'empty submit keeps the stored value' );
+		$save( [ 'api_key' => 'not-a-key' ] );
+		$this->assertSame( 'badkey', $code );
+		$this->assertSame( $stored, $this->options[ Claude_Client::OPTION_API_KEY ], 'a non-key keeps the stored value' );
 
-		$new = $admin->sanitize_api_key( 'sk-ant-api03-NEWKEY000000000000000000' );
-		$this->assertTrue( Secret_Store::is_envelope( $new ), 'a new key is returned sealed' );
-		$this->assertSame( 'sk-ant-api03-NEWKEY000000000000000000', Secret_Store::open( $new ) );
-		$this->assertSame( $new, $admin->sanitize_api_key( $new ), 'an envelope passes straight through' );
+		$save( [ 'api_key' => 'sk-ant-api03-NEWKEY000000000000000000' ] );
+		$this->assertSame( 'saved', $code );
+		$this->assertTrue( Secret_Store::is_envelope( $this->options[ Claude_Client::OPTION_API_KEY ] ), 'a new key is stored sealed' );
+		$this->assertSame( 'sk-ant-api03-NEWKEY000000000000000000', Secret_Store::get( Claude_Client::OPTION_API_KEY ) );
 
-		$_POST[ Claude_Client::OPTION_API_KEY . '_clear' ] = '1';
-		$this->assertSame( '', $admin->sanitize_api_key( '' ), 'Clear empties it' );
-		unset( $_POST[ Claude_Client::OPTION_API_KEY . '_clear' ] );
+		$save( [ 'clear_api_key' => '1' ] );
+		$this->assertSame( 'cleared', $code );
+		$this->assertArrayNotHasKey( Claude_Client::OPTION_API_KEY, $this->options, 'Clear removes it' );
 	}
 
 	/**
@@ -324,7 +424,7 @@ class SecretStoreTest extends TestCase {
 		$names     = array_keys( Secret_Store::OPTIONS );
 		$constants = []; // "Class::NAME" usable from any file.
 		$own       = []; // File name => [ "self::NAME", ... ] usable only inside the defining class.
-		foreach ( [ 'AJR\SEOAssistant\AI\Claude_Client', 'AJR\SEOAssistant\GSC\GSC_Client', 'AJR\SEOAssistant\Report\Push_Key' ] as $class ) {
+		foreach ( [ 'AJR\SEOAssistant\AI\Claude_Client', 'AJR\SEOAssistant\Report\Push_Key' ] as $class ) {
 			$short = substr( (string) strrchr( '\\' . $class, '\\' ), 1 );
 			foreach ( ( new \ReflectionClass( $class ) )->getConstants() as $name => $value ) {
 				if ( in_array( $value, $names, true ) ) {
@@ -334,7 +434,7 @@ class SecretStoreTest extends TestCase {
 				}
 			}
 		}
-		$this->assertCount( count( $names ), $constants, 'every secret option has a class constant to look for' );
+		$this->assertCount( count( array_diff( $names, Upgrade::GSC_OPTIONS ) ), $constants, 'every live secret option has a class constant to look for (5.0: the Google ones exist only to be deleted)' );
 
 		$src     = dirname( __DIR__, 3 ) . '/src';
 		$scanned = 0;
@@ -553,32 +653,11 @@ class SecretStoreTest extends TestCase {
 		$this->options = [
 			'ai_seo_assistant_anthropic_api_key' => self::CLAUDE,
 			Upgrade::OPTION                      => '4.0.0',
-			'ai_seo_assistant_redirect_map'      => [],
 		];
 		$this->context['caps'] = [ 'manage_options' ];
-		\WP_Mock::onFilter( 'ai_seo_assistant_core_owns_redirects' )->with( false )->reply( true );
-
-		// The table check, counted: a fake $wpdb whose table exists with rows.
-		$wpdb = new class() {
-			/** @var string */
-			public $prefix = 'wp_';
-			/** @var int */
-			public $checks = 0;
-			public function esc_like( $s ) {
-				return $s;
-			}
-			public function prepare( $q, ...$a ) {
-				return $q;
-			}
-			public function get_var( $q ) {
-				if ( 0 === strpos( $q, 'SHOW TABLES' ) ) {
-					++$this->checks;
-					return 'wp_ai_seo_assistant_redirects';
-				}
-				return '3';
-			}
-		};
-		$GLOBALS['wpdb'] = $wpdb; // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test double.
+		// 5.0: a 4.x redirects table with 3 enabled rules (counted table checks).
+		$wpdb = $this->fake_db( 'wp_ai_seo_assistant_redirects', 3 );
+		$this->fake_http();
 
 		// The database refuses every write to the secret rows (stands in for "cannot seal").
 		$this->refuse_secret_writes = true;
@@ -589,22 +668,21 @@ class SecretStoreTest extends TestCase {
 		$this->assertSame( '4.0.0', $this->options[ Upgrade::OPTION ], 'level not advanced' );
 		$attempt = $this->options[ Upgrade::ATTEMPT_OPTION ];
 		$this->assertSame( [ 'ai_seo_assistant_anthropic_api_key' ], $attempt['failed'] );
-		$this->assertSame( 'kept-rows', $attempt['redirects'] );
 		$this->assertTrue( $this->autoload[ Upgrade::ATTEMPT_OPTION ] );
-		$this->assertSame( 1, $wpdb->checks );
+		$this->assertSame( 0, $wpdb->checks, 'no 5.0 step (and no table check) while sealing fails' );
 		$this->assertSame( 1, $this->refused, 'one sealing attempt' );
 
 		// The next admin loads, within the day: nothing runs.
 		$upgrade->maybe_run();
 		$upgrade->maybe_run();
-		$this->assertSame( 1, $wpdb->checks, 'no table check on every admin load' );
+		$this->assertSame( 0, $wpdb->checks, 'no table check on every admin load' );
 		$this->assertSame( 1, $this->refused, 'no sealing attempt on every admin load' );
 		$this->assertTrue( Upgrade::waiting() );
 
 		// A day later: the secrets are tried again, the table check is not.
 		$this->options[ Upgrade::ATTEMPT_OPTION ]['at'] = time() - Upgrade::RETRY_AFTER - 1;
 		$upgrade->maybe_run();
-		$this->assertSame( 1, $wpdb->checks, 'the table check ran once in all' );
+		$this->assertSame( 0, $wpdb->checks, 'still no table check while sealing fails' );
 		$this->assertGreaterThan( time() - 60, $this->options[ Upgrade::ATTEMPT_OPTION ]['at'], 'attempt re-recorded' );
 
 		// Writes work again: the next retry succeeds and clears the record.
@@ -614,6 +692,9 @@ class SecretStoreTest extends TestCase {
 		$this->assertSame( Upgrade::LEVEL, $this->options[ Upgrade::OPTION ] );
 		$this->assertArrayNotHasKey( Upgrade::ATTEMPT_OPTION, $this->options );
 		$this->assertTrue( Secret_Store::is_envelope( $this->options['ai_seo_assistant_anthropic_api_key'] ) );
+		// 5.0 step: the table holds enabled rules, so it is kept and the redirect part stays pending.
+		$this->assertSame( 3, $this->options[ Upgrade::REDIRECTS_PENDING ] );
+		$this->assertSame( [], array_filter( $wpdb->queries, static fn( $q ) => false !== stripos( $q, 'DROP TABLE' ) ), 'never dropped with enabled rules' );
 		unset( $GLOBALS['wpdb'] );
 	}
 
@@ -625,5 +706,24 @@ class SecretStoreTest extends TestCase {
 		foreach ( array_keys( Secret_Store::OPTIONS ) as $option ) {
 			$this->assertStringContainsString( "'" . $option . "'", $uninstall, $option . ' is deleted on uninstall' );
 		}
+	}
+
+	/**
+	 * Logged-out admin-ajax.php is is_admin() but anyone can reach it: a read there never writes (no reseal).
+	 * The rule is identical to AJR Core's Secret_Store::may_seal_now().
+	 */
+	public function test_logged_out_ajax_never_writes(): void {
+		$m = new \ReflectionMethod( Secret_Store::class, 'may_write_here' );
+		$m->setAccessible( true );
+		$this->context['admin']     = true;
+		$this->context['logged_in'] = false;
+		$this->assertFalse( $m->invoke( null ), 'logged-out admin-ajax' );
+		$this->context['logged_in'] = true;
+		$this->assertTrue( $m->invoke( null ), 'a logged-in wp-admin request' );
+		$this->context['admin'] = false;
+		$this->context['cron']  = true;
+		$this->assertTrue( $m->invoke( null ), 'cron' );
+		$this->context['cron'] = false;
+		$this->assertFalse( $m->invoke( null ), 'a front-end request' );
 	}
 }

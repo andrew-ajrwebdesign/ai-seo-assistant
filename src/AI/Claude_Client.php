@@ -32,14 +32,14 @@ defined( 'ABSPATH' ) || exit;
  */
 class Claude_Client {
 
-	const API_URL          = 'https://api.anthropic.com/v1/messages';
-	const API_VERSION      = '2023-06-01';
-	const CONFIG_CONSTANT  = 'AI_SEO_ASSISTANT_ANTHROPIC_API_KEY';
-	const OPTION_API_KEY   = 'ai_seo_assistant_anthropic_api_key';
-	const OPTION_MODEL     = 'ai_seo_assistant_model';
-	const DEFAULT_MODEL    = 'claude-opus-5';
-	const KEY_PREFIX       = 'sk-ant-';
-	const FALLBACK_BETA    = 'server-side-fallback-2026-07-01';
+	const API_URL         = 'https://api.anthropic.com/v1/messages';
+	const API_VERSION     = '2023-06-01';
+	const CONFIG_CONSTANT = 'AI_SEO_ASSISTANT_ANTHROPIC_API_KEY';
+	const OPTION_API_KEY  = 'ai_seo_assistant_anthropic_api_key';
+	const OPTION_MODEL    = 'ai_seo_assistant_model';
+	const DEFAULT_MODEL   = 'claude-opus-5';
+	const KEY_PREFIX      = 'sk-ant-';
+	const FALLBACK_BETA   = 'server-side-fallback-2026-07-01';
 
 	/**
 	 * Default cap on Claude requests per user per hour (see check_rate_limit()).
@@ -56,12 +56,10 @@ class Claude_Client {
 	 * thinking as well as the answer, because a reply cut off at the limit is
 	 * unusable JSON.
 	 *
-	 * Every timeout sits well under the 120 s the editor's browser waits
-	 * (assets/js/admin.js). If the server gave up at the same moment as the
-	 * browser, the browser would show "timed out" while PHP carried on,
-	 * saved the result and billed the request, and the user would retry and
-	 * pay twice. With the server finishing first, its error or placeholder
-	 * fallback always reaches the screen.
+	 * Every timeout sits well under what the page review's browser waits, so the server's own answer (or
+	 * error) always reaches the screen: a browser that gave up while PHP carried on would invite a retry
+	 * that pays twice. 'metadata' and 'recommendations' were the 4.x editor box's tasks; 'metadata' stays
+	 * as the default shape for an unnamed task.
 	 */
 	const TASKS = [
 		'metadata'        => [
@@ -74,12 +72,56 @@ class Claude_Client {
 			'max_tokens' => 16000,
 			'timeout'    => 90,
 		],
+		'review'          => [
+			'effort'     => 'medium',
+			'max_tokens' => 16000,
+			'timeout'    => 90,
+		],
+		// 5.0: one cheap pass per push sorting the site's searches by intent (Scan/Intent). Always Haiku.
+		'intent'          => [
+			'effort'     => 'low',
+			'max_tokens' => 8000,
+			'timeout'    => 60,
+			'model'      => 'claude-haiku-4-5',
+		],
 		'test'            => [
 			'effort'     => 'low',
 			'max_tokens' => 1024,
 			'timeout'    => 20,
 		],
 	];
+
+	/**
+	 * What the most recent reply cost, in dollars (Spend::cost() of its usage); 0 before one arrives.
+	 *
+	 * @var float
+	 */
+	protected $last_cost = 0.0;
+
+	/**
+	 * The most recent reply's usage (input_tokens, output_tokens…); [] before one arrives.
+	 *
+	 * @var array<string,int>
+	 */
+	protected $last_usage = [];
+
+	/**
+	 * Usage of the most recent reply (the intent pass sizes its batches from output tokens per item).
+	 *
+	 * @return array<string,int>
+	 */
+	public function get_last_usage(): array {
+		return $this->last_usage;
+	}
+
+	/**
+	 * Cost of the most recent reply in dollars.
+	 *
+	 * @return float
+	 */
+	public function get_last_cost() {
+		return $this->last_cost;
+	}
 
 	/**
 	 * Model actually used for the most recent successful request.
@@ -104,17 +146,17 @@ class Claude_Client {
 	public static function available_models() {
 		return [
 			'claude-opus-5'    => [
-				'label'     => __( 'Claude Opus 5: best quality (recommended)', 'ai-seo-assistant' ),
+				'label'     => __( 'Claude Opus 5 (recommended)', 'ai-seo-assistant' ),
 				'effort'    => true,
 				'fallbacks' => true,
 			],
 			'claude-sonnet-5'  => [
-				'label'     => __( 'Claude Sonnet 5: faster, lower cost', 'ai-seo-assistant' ),
+				'label'     => __( 'Claude Sonnet 5: faster, about half the cost', 'ai-seo-assistant' ),
 				'effort'    => true,
 				'fallbacks' => false,
 			],
 			'claude-haiku-4-5' => [
-				'label'     => __( 'Claude Haiku 4.5: fastest, lowest cost', 'ai-seo-assistant' ),
+				'label'     => __( 'Claude Haiku 4.5: fastest, shortest suggestions', 'ai-seo-assistant' ),
 				'effort'    => false,
 				'fallbacks' => false,
 			],
@@ -215,7 +257,7 @@ class Claude_Client {
 	 * @param string $task   Key of self::TASKS; sets effort and max_tokens.
 	 * @return array|\WP_Error Decoded object, or an error with a masked message.
 	 */
-	public function generate_json( $prompt, array $schema, $task = 'metadata' ) {
+	public function generate_json( $prompt, array $schema, $task = 'metadata', array $images = [] ) {
 		$response = $this->request(
 			(string) $prompt,
 			$task,
@@ -224,7 +266,8 @@ class Claude_Client {
 					'type'   => 'json_schema',
 					'schema' => $schema,
 				],
-			]
+			],
+			$images
 		);
 
 		if ( is_wp_error( $response ) ) {
@@ -269,7 +312,7 @@ class Claude_Client {
 	 * @param array  $output_config Extra output_config entries (e.g. format).
 	 * @return array|\WP_Error Decoded response body.
 	 */
-	protected function request( $prompt, $task, array $output_config = [] ) {
+	protected function request( $prompt, $task, array $output_config = [], array $images = [] ) {
 		$api_key = $this->get_api_key();
 
 		if ( '' === $api_key ) {
@@ -285,9 +328,16 @@ class Claude_Client {
 			return $limited;
 		}
 
-		$model  = $this->get_model();
-		$models = self::available_models();
+		// 5.0: the per-site billing-month cap, checked before every call.
+		$capped = Spend::check( isset( self::TASKS[ $task ] ) ? $task : 'metadata' );
+
+		if ( is_wp_error( $capped ) ) {
+			return $capped;
+		}
+
 		$shape  = self::TASKS[ $task ] ?? self::TASKS['metadata'];
+		$model  = isset( $shape['model'] ) ? (string) $shape['model'] : $this->get_model();
+		$models = self::available_models();
 
 		$body = [
 			'model'      => $model,
@@ -296,7 +346,7 @@ class Claude_Client {
 			'messages'   => [
 				[
 					'role'    => 'user',
-					'content' => $prompt,
+					'content' => self::content_blocks( $prompt, $images ),
 				],
 			],
 		];
@@ -339,6 +389,11 @@ class Claude_Client {
 		);
 
 		if ( is_wp_error( $response ) ) {
+			// A timeout or a dropped connection after the request went out may still be billed: count the
+			// call's worst case, so the cap never under-counts. A refused connection was never sent.
+			if ( preg_match( '/timed out|cURL error (28|52|55|56)|connection reset|empty reply/i', $response->get_error_message() ) ) {
+				$this->last_cost = Spend::record_unknown( $task, $model );
+			}
 			return new \WP_Error(
 				'ai_seo_claude_unreachable',
 				Utils::mask_sensitive_text( $response->get_error_message() )
@@ -353,10 +408,17 @@ class Claude_Client {
 		}
 
 		if ( ! is_array( $data ) ) {
+			$this->last_cost = Spend::record_unknown( $task, $model ); // A 2xx is billed even when unreadable.
 			return new \WP_Error(
 				'ai_seo_claude_invalid_response',
 				__( 'Claude returned an unreadable response.', 'ai-seo-assistant' )
 			);
+		}
+
+		// Every billed reply is counted, a refused or cut-off one included: Anthropic bills its tokens too.
+		if ( isset( $data['usage'] ) && is_array( $data['usage'] ) ) {
+			$this->last_cost  = Spend::record( isset( $data['model'] ) ? (string) $data['model'] : $model, $data['usage'] );
+			$this->last_usage = array_map( 'intval', array_filter( $data['usage'], 'is_numeric' ) );
 		}
 
 		$stop_reason = $data['stop_reason'] ?? '';
@@ -378,6 +440,41 @@ class Claude_Client {
 		$this->last_model = isset( $data['model'] ) ? sanitize_text_field( $data['model'] ) : $model;
 
 		return $data;
+	}
+
+	/**
+	 * The user message's content: the prompt alone, or (5.0 page review) each image introduced by its ID
+	 * and attached as a base64 image block, then the prompt, so Claude describes the photo it can see.
+	 *
+	 * @param string                         $prompt Prompt.
+	 * @param array<int,array<string,mixed>> $images [ id, media_type, data (base64) ].
+	 * @return string|array<int,array<string,mixed>>
+	 */
+	public static function content_blocks( $prompt, array $images ) {
+		if ( [] === $images ) {
+			return $prompt;
+		}
+		$blocks = [];
+		foreach ( $images as $image ) {
+			$blocks[] = [
+				'type' => 'text',
+				'text' => 'Image ' . (int) $image['id'] . ':',
+			];
+			$blocks[] = [
+				'type'   => 'image',
+				'source' => [
+					'type'       => 'base64',
+					'media_type' => (string) $image['media_type'],
+					'data'       => (string) $image['data'],
+				],
+			];
+		}
+		$blocks[] = [
+			'type' => 'text',
+			'text' => $prompt,
+		];
+
+		return $blocks;
 	}
 
 	/**

@@ -35,6 +35,71 @@ AI SEO Assistant is the **retainer product**: installed on retainer clients' sit
 - Figures come only from the pushed snapshot (format v1, architecture map §12). A source with no data is omitted, never shown as 0. Nothing is estimated or invented on the site.
 - Undecided: whether the report is also emailed to the owner (not requested; out of scope for 4.3.0).
 
+## SEO scan: how pages are ranked (agency only)
+
+The SEO scan lists pages by **opportunity**: the extra visits a year a better Google listing could win, weighted by what the searches and the page are worth. Approved by Andrew 2026-10-06 (v2 in the morning, v3 "yes add all four" the same day). The code and its reasoning are in `src/Scan/Opportunity.php` and `src/Scan/Intent.php`.
+
+- **Two yearly figures, both estimates.**
+  - **Quick win:** what a better title and description could bring at today's position. It is worked out for each of the page's top searches as impressions × (expected CTR at its position − its CTR), then × 365/90.
+  - **Top-3 prize:** the same if each search reached position 3.
+  - The page's other impressions (searches Google does not name) count at the page's average position.
+  - A search past position 20 adds almost nothing to the quick win.
+  - Pages pushed with v1 data use the page-level formula.
+- **Search intent.** Each search is sorted by keyword rules first. These are generic, plus extra phrases for AJR Core's business type, and filterable with `ai_seo_assistant_intent_rules`. For an estate agent (Andrew, round 3), researching a move is **commercial**, not a lead: "moving to", "relocation", "relocating", "real estate", "living in", "cost of living". Lead stays for agent, realtor, broker, selling, homes for sale, home value and listing a home. The searches the rules leave go to Claude (Haiku 4.5) once per push, in one call; a change to the rules runs it again, and the rules always win over a cached answer. That call counts toward the spend cap and is skipped when the cap is reached; its answers are cached. The weights are:
+
+  | Intent | Weight |
+  |---|---|
+  | Lead (ready to enquire) | 3 |
+  | Commercial (comparing) | 2 |
+  | Informational (learning) | 1 |
+  | Navigational (looking for this business by name) | 0.5 |
+  | Not sorted yet | 1 |
+
+  The unnamed searches take the named ones' average weight.
+- **Page value from its page type.** The page type is set in AJR Core; it is the same setting that decides the page's schema.
+
+  | Page type | Value |
+  |---|---|
+  | Service, contact | 1.5 |
+  | Area | 1.2 |
+  | Article, FAQ, team member | 0.6 |
+  | Other | 1.0 |
+
+  - **Not set:** a post counts as information, and so does a page that is mainly a list of posts. Otherwise a page counts as money when it is AJR Core's booking page, holds a form AJR Core's Leads module counts (or a known form or booking embed), or is in the main menu's top level.
+  - **Enquiry rate:** a page whose enquiry rate is twice the site's counts one step higher, but only when the site has 10 or more enquiries in 90 days.
+- **Enquiry estimate.** "≈ N enquiries a year" is the extra visits × the page's enquiry rate (the site's when the page had fewer than 30 visits). It is shown only when the site tracked 10 or more enquiries in 90 days, and is never shown as 0.
+- **Tiers that scale with the site, not a 0–100 score** (Andrew, 2026-10-06, round 3). Pages are sorted by their weighted value a year: the figure × intent × page value × (1 + ln(1 + enquiries)).
+  - **High:** the smallest set of top pages that together hold half the site's total.
+  - **Medium:** the pages holding the next quarter.
+  - **Low:** the rest with a value. **None:** no measurable value.
+  - **Floors**, so a trivial gain never reads High or Medium: High needs 24 weighted visits a year, Medium 8 (filter: `ai_seo_assistant_opportunity_floors`).
+- **"Quick wins | Biggest prizes".** A toggle on the SEO scan list. Quick wins (the default) ranks and tiers by the weighted quick win. Biggest prizes ranks and tiers by the weighted top-3 prize: the pages worth content and link work. Each agency user's choice is remembered (user meta `aisa_rank_mode`). The review header shows both figures either way.
+- **The site's own click curve.** Expected CTR comes from the site's own searches when there are enough.
+  - Searches are bucketed by position: 1 to 10 each, then 11–15, 16–20, 21–30 and 31–50.
+  - A bucket with 1,000 impressions uses the site's CTR.
+  - A thinner bucket takes the standard value × own ÷ standard at the nearest calibrated bucket.
+  - The curve is smoothed so it never rises with position, worked out once per push, and named in the scan footnote.
+  - The `ai_seo_assistant_expected_ctr` filter still overrides it.
+
+## What Google reads, and the Google listing (agency only)
+
+- **Schema is never an editor job.** AJR Core prints the structured data from each page's type and the business details. Google's Business Profile is the source of truth for those details.
+- **What the scan reports.** The scan's only page-level schema finding is "Page type not set" (one click), and only when AJR Core is unsure of the type. Obvious types are set automatically, logged in Changes with Undo, and a person's choice (or Undo) always wins: auto-apply never touches that page again. A page nothing points to is "other", which is not a problem. Claude is never asked for schema advice.
+- **Noise is a cost.** A finding on most pages is the template's, reported once for the site; only the page's own content is judged.
+- **"What Google reads on this page"** is a panel in the page review. It shows:
+  - the page type, with AJR Core's suggestion and a one-click "Set as …";
+  - whether the page names the business, and whether the business matches Google;
+  - the structured data found on the rendered page, in plain words;
+  - a link to Google's Rich Results Test.
+- **The "Google listing" group** in the SEO scan comes from the weekly push's `business_profile_check`.
+  - A difference the agency pinned in the Business details row of AJR Core → Your essentials is "Kept on purpose": shown with its reason, never counted.
+  - A check that could not run says "Google listing not checked", never "all match".
+  - The plugin hands the stored check to AJR Core through `ajr_core_business_profile_check`.
+
+## Layout
+
+Every screen uses the full admin width. AJR Core's "Need a hand?" card sits in a right-hand column, as on AJR Core's own screens, and drops below the content on narrow screens. The client's Report shows it too: the card is for the client. It needs AJR Core 0.22 (`Support::render_card()`); before that the screens are full width without it.
+
 ## Brand Commitments
 
 - **AJR-branded premium look** (confirmed 2026-09-29): unmistakably AJR Web Design's work inside wp-admin, not a generic stats page. Header reads "Weekly report by AJR Web Design".

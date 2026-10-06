@@ -2,7 +2,7 @@
  * AI SEO Assistant — Weekly report (wp-admin → AI SEO Assistant → Weekly report).
  *
  * Built from the approved Figma mockup (reORO92GJaeEhxTgWuaj9R). Every colour is a token declared once
- * on .aisa-report — the AJR brand palette — and nothing below it types a colour. Charts are inline SVG
+ * on .aisa-report and .aisa-tool (5.0: the agency screens share them) — the AJR brand palette — and nothing below it types a colour. Charts are inline SVG
  * whose shapes carry classes only; they are coloured here.
  *
  * Mobile first: one column, then two-up rows from 900px. No motion beyond the admin's own focus rings.
@@ -15,7 +15,8 @@
 	--aisa-admin-divider: #dcdcde;
 }
 
-.aisa-report {
+.aisa-report,
+.aisa-tool {
 	--aisa-dark: #071a2f;
 	--aisa-dark-lift: #11334d;
 	--aisa-primary: #0f766e;
@@ -32,6 +33,13 @@
 	--aisa-on-dark: #fff;
 	--aisa-warning-bg: #fff7e6;
 	--aisa-warning-edge: #b45309;
+	--aisa-warning-ink: #8a3c06;
+	--aisa-good-bg: #e7f5ec;
+	--aisa-bad-bg: #fdecea;
+	--aisa-accent-bg: #e3f3f0;
+	--aisa-primary-ink: #0b5f58;
+	--aisa-info: #1d5fa8;
+	--aisa-info-bg: #eaf2fb;
 
 	--aisa-radius: 12px;
 	--aisa-gap: 20px;
@@ -41,8 +49,7 @@
 
 	display: grid;
 	gap: var(--aisa-gap);
-	max-inline-size: 1200px;
-	margin-block-start: 16px;
+	margin-block-start: 16px; /* Full admin width (5.0): no cap; the layout below adds the card column. */
 	color: var(--aisa-ink);
 	font-family: var(--aisa-sans);
 	font-size: 14px;
@@ -51,20 +58,26 @@
 
 .aisa-report *,
 .aisa-report *::before,
-.aisa-report *::after {
+.aisa-report *::after,
+.aisa-tool *,
+.aisa-tool *::before,
+.aisa-tool *::after {
 	box-sizing: border-box;
 }
 
-.aisa-report :where(h1, h2, h3, p, ul, figure) {
+.aisa-report :where(h1, h2, h3, p, ul, ol, figure, dl, dd),
+.aisa-tool :where(h1, h2, h3, p, ul, ol, figure, dl, dd) {
 	margin: 0;
 	padding: 0;
 }
 
-.aisa-report :where(ul) {
+.aisa-report :where(ul, ol),
+.aisa-tool :where(ul, ol) {
 	list-style: none;
 }
 
-.aisa-report .aisa-icon {
+.aisa-report .aisa-icon,
+.aisa-tool .aisa-icon {
 	inline-size: 20px;
 	block-size: 20px;
 	font-size: 20px;
@@ -486,6 +499,7 @@
 /* ---- Table and lists --------------------------------------------------------------------------- */
 
 .aisa-tablewrap {
+	position: relative; /* Holds WP's absolutely positioned .screen-reader-text, which otherwise widens the page on a phone. */
 	min-inline-size: 0;
 	overflow-x: auto;
 }
@@ -529,7 +543,8 @@
 	padding-inline-end: 0;
 }
 
-.aisa-report .aisa-num {
+.aisa-report .aisa-num,
+.aisa-tool .aisa-num {
 	text-align: end;
 	font-variant-numeric: tabular-nums;
 	white-space: nowrap;
@@ -684,13 +699,41 @@
 	font-size: 15px;
 }
 
-/* ---- Agency-only delivery panel (standard admin styling, kept below the report) ----------------- */
+/* ---- Full-width layout with AJR Core's "Need a hand?" card ------------------------------------------ */
 
-.aisa-delivery {
-	max-inline-size: 1200px;
-	margin-block-start: 32px;
-	padding-block-start: 16px;
-	border-block-start: 1px solid var(--aisa-admin-divider);
+/* Content, then the card in a 300px column on the right (AJR Core's essentials screen does the same);
+ * on a narrow screen the card drops below the content. */
+.aisa-layout {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	gap: var(--aisa-gap);
+	align-items: start;
+}
+
+.aisa-layout__main {
+	display: grid;
+	gap: var(--aisa-gap);
+	min-inline-size: 0;
+}
+
+@media (min-width: 1200px) {
+	.aisa-layout--card {
+		grid-template-columns: minmax(0, 1fr) 300px;
+	}
+
+	.aisa-layout__side {
+		position: sticky;
+		inset-block-start: 52px;
+	}
+}
+
+/* AJR Core's card keeps wp-admin's own type size inside the plugin's 14px screens. */
+.aisa-layout__side {
+	font-size: 13px;
+}
+
+.aisa-layout__side .ajr-support .button {
+	line-height: 1.3;
 }
 
 /* ---- Wider screens ----------------------------------------------------------------------------- */
@@ -724,13 +767,265 @@
 	}
 }
 
+/* ---- 5.0: Weekly | Monthly tabs, taps apart, the month ---------------------------------------- */
+
+.aisa-tabs {
+	display: inline-flex;
+	gap: 2px;
+	padding: 3px;
+	border-radius: 10px;
+	background-color: var(--aisa-dark-lift);
+}
+
+.aisa-tab {
+	min-block-size: 36px;
+	padding: 7px 16px;
+	border-radius: 8px;
+	color: var(--aisa-muted-light);
+	font-size: 13px;
+	font-weight: 600;
+	text-decoration: none;
+}
+
+.aisa-tab:hover {
+	color: var(--aisa-on-dark);
+}
+
+.aisa-tab.is-current {
+	background-color: var(--aisa-bg);
+	color: var(--aisa-ink);
+}
+
+.aisa-tab:focus-visible {
+	outline: 2px solid var(--aisa-accent-light);
+	outline-offset: 2px;
+	box-shadow: none;
+}
+
+/* The brand, the tabs and the freshness pill share the header's first row. */
+.aisa-hero__top .aisa-tabs {
+	margin-inline-end: auto;
+}
+
+.aisa-source__label {
+	display: grid;
+}
+
+.aisa-source__by {
+	color: var(--aisa-muted);
+	font-size: 12px;
+	font-weight: 400;
+}
+
+/* A tap is listed under the total, not added to it: quieter, no meter. */
+.aisa-source--tap {
+	padding-block-start: 8px;
+	color: var(--aisa-muted);
+}
+
+.aisa-source--tap .aisa-source__count {
+	font-weight: 500;
+}
+
+.aisa-metric__note {
+	display: block;
+	color: var(--aisa-muted);
+	font-size: 11px;
+}
+
+.aisa-print {
+	margin-inline-start: auto;
+	border-color: var(--aisa-dark-lift);
+	cursor: pointer;
+	font-family: inherit;
+}
+
+/* The month's two headline tiles carry the chart's colours (F1). */
+.aisa-tiles--feature .aisa-metric--clicks {
+	border: 0;
+	background-color: var(--aisa-primary);
+}
+
+.aisa-tiles--feature .aisa-metric--shown {
+	border: 0;
+	background-color: var(--aisa-dark);
+}
+
+.aisa-tiles--feature :where(.aisa-metric--clicks, .aisa-metric--shown) :where(.aisa-metric__label, .aisa-metric__value, .aisa-metric__change) {
+	color: var(--aisa-on-dark);
+}
+
+.aisa-done th,
+.aisa-done td {
+	vertical-align: top;
+}
+
+.aisa-done__date {
+	color: var(--aisa-muted);
+	white-space: nowrap;
+}
+
+.aisa-pill {
+	display: inline-flex;
+	align-items: center;
+	padding: 2px 10px;
+	border: 1px solid var(--aisa-border);
+	border-radius: 999px;
+	background-color: var(--aisa-surface);
+	color: var(--aisa-muted);
+	font-size: 12px;
+	font-weight: 600;
+	line-height: 1.5;
+	white-space: nowrap;
+}
+
+.aisa-pill--good {
+	border-color: var(--aisa-good-bg);
+	background-color: var(--aisa-good-bg);
+	color: var(--aisa-good);
+}
+
+.aisa-pill--bad {
+	border-color: var(--aisa-bad-bg);
+	background-color: var(--aisa-bad-bg);
+	color: var(--aisa-bad);
+}
+
+.aisa-pill--warn {
+	border-color: var(--aisa-warning-edge);
+	background-color: var(--aisa-warning-bg);
+	color: var(--aisa-warning-ink);
+}
+
+.aisa-pill--accent {
+	border-color: var(--aisa-accent-bg);
+	background-color: var(--aisa-accent-bg);
+	color: var(--aisa-primary-ink);
+}
+
+.aisa-pill--info {
+	border-color: var(--aisa-info-bg);
+	background-color: var(--aisa-info-bg);
+	color: var(--aisa-info);
+}
+
+.aisa-print-only {
+	display: none;
+}
+
+/* The 12-period bars keep their drawn size (labels stay small) instead of stretching to the column. */
+.aisa-chart--bars {
+	max-inline-size: 440px;
+}
+
+/* ---- Print: the Monthly report on A4 (F3a/F3b), the Weekly report plainly -------------------- */
+
 @media print {
+	@page {
+		size: A4;
+		margin: 14mm 12mm;
+	}
+
+	.aisa-no-print {
+		display: none !important;
+	}
+
+	.aisa-layout--card {
+		grid-template-columns: minmax(0, 1fr);
+	}
+
+	#wpadminbar,
+	#adminmenumain,
+	#wpfooter,
+	.notice,
+	.update-nag,
 	.aisa-weeks,
-	.aisa-delivery {
+	.aisa-tabs,
+	.aisa-fresh {
+		display: none !important; /* Hide wp-admin's own chrome, which sets its own display. */
+	}
+
+	html.wp-toolbar {
+		padding-block-start: 0;
+	}
+
+	#wpcontent,
+	#wpbody-content {
+		margin: 0;
+		padding: 0;
+	}
+
+	.aisa-wrap {
+		margin: 0;
+	}
+
+	.aisa-report {
+		max-inline-size: none;
+		margin: 0;
+		gap: 12px;
+		font-size: 11pt;
+	}
+
+	/* The dark header prints as a plain letterhead: brand left, client and period right. */
+	.aisa-hero {
+		padding: 0 0 8px;
+		border-radius: 0;
+		border-block-end: 2px solid var(--aisa-ink);
+		background-color: transparent;
+		color: var(--aisa-ink);
+	}
+
+	.aisa-hero__headline,
+	.aisa-hero__sub,
+	.aisa-brand strong {
+		color: var(--aisa-ink);
+	}
+
+	.aisa-report--month .aisa-hero__top {
 		display: none;
 	}
 
-	.aisa-hero {
+	.aisa-report--month .aisa-print-only {
+		display: flex;
+		justify-content: space-between;
+		font-size: 10pt;
+	}
+
+	.aisa-print-head span {
+		text-align: end;
+	}
+
+	.aisa-card,
+	.aisa-row > *,
+	.aisa-tablewrap {
+		break-inside: avoid;
+	}
+
+	.aisa-print-page {
+		break-before: page;
+	}
+
+	.aisa-figure--wide {
+		overflow: visible;
+	}
+
+	.aisa-chart--lines {
+		min-inline-size: 0;
+	}
+
+	.aisa-row {
+		grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+	}
+
+	.aisa-row--even {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	.aisa-card,
+	.aisa-tiles--feature .aisa-metric,
+	.aisa-pill,
+	.aisa-meter__value,
+	.aisa-chart {
 		print-color-adjust: exact;
 	}
 }

@@ -1,0 +1,458 @@
+{
+  "schema": 2,
+  "period": "week",
+  "site": "northfieldplumbing.example",
+  "week": {
+    "start": "2026-09-28",
+    "end": "2026-10-04"
+  },
+  "generated_at": "2026-10-05T07:12:00+00:00",
+  "enquiries": {
+    "sources": [
+      {
+        "key": "ads_calls",
+        "label": "Calls from Google Ads",
+        "kind": "call",
+        "counted_by": "Google Ads",
+        "in_total": true,
+        "count": 5,
+        "previous": 4
+      },
+      {
+        "key": "gbp_call_taps",
+        "label": "Taps on Call on your Google listing",
+        "kind": "tap",
+        "counted_by": "Google",
+        "in_total": false,
+        "count": 6,
+        "previous": 5
+      },
+      {
+        "key": "form",
+        "label": "Website form",
+        "kind": "form",
+        "counted_by": "Google Analytics",
+        "in_total": true,
+        "count": 4,
+        "previous": 4
+      },
+      {
+        "key": "booking",
+        "label": "Online bookings",
+        "kind": "booking",
+        "counted_by": "Google Analytics",
+        "in_total": true,
+        "count": 2,
+        "previous": 3
+      },
+      {
+        "key": "phone_taps",
+        "label": "Taps on your phone number on the website",
+        "kind": "tap",
+        "counted_by": "Google Analytics",
+        "in_total": false,
+        "count": 6,
+        "previous": 5
+      }
+    ],
+    "history": [
+      {
+        "start": "2026-07-13",
+        "end": "2026-07-19",
+        "total": 7
+      },
+      {
+        "start": "2026-07-20",
+        "end": "2026-07-26",
+        "total": 9
+      },
+      {
+        "start": "2026-07-27",
+        "end": "2026-08-02",
+        "total": 8
+      },
+      {
+        "start": "2026-08-03",
+        "end": "2026-08-09",
+        "total": 10
+      },
+      {
+        "start": "2026-08-10",
+        "end": "2026-08-16",
+        "total": 9
+      },
+      {
+        "start": "2026-08-17",
+        "end": "2026-08-23",
+        "total": 10
+      },
+      {
+        "start": "2026-08-24",
+        "end": "2026-08-30",
+        "total": 10
+      },
+      {
+        "start": "2026-08-31",
+        "end": "2026-09-06",
+        "total": 9
+      },
+      {
+        "start": "2026-09-07",
+        "end": "2026-09-13",
+        "total": 12
+      },
+      {
+        "start": "2026-09-14",
+        "end": "2026-09-20",
+        "total": 10
+      },
+      {
+        "start": "2026-09-21",
+        "end": "2026-09-27",
+        "total": 11
+      },
+      {
+        "start": "2026-09-28",
+        "end": "2026-10-04",
+        "total": 11
+      }
+    ],
+    "note": "Calls are counted by the service that connected them. Taps are people tapping your number on the website or the Call button on your Google listing; they are shown apart and not added."
+  },
+  "note": {
+    "did": [
+      "Rewrote the water heater page's Google title and description."
+    ],
+    "next": [
+      "Check the boiler repair change once 4 weeks of data are in."
+    ],
+    "author": "Andrew Ryan",
+    "date": "2026-10-05"
+  },
+  "gsc": {
+    "country": "usa",
+    "totals": {
+      "clicks": {
+        "value": 402,
+        "previous": 388
+      },
+      "impressions": {
+        "value": 17630,
+        "previous": 17110
+      },
+      "ctr": {
+        "value": 2.3,
+        "previous": 2.3
+      },
+      "position": {
+        "value": 11.6,
+        "previous": 11.9
+      }
+    },
+    "series": {
+      "unit": "week",
+      "start": "2026-07-13",
+      "clicks": [
+        350,
+        356,
+        352,
+        365,
+        361,
+        374,
+        380,
+        386,
+        382,
+        392,
+        395,
+        402
+      ],
+      "impressions": [
+        15100,
+        15400,
+        15300,
+        15900,
+        15800,
+        16300,
+        16500,
+        16700,
+        16600,
+        17000,
+        17110,
+        17630
+      ]
+    },
+    "top_queries": [
+      {
+        "query": "emergency plumber northfield",
+        "clicks": 61,
+        "change": 7
+      },
+      {
+        "query": "northfield plumbing",
+        "clicks": 40,
+        "change": -2
+      }
+    ]
+  },
+  "ga4": {
+    "totals": {
+      "visits": {
+        "value": 1260,
+        "previous": 1190
+      },
+      "key_events": {
+        "value": 14,
+        "previous": 12
+      },
+      "engaged": {
+        "value": 61,
+        "previous": 62
+      }
+    },
+    "top_pages": [
+      {
+        "title": "Emergency plumbing",
+        "path": "/emergency-plumber/",
+        "visits": 301
+      },
+      {
+        "title": "Home",
+        "path": "/",
+        "visits": 280
+      }
+    ]
+  },
+  "ads": {
+    "currency": "USD",
+    "budget": 700,
+    "spend": {
+      "value": 612.4,
+      "previous": 655.1
+    },
+    "clicks": {
+      "value": 188,
+      "previous": 179
+    },
+    "conversions": {
+      "value": 9,
+      "previous": 8
+    },
+    "calls": {
+      "value": 5,
+      "previous": 4
+    }
+  },
+  "pages": {
+    "queries_country": "usa",
+    "range": {
+      "start": "2026-07-06",
+      "end": "2026-10-04"
+    },
+    "previous_range": {
+      "start": "2026-04-06",
+      "end": "2026-07-05"
+    },
+    "series_start": "2026-07-06",
+    "cap": 500,
+    "available": 2,
+    "truncated": false,
+    "items": [
+      {
+        "path": "/water-heater-installation/",
+        "url": "https://northfieldplumbing.example/water-heater-installation/",
+        "gsc": {
+          "clicks": {
+            "value": 44,
+            "previous": 50
+          },
+          "impressions": {
+            "value": 7310,
+            "previous": 6706
+          },
+          "ctr": {
+            "value": 0.6,
+            "previous": 0.7
+          },
+          "position": {
+            "value": 8.9,
+            "previous": 9.3
+          },
+          "series": {
+            "clicks": [
+              2,
+              4,
+              6,
+              3,
+              5,
+              2,
+              4,
+              6,
+              3,
+              5,
+              2,
+              4,
+              6
+            ],
+            "impressions": [
+              540,
+              542,
+              544,
+              541,
+              543,
+              540,
+              542,
+              544,
+              541,
+              543,
+              540,
+              542,
+              544
+            ],
+            "position": [
+              9.4,
+              9.1,
+              9.2,
+              8.8,
+              9,
+              8.9,
+              8.7,
+              9.1,
+              8.8,
+              8.6,
+              8.9,
+              8.8,
+              8.7
+            ]
+          },
+          "query_count": 64,
+          "top_queries": [
+            {
+              "query": "water heater installation northfield",
+              "clicks": 18,
+              "impressions": 1240,
+              "ctr": 1.5,
+              "position": 4.1,
+              "change": 3
+            },
+            {
+              "query": "water heater installation near me",
+              "clicks": 9,
+              "impressions": 2310,
+              "ctr": 0.4,
+              "position": 9.8,
+              "change": -2
+            },
+            {
+              "query": "water heater installation cost",
+              "clicks": 0,
+              "impressions": 280,
+              "ctr": 0,
+              "position": 15.1,
+              "change": 0
+            }
+          ]
+        },
+        "ga4": {
+          "visits": 312,
+          "google_organic_visits": 181,
+          "engaged": 58,
+          "engagement_time": 72,
+          "enquiries": [
+            {
+              "key": "phone_taps",
+              "count": 2
+            },
+            {
+              "key": "form",
+              "count": 1
+            }
+          ]
+        }
+      },
+      {
+        "path": "/book-online/",
+        "url": null,
+        "gsc": null,
+        "ga4": {
+          "visits": 391,
+          "google_organic_visits": 0,
+          "engaged": 71,
+          "engagement_time": 95,
+          "enquiries": [
+            {
+              "key": "booking",
+              "count": 8
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "business_profile_check": {
+    "version": 1,
+    "checked": true,
+    "checked_at": "2026-10-05T07:11:40.000Z",
+    "page": "https://northfieldplumbing.example/",
+    "place_id": "ChIJExampleNorthfieldPlumbing00",
+    "maps_url": "https://maps.google.com/?cid=1234567890123456789",
+    "summary": {
+      "fields": 3,
+      "match": 1,
+      "mismatch": 1,
+      "missing_on_site": 1,
+      "missing_on_google": 0,
+      "not_compared": 0,
+      "problems": 2,
+      "worst": "medium"
+    },
+    "google": {
+      "name": "Northfield Plumbing & Heating",
+      "phone": "(555) 014-2290",
+      "status": "OPERATIONAL",
+      "primary_type": "plumber",
+      "rating": 4.8,
+      "review_count": 112,
+      "service_area_only": true
+    },
+    "fields": [
+      {
+        "field": "status",
+        "status": "match",
+        "severity": "info",
+        "site": null,
+        "google": "OPERATIONAL",
+        "message": "Your Google listing shows the business as open.",
+        "detail": "businessStatus OPERATIONAL",
+        "fix": null
+      },
+      {
+        "field": "hours",
+        "status": "mismatch",
+        "severity": "medium",
+        "site": "Mon–Fri 08:00–17:00",
+        "google": "Mon–Fri 08:00–18:00",
+        "message": "Your website says you close at 5pm on weekdays; your Google listing says 6pm.",
+        "detail": "openingHoursSpecification on https://northfieldplumbing.example/#plumber differs Mon–Fri closing time",
+        "fix": {
+          "where": "site_or_google",
+          "site": "AJR Core → Business details → Opening hours",
+          "google": "Google Business Profile → Edit profile → Hours"
+        }
+      },
+      {
+        "field": "same_as",
+        "status": "missing_on_site",
+        "severity": "low",
+        "site": null,
+        "google": "https://maps.google.com/?cid=1234567890123456789",
+        "message": "Your website does not link to your Google listing.",
+        "detail": "no sameAs/hasMap naming cid 1234567890123456789",
+        "fix": {
+          "where": "site",
+          "site": "AJR Core → Business details → Profiles elsewhere (or Google → Google reviews, \"this is my business\")",
+          "google": null
+        }
+      }
+    ]
+  }
+}

@@ -2,10 +2,11 @@
 /**
  * Plugin Name:       AI SEO Assistant
  * Plugin URI:        https://github.com/andrew-ajrwebdesign/ai-seo-assistant
- * Description:       AI-assisted SEO metadata generation, audit tools, and AI-agent content endpoints for WordPress.
- * Version:           4.4.0
- * Requires at least: 6.0
+ * Description:       The retainer report and the agency's SEO scan: every page checked, ranked by the clicks it could win, with Claude-written titles, descriptions and alt text applied only after review.
+ * Version:           5.0.0
+ * Requires at least: 6.5
  * Requires PHP:      8.0
+ * Requires Plugins:  ajr-core
  * Author:            AJR Web Design
  * Author URI:        https://ajrwebdesign.com
  * License:           GPL-2.0-or-later
@@ -28,63 +29,44 @@ define( 'AI_SEO_ASSISTANT_PATH', plugin_dir_path( __FILE__ ) );
 define( 'AI_SEO_ASSISTANT_URL', plugin_dir_url( __FILE__ ) );
 define( 'AI_SEO_ASSISTANT_BASENAME', plugin_basename( __FILE__ ) );
 
-// Composer PSR-4 autoloader — all classes live under AJR\SEOAssistant\
-// (including the Markdown module) plus league/html-to-markdown. The packaged
-// release zip bundles vendor/; when working from a source checkout, run
-// `composer install` to generate it.
-$ai_seo_assistant_autoload = AI_SEO_ASSISTANT_PATH . 'vendor/autoload.php';
-
-if ( ! is_readable( $ai_seo_assistant_autoload ) ) {
-	// Dependencies are missing (e.g. a partial copy without vendor/). Fail with a
-	// clear admin notice instead of a fatal error on activation.
-	add_action(
-		'admin_notices',
-		static function () {
-			echo '<div class="notice notice-error"><p><strong>AI SEO Assistant</strong> could not start because its dependencies are missing. Install the packaged plugin zip, or run <code>composer install</code> in the plugin folder to generate <code>vendor/</code>.</p></div>';
+/*
+ * PSR-4 autoloader for AJR\SEOAssistant\ → src/. 5.0 has no runtime dependency (Markdown for AI and its
+ * league/html-to-markdown went to AJR Core), so there is no vendor/ in the release zip and no Composer
+ * autoloader to fail; Composer stays for the dev tools (PHPUnit, PHPCS) only.
+ */
+spl_autoload_register(
+	static function ( string $class ): void {
+		$prefix = 'AJR\\SEOAssistant\\';
+		if ( 0 !== strpos( $class, $prefix ) ) {
+			return;
 		}
-	);
-
-	return;
-}
-
-require_once $ai_seo_assistant_autoload;
+		$file = AI_SEO_ASSISTANT_PATH . 'src/' . str_replace( '\\', '/', substr( $class, strlen( $prefix ) ) ) . '.php';
+		if ( is_readable( $file ) ) {
+			require $file;
+		}
+	}
+);
 
 /**
- * Boot the plugin once all plugins are loaded.
- *
- * The core assistant wires up the admin UI, AI generation, and Search
- * Console integration; the Markdown module wires up the AI-discovery
- * endpoints. Both are booted here to keep this file a thin entry point.
+ * Boot once every plugin has loaded (AJR Core's classes are then known).
  */
 add_action(
 	'plugins_loaded',
 	static function () {
 		\AJR\SEOAssistant\Core\Plugin::instance()->init();
-
-		// Markdown for AI stands down while AJR Core 0.8+ or the site's own core serves it (Plugin::core_owns_markdown()).
-		if ( ! \AJR\SEOAssistant\Core\Plugin::core_owns_markdown() ) {
-			\AJR\SEOAssistant\Markdown\Module::boot();
-		}
 	}
 );
 
 register_activation_hook(
 	__FILE__,
 	static function () {
-		// 4.4.0: nothing is installed for a feature a core plugin owns. Activating beside AJR Core used to
-		// create an empty redirects table and this plugin's llms.txt rewrite rules, neither ever used.
-		if ( ! \AJR\SEOAssistant\Core\Plugin::core_owns_markdown() ) {
-			\AJR\SEOAssistant\Markdown\Module::activate();
-		}
-		if ( ! \AJR\SEOAssistant\Core\Plugin::core_owns_redirects() ) {
-			\AJR\SEOAssistant\Redirects\Redirect_Store::install();
-		}
+		\AJR\SEOAssistant\Core\Schema::install();
 	}
 );
 register_deactivation_hook(
 	__FILE__,
 	static function () {
-		\AJR\SEOAssistant\Markdown\Module::deactivate();
 		\AJR\SEOAssistant\Report\Stale_Alert::unschedule();
+		\AJR\SEOAssistant\Scan\Scheduler::unschedule();
 	}
 );

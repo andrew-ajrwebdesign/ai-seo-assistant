@@ -7,7 +7,10 @@
  *    already treats it as absent; this says which one to re-enter.
  * 2. The 4.4.0 upgrade could not seal a secret on this server (Core\Upgrade::attempt()).
  * 3. A secret was found in plain text after the upgrade and has just been sealed (shown once).
- * 4. The auth salts are not usable constants in wp-config.php, so WordPress keeps them in the database
+ * 4. The 5.0 upgrade could not get Google to revoke the old Search Console grant (shown once).
+ * 5. No Administrator counts as agency, so every Administrator has the tools (and the Claude budget).
+ *    Persistent until someone is named: the no-lockout fallback must not go unnoticed.
+ * 6. The auth salts are not usable constants in wp-config.php, so WordPress keeps them in the database
  *    beside the sealed secrets, and anyone with the database can open them.
  *
  * Shown on this plugin's screens, the Dashboard and the Plugins screen only: the check reads the secret
@@ -83,6 +86,52 @@ class Secret_Notices {
 				)
 			) . '</p></div>';
 			delete_option( Secret_Store::RESEALED_OPTION );
+		}
+
+		// The last push's per-page search data could not be saved: the scan still ranks on the previous one.
+		$failed = get_option( \AJR\SEOAssistant\Report\Snapshot_Store::PAGES_FAILED, false );
+		if ( is_array( $failed ) ) {
+			/* translators: 1: number of pages, 2: date. */
+			echo '<div class="notice notice-warning"><p>' . esc_html( sprintf( __( 'AI SEO Assistant: the search data for %1$d pages pushed on %2$s could not be saved (the database refused it), so the scan still uses the previous push. The next push tries again; if this stays, check the database.', 'ai-seo-assistant' ), (int) ( $failed['pages'] ?? 0 ), wp_date( 'D j M', (int) ( $failed['at'] ?? time() ) ) ) ) . '</p></div>';
+		}
+
+		// A table update that did not take (no ALTER privilege, a full disk): one notice while it stays so.
+		$db_failed = get_option( \AJR\SEOAssistant\Core\Schema::FAILED_OPTION, false );
+		if ( is_array( $db_failed ) && ! \AJR\SEOAssistant\Core\Schema::is_current() ) {
+			/* translators: %s: comma-separated table columns, e.g. "scan.body_text". */
+			echo '<div class="notice notice-error"><p>' . esc_html( sprintf( __( 'AI SEO Assistant could not update its database tables (missing: %s). Scans still run, without the page text that marks editor to-dos done. It tries again every hour; check that the database user may alter tables.', 'ai-seo-assistant' ), implode( ', ', array_map( 'strval', (array) ( $db_failed['missing'] ?? [] ) ) ) ) ) . '</p></div>';
+		}
+
+		// 5.0: Google did not confirm revoking the old on-site Search Console grant. Shown once.
+		if ( false !== get_option( Upgrade::REVOKE_FAILED, false ) ) {
+			echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__( 'AI SEO Assistant 5.0 removed its old Search Console connection, but Google did not confirm revoking the access it held. Remove "AI SEO Assistant" (or the Google Cloud app it used) from the Google account’s third-party access:', 'ai-seo-assistant' ) . ' <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener noreferrer">myaccount.google.com/permissions</a></p></div>';
+			delete_option( Upgrade::REVOKE_FAILED );
+		}
+
+		// 5.0: the old redirects table still holds enabled rules, which 5.0 no longer serves. Never deleted
+		// until every one of them is confirmed in AJR Core (Upgrade::confirm_redirects_moved()).
+		$pending = (int) get_option( Upgrade::REDIRECTS_PENDING, 0 );
+		if ( $pending > 0 ) {
+			// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- display-only list from our own redirect.
+			$missing = isset( $_GET['aisa_missing'] ) ? sanitize_text_field( wp_unslash( $_GET['aisa_missing'] ) ) : '';
+			echo '<div class="notice notice-error"><p><strong>' . esc_html(
+				sprintf(
+					/* translators: %d: number of redirect rules. */
+					_n( 'AI SEO Assistant 5.0 no longer runs redirects, and its old table still holds %d enabled redirect.', 'AI SEO Assistant 5.0 no longer runs redirects, and its old table still holds %d enabled redirects.', $pending, 'ai-seo-assistant' ),
+					$pending
+				)
+			) . '</strong> ' . esc_html__( 'Move them into AJR Core › Redirects first (its import reads the old table), then confirm here. The old table is kept until every enabled rule is found in AJR Core.', 'ai-seo-assistant' ) . '</p>';
+			if ( '' !== $missing ) {
+				/* translators: %s: paths. */
+				echo '<p>' . esc_html( sprintf( __( 'Not in AJR Core yet: %s', 'ai-seo-assistant' ), $missing ) ) . '</p>';
+			}
+			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '"><p>';
+			wp_nonce_field( Tools_Actions::REDIRECTS );
+			echo '<input type="hidden" name="action" value="' . esc_attr( Tools_Actions::REDIRECTS ) . '"><button type="submit" class="button">' . esc_html__( 'They are in AJR Core: retire the old table', 'ai-seo-assistant' ) . '</button></p></form></div>';
+		}
+
+		if ( in_array( Access::source(), [ 'fallback', 'none' ], true ) ) {
+			echo '<div class="notice notice-warning"><p>' . esc_html__( 'AI SEO Assistant: no Administrator is marked as agency staff, so every Administrator sees the SEO tools and can spend this site’s Claude budget. Mark the agency login in AJR Core, or tick who sees the tools in Settings.', 'ai-seo-assistant' ) . ' <a href="' . esc_url( admin_url( 'admin.php?page=' . Settings_Page::SLUG . '#aisa-s-access' ) ) . '">' . esc_html__( 'Who sees the tools', 'ai-seo-assistant' ) . '</a></p></div>';
 		}
 
 		if ( ! Secret_Store::salts_in_config() && $this->any_secret_stored() ) {

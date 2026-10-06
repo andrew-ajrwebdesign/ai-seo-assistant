@@ -13,7 +13,12 @@
     <file>src/Core/Secret_Store.php</file>
     <file>src/Core/Secret_Guard.php</file>
     <file>src/Core/Upgrade.php</file>
-    <file>src/Admin/Secret_Notices.php</file>
+    <!-- 5.0: the scan, review, change log, page data and every admin screen. -->
+    <file>src/Scan</file>
+    <file>src/Review</file>
+    <file>src/Changes</file>
+    <file>src/Search</file>
+    <file>src/Admin</file>
 
     <exclude-pattern>/vendor/*</exclude-pattern>
     <exclude-pattern>/tests/*</exclude-pattern>
@@ -37,6 +42,12 @@
                 <element value="ai-seo-assistant"/>
             </property>
         </properties>
+    </rule>
+
+    <!-- A variable used and never defined is an error (Changes_Page used $log it never set: a 500 that
+         php -l and WPCS both passed). -->
+    <rule ref="VariableAnalysis.CodeAnalysis.VariableAnalysis.UndefinedVariable">
+        <type>error</type>
     </rule>
 
     <!-- Match the plugin header: Requires at least 6.0, Requires PHP 8.0. -->

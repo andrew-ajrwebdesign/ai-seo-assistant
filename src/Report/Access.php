@@ -2,16 +2,17 @@
 /**
  * Access — the report is the owner's; the tools are the agency's.
  *
- * WHY (Andrew, 2026-09-29): the client — usually a WordPress Administrator — sees the Weekly report and
- * none of the plugin's tool screens (Settings, Audit, Recommendations, Search Console, Indexing, Markdown,
- * Redirects, Metadata report). Administrators all hold manage_options, so the tools move behind their own
- * capability, TOOLS_CAP, granted by this filter to the users named in the "Agency users" option.
+ * WHY (Andrew, 2026-09-29): the client — usually a WordPress Administrator — sees the Report and none of
+ * the plugin's tool screens (5.0: SEO scan, Search Console, Changes, Settings, and the editor's SEO to-do box). Every
+ * one of them can spend the agency's Claude key or change the site's SEO fields. Administrators all hold
+ * manage_options, so the tools sit behind their own capability, TOOLS_CAP, granted by this filter.
  *
- * NO LIST. Until at least one existing Administrator is named (a list that names only deleted or demoted
- * users counts as none): with AJR Core active, AJR Core decides who is agency (4.4.0: one resolver for the
- * whole stack; Administrators whose login email is on the agency's domain), unless it counts NO current
- * Administrator as agency, when every Administrator keeps the tools (no lockout); without AJR Core, every
- * Administrator keeps the tools, as before.
+ * WHO. AJR Core (required from 5.0) decides: its Support::is_agency_user() is the stack's single agency
+ * resolver (Administrators whose login email is on the agency's domain). The "Agency users" list is an
+ * explicit override only: once it names a current Administrator (a list naming only deleted or demoted
+ * users counts as none), it alone decides. NO LOCKOUT (4.4.0 round 2): when AJR Core counts no current
+ * Administrator as agency, or is missing, every Administrator keeps the tools, so nobody is ever locked
+ * out of the screen that fixes it.
  *
  * @package AJR\SEOAssistant
  */
@@ -88,6 +89,21 @@ class Access {
 		// agency login on this site yet, or the agency domain changed), nobody could reach the tool screens,
 		// including the one that names agency users. Then every Administrator keeps them, as before 4.4.0.
 		return ! self::core_has_agency_admin();
+	}
+
+	/**
+	 * Where the answer comes from, for the Settings screen: 'override', 'ajr-core', 'fallback' (no
+	 * Administrator counts as agency, so all keep the tools) or 'none' (AJR Core missing).
+	 */
+	public static function source(): string {
+		if ( [] !== self::named() ) {
+			return 'override';
+		}
+		if ( ! class_exists( 'AJR\Core\Admin\Support' ) ) {
+			return 'none';
+		}
+
+		return self::core_has_agency_admin() ? 'ajr-core' : 'fallback';
 	}
 
 	/**

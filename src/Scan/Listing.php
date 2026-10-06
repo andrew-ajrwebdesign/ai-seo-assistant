@@ -1,0 +1,108 @@
+<?php
+/**
+ * Listing — the "Google listing" issue group: the pushed Business Profile check (business_profile_check),
+ * read against AJR Core's pins.
+ *
+ * Google's listing is the source of truth for the business details (decision 2026-10-06). A difference the
+ * agency pinned in the Business details row of AJR Core → Your essentials (contract 4: `\AJR\Core\Business\Pins`) is "Kept on purpose":
+ * shown with its reason, never counted as an issue. A check that could not run says "Google listing not
+ * checked", never "all match".
+ *
+ * @package AJR\SEOAssistant
+ */
+
+declare( strict_types=1 );
+
+namespace AJR\SEOAssistant\Scan;
+
+use AJR\SEOAssistant\Report\Snapshot_Store;
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * The Google listing group.
+ */
+class Listing {
+
+	/** AJR Core's pins (contract 4). */
+	public const PINS = 'AJR\Core\Business\Pins';
+
+	/** AJR Core's settings screen, whose "Business details" row holds the business facts (no screen of its own). */
+	public const CORE_SETTINGS = 'AJR\Core\Admin\Settings';
+
+	/**
+	 * AJR Core's pins: field => { reason, pinned_at, user_id }. [] without Core 0.22.
+	 *
+	 * @return array<string,array<string,mixed>>
+	 */
+	public static function pins(): array {
+		if ( ! class_exists( self::PINS ) || ! method_exists( self::PINS, 'all' ) ) {
+			return [];
+		}
+		$pins = self::PINS;
+		$all  = $pins::all();
+
+		return is_array( $all ) ? $all : [];
+	}
+
+	/**
+	 * The group: state, issues (counted), kept (pinned) and the check's facts.
+	 *
+	 * @param array<string,mixed>|null          $listing Snapshot_Store::listing().
+	 * @param array<string,array<string,mixed>> $pins    pins().
+	 * @return array{state:string,issues:array<int,array<string,mixed>>,kept:array<int,array<string,mixed>>,listing:array<string,mixed>|null}
+	 */
+	public static function group( ?array $listing, array $pins ): array {
+		$out = [
+			'state'   => 'none',
+			'issues'  => [],
+			'kept'    => [],
+			'listing' => $listing,
+		];
+		if ( null === $listing ) {
+			return $out;
+		}
+		if ( empty( $listing['checked'] ) ) {
+			$out['state'] = 'not_checked';
+			return $out;
+		}
+		$out['state'] = 'checked';
+		foreach ( (array) $listing['fields'] as $f ) {
+			if ( in_array( $f['status'] ?? '', [ 'match', 'not_compared' ], true ) || 'info' === ( $f['severity'] ?? 'info' ) ) {
+				continue;
+			}
+			if ( isset( $pins[ $f['field'] ] ) ) {
+				$out['kept'][] = $f + [ 'pin' => (array) $pins[ $f['field'] ] ];
+			} else {
+				$out['issues'][] = $f;
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * The group for this site now.
+	 *
+	 * @return array{state:string,issues:array<int,array<string,mixed>>,kept:array<int,array<string,mixed>>,listing:array<string,mixed>|null}
+	 */
+	public static function current(): array {
+		return self::group( Snapshot_Store::listing(), self::pins() );
+	}
+
+	/**
+	 * Link to the "Business details" row of AJR Core → Your essentials, opened. AJR Core's own
+	 * `Settings::business_details_url()` when it has one; else the essentials screen with the row's anchor.
+	 */
+	public static function core_url(): string {
+		if ( class_exists( self::CORE_SETTINGS ) && method_exists( self::CORE_SETTINGS, 'business_details_url' ) ) {
+			$settings = self::CORE_SETTINGS;
+			$url      = (string) $settings::business_details_url();
+			if ( '' !== $url ) {
+				return $url;
+			}
+		}
+
+		return admin_url( 'admin.php?page=ajr-core#business-details' );
+	}
+}

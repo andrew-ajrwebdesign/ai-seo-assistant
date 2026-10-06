@@ -1,6 +1,8 @@
 <?php
 /**
- * Handles global and per-page SEO focus context.
+ * Local_SEO_Context — the business's focus (this plugin's 4.x settings, else AJR Core's business facts).
+ * The page-level "Local SEO Focus" meta keys are kept as constants: the 4.x editor box that wrote them is
+ * gone (5.0), and Page_Review reads what was typed there as extra context until someone clears it.
  */
 
 namespace AJR\SEOAssistant\Content;
@@ -77,32 +79,6 @@ class Local_SEO_Context {
 		}
 
 		return $context;
-	}
-
-	public function save_page_context( $post_id, $data ) {
-		$fields = [
-			self::META_SERVICE_FOCUS => 'ai_seo_service_focus',
-			self::META_SEARCH_INTENT => 'ai_seo_search_intent',
-			self::META_PRIORITY      => 'ai_seo_priority',
-			self::META_PAGE_NOTES    => 'ai_seo_page_notes',
-		];
-
-		if ( $this->is_local_mode() ) {
-			$fields[ self::META_PRIMARY_LOCATION ]    = 'ai_seo_primary_location';
-			$fields[ self::META_SECONDARY_LOCATIONS ] = 'ai_seo_secondary_locations';
-		}
-
-		foreach ( $fields as $meta_key => $field_name ) {
-			if ( ! isset( $data[ $field_name ] ) ) {
-				continue;
-			}
-
-			update_post_meta(
-				$post_id,
-				$meta_key,
-				sanitize_textarea_field( wp_unslash( $data[ $field_name ] ) )
-			);
-		}
 	}
 
 	/*
@@ -202,18 +178,5 @@ class Local_SEO_Context {
 		}
 
 		return implode( "\n", $lines );
-	}
-
-	public function has_any_context( $post_id ) {
-		$page_context   = $this->get_page_context( $post_id );
-		$global_context = $this->get_global_context();
-
-		foreach ( array_merge( $page_context, $global_context ) as $value ) {
-			if ( ! empty( trim( (string) $value ) ) ) {
-				return true;
-			}
-		}
-
-		return false;
 	}
 }

@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "checked": true,
+  "checked_at": "2026-10-05T07:11:40.000Z",
+  "page": "https://northfieldplumbing.example/",
+  "place_id": "ChIJExampleNorthfieldPlumbing00",
+  "maps_url": "https://maps.google.com/?cid=1234567890123456789",
+  "summary": {
+    "fields": 3,
+    "match": 1,
+    "mismatch": 1,
+    "missing_on_site": 1,
+    "missing_on_google": 0,
+    "not_compared": 0,
+    "problems": 2,
+    "worst": "medium",
+    "suggestions": 3
+  },
+  "google": {
+    "name": "Northfield Plumbing & Heating",
+    "phone": "(555) 014-2290",
+    "status": "OPERATIONAL",
+    "primary_type": "plumber",
+    "rating": 4.8,
+    "review_count": 112,
+    "service_area_only": true
+  },
+  "fields": [
+    {
+      "field": "status",
+      "status": "match",
+      "severity": "info",
+      "site": null,
+      "google": "OPERATIONAL",
+      "message": "Your Google listing shows the business as open.",
+      "detail": "businessStatus OPERATIONAL",
+      "fix": null
+    },
+    {
+      "field": "hours",
+      "status": "mismatch",
+      "severity": "medium",
+      "site": "Mon–Fri 08:00–17:00",
+      "google": "Mon–Fri 08:00–18:00",
+      "message": "Your website says you close at 5pm on weekdays; your Google listing says 6pm.",
+      "detail": "openingHoursSpecification on https://northfieldplumbing.example/#plumber differs Mon–Fri closing time",
+      "fix": {
+        "where": "site_or_google",
+        "site": "AJR Core → Business details → Opening hours",
+        "google": "Google Business Profile → Edit profile → Hours"
+      }
+    },
+    {
+      "field": "same_as",
+      "status": "missing_on_site",
+      "severity": "low",
+      "site": null,
+      "google": "https://maps.google.com/?cid=1234567890123456789",
+      "message": "Your website does not link to your Google listing.",
+      "detail": "no sameAs/hasMap naming cid 1234567890123456789",
+      "fix": {
+        "where": "site",
+        "site": "AJR Core → Business details → Profiles elsewhere (or Google → Google reviews, \"this is my business\")",
+        "google": null
+      }
+    }
+  ],
+  "suggestions": [
+    {
+      "id": "primary_category",
+      "priority": "high",
+      "field": "category",
+      "current": "Services",
+      "suggested": "Plumber",
+      "why": "Google's data shows your main category as the general \"Services\". A specific main category (\"Plumber\") is the strongest signal for which searches show your listing.",
+      "where": "Business Profile → Edit profile → Business category",
+      "detail": "Places primaryType \"service\" is generic; the site's schema type is Plumber. Check the profile's current primary category before changing it.",
+      "copy": "Plumber"
+    },
+    {
+      "id": "hours",
+      "priority": "medium",
+      "field": "hours",
+      "current": "Mon–Fri 08:00–18:00",
+      "suggested": "Mon–Fri 08:00–17:00",
+      "why": "Your Google listing says you close at 6pm on weekdays; your website says 5pm. Callers who get no answer after 5pm tend to leave poor reviews.",
+      "where": "Business Profile → Edit profile → Hours",
+      "detail": "listing regularOpeningHours closes 18:00 Mon–Fri; https://northfieldplumbing.example/#plumber publishes 17:00. Confirm with the client which is right.",
+      "copy": null
+    },
+    {
+      "id": "website_utm",
+      "priority": "low",
+      "field": "website",
+      "current": "https://northfieldplumbing.example/",
+      "suggested": "https://northfieldplumbing.example/?utm_source=google&utm_medium=organic&utm_campaign=gbp",
+      "why": "Tagging the website link on your Google listing lets your report count the visits that come from the listing.",
+      "where": "Business Profile → Edit profile → Contact → Website",
+      "detail": "websiteUri has no utm_ parameters; GA4 files these visits under google / organic.",
+      "copy": "https://northfieldplumbing.example/?utm_source=google&utm_medium=organic&utm_campaign=gbp"
+    }
+  ],
+  "suggestions_unchecked": [
+    {
+      "id": "booking_link",
+      "priority": "low",
+      "field": "booking",
+      "suggested": "https://northfieldplumbing.example/book-online/?utm_source=google&utm_medium=organic&utm_campaign=gbp-booking",
+      "why": "Your website takes online bookings. If your Google listing has no booking link, adding one lets people book straight from Google.",
+      "where": "Business Profile → Edit profile → Contact → Booking links",
+      "detail": "the site publishes a ReserveAction target /book-online/; Places does not expose the listing's booking link.",
+      "copy": "https://northfieldplumbing.example/book-online/?utm_source=google&utm_medium=organic&utm_campaign=gbp-booking",
+      "reason": "Google's data doesn't show booking links, so we can't tell whether your listing has one."
+    },
+    {
+      "id": "service_area",
+      "priority": null,
+      "field": null,
+      "suggested": null,
+      "why": null,
+      "where": null,
+      "detail": null,
+      "copy": null,
+      "reason": "Google's data doesn't show the towns your listing serves, so missing towns can't be checked."
+    }
+  ]
+}

@@ -1,621 +1,180 @@
 # AI SEO Assistant
 
-AI SEO Assistant is a WordPress admin plugin for generating SEO metadata, reviewing page content, producing SEO recommendations, and using Google Search Console data to support smarter page-level optimization decisions.
+AI SEO Assistant is AJR Web Design's retainer plugin. The client sees one screen, the **Report**: their enquiries, Search Console, Analytics and Ads, week by week and by billing month. The agency gets the tools behind it: an **SEO scan** of every rendered page ranked by the clicks it could win, a **page review** where Claude suggests the title, description, keyphrase and image alt text, a **Changes** log that measures each change and can undo it, and a **Search Console** view.
 
-The plugin is designed for controlled WordPress admin workflows. It is not intended to automatically rewrite public content without review. Its purpose is to help developers, site owners, and SEO teams identify practical page-level improvements using a combination of AI analysis, site context, page content, and real search performance data.
+5.0 requires **AJR Core** (`Requires Plugins: ajr-core`). Everything that AJR Core now does (Markdown for AI, redirects, schema, the business profile, Google tags) has left this plugin.
 
-## Features
+## Screens
 
-### Weekly Report (4.3.0)
+| Menu | Who | What |
+|---|---|---|
+| **Report** (Weekly \| Monthly) | every Administrator | Enquiries first (calls + forms + bookings; taps shown apart, never added), Search Console, Analytics key events, Ads. The monthly view follows the client's billing month, prints to A4 and reads on a phone. |
+| **SEO scan** | agency | Every published page checked as Google sees it, ranked by opportunity, with the page review. |
+| **Search Console** | agency | The site's last week and 12-week lines, and every page with its searches. |
+| **Changes** | agency | Every applied change with its before and after, its effect on clicks after 4 full weeks, Undo, and a CSV export. |
+| **Settings** | agency | Claude key and model, monthly spend cap, brand tone, who sees the tools, report delivery. |
 
-**AI SEO Assistant → Weekly report** is the client's page: under a header leading with the week's enquiries, Search Console comes first (4.3.1), then enquiries from every source beside a note from the agency, then Analytics and Google Ads, with 12 weeks of history and 52 weeks kept.
+Every screen uses the full admin width. With AJR Core 0.22, its "Need a hand?" card (`Support::render_card()`) sits in a right-hand column, below the content on narrow screens; the Report shows it too.
 
-* **The site holds no Google keys.** The agency's `retainer-scan` builds each week's snapshot and POSTs it to `/wp-json/ai-seo-assistant/v1/report`, signed with HMAC-SHA256 (`X-AISA-Signature: t=<unix>,v1=<hex>` over `"<t>.<body>"`, 10-minute window). The per-site key is made on the Weekly report screen and shown once, or set as `AI_SEO_ASSISTANT_REPORT_KEY` in `wp-config.php`. Snapshots are validated against schema 1 and must name this site.
-* **No SSH needed.** The push is plain HTTPS. On a host that blocks it, upload the saved JSON with **Import a report** on the same screen.
-* **Late reports.** If no update arrives for 8 days, a daily check emails one alert (to the address set on the screen, or the admin email), and a "back on track" email when updates resume. The client sees a "these figures are N days old" notice meanwhile.
-* **Report only for the client.** Tool screens need the `aisa_manage_tools` capability, held by the Administrators ticked under **Who sees the tools**. While nobody is ticked, every Administrator keeps the tools, so installing the update locks no one out. The same capability gates the **AI SEO Assistant box in the post editor** and every AI call it makes, because each one spends the agency's Claude key. Clients still edit posts as normal. This is a tidy-up for the client, not a security boundary: an Administrator can still do anything an Administrator can.
+An Administrator who is not agency staff sees **Report** only. "Agency" is AJR Core's `Support::is_agency_user()`, or the list ticked under **Who sees the tools**. If neither names a current Administrator, every Administrator keeps the tools, so an update locks no one out, and a warning stays on the plugin's screens, the Dashboard and the Plugins screen until someone is named. This keeps the menu tidy for the client; it is not a security boundary.
 
-### AI Metadata Generation
+## The data comes to the site; the site holds no Google login
 
-Generate page-level SEO metadata suggestions, including:
+The agency's `retainer-scan` (claude-workspace `toolkits/retainer-scan`) builds each week's snapshot and POSTs it to `/wp-json/ai-seo-assistant/v1/report`, signed with HMAC-SHA256 (`X-AISA-Signature: t=<unix>,v1=<hex>` over `"<t>.<body>"`, 10-minute window). The endpoint refuses a body over 2 MiB **before** it checks the signature, and checks the signature before it decodes anything.
 
-* SEO titles
-* Meta descriptions
-* Focus keyword ideas
-* Page-level SEO summaries
+* **Schema 1** (weekly report) is still read.
+* **Schema 2** adds the billing month, per-page Search Console and GA4 data (the scan's ranking), enquiry sources with `kind` / `in_total`, and an optional `business_profile_check` that shows as the **Google listing** card in the SEO scan. A tap source that claims `in_total` is refused. Google-sourced text is capped and escaped, and rows that fail the text rules are dropped. Stored snapshots are never autoloaded.
+* The per-site push key is made under **Settings → Report delivery** and shown once, or set as `AI_SEO_ASSISTANT_REPORT_KEY` in `wp-config.php`. On a host that blocks the push, import the saved JSON on the same screen.
+* If no update arrives for 8 days, one alert email goes out, then a "back on track" email when updates resume.
 
-The plugin uses Claude (Anthropic's API) when an API key is configured. Every reply is constrained to a JSON schema, so titles, descriptions and recommendations always arrive in the exact shape the plugin expects. Without a key, or if the API is unreachable, it falls back to placeholder metadata built from the page content.
+Upgrading from 4.x **revokes the stored Google token** at Google and deletes it. A failed revoke never blocks the upgrade.
 
-### SEO Recommendations
+## SEO scan
 
-Generate structured SEO recommendations for individual pages or posts.
+The scan fetches each published page from the site itself (never following a redirect off it), reads the rendered HTML and checks only the page's own content: the entry content when the theme marks it, without the sidebar, author box, related posts or comments. Password-protected pages are never scanned or sent to Claude. It checks:
 
-Recommendations may include:
+* **Title:** width in pixels (580 px), duplicates.
+* **Meta description:** length and duplicates.
+* **Headings:** one H1, no skipped levels.
+* **Images:**
+  * missing or weak alt text, and the same alt text shared across images;
+  * `alt=""`, reported apart (right for decoration); images marked `role="presentation"` or `aria-hidden` owe no alt;
+  * alt text the page does not print: a Divi module or a block with its own alt;
+  * a copied alt printed over a good Media Library alt;
+  * heavy images.
+* **Links:**
+  * pages nothing links to, and too few links in or out (menu and footer links count as links in; suggested pages to link from must be on a related topic);
+  * broken links, and links that go through a redirect.
+* **Indexing:** noindex pages listed in the sitemap, pages missing from the sitemap, and canonicals pointing elsewhere. These checks are skipped while search engines are discouraged.
+* **Page type, sharing image and short pages** (not for contact, team member, "other", form or calculator pages).
 
-* Metadata issues
-* Missing or weak topic coverage
-* Search intent alignment
-* Page clarity issues
-* Repeated or vague headings
-* Thin content sections
-* Internal linking opportunities
-* Content placement suggestions
-* Local SEO improvements where relevant
+A finding on more than half the pages (six or more scanned) comes from the theme or a template: it is shown once, under "Across the site", and not on each page.
 
-When Google Search Console data is available, recommendations can be informed by real search queries and page performance data.
+Results go in the custom table `{prefix}aisa_scan`.
 
-When Search Console data is not available, the plugin should still perform a general page-quality review instead of assuming the page is already optimized.
+The scan runs:
 
-### Google Search Console Integration
+* after each push;
+* when a page is saved: any number of saves join one queued run;
+* when you press **Rescan now**. This runs in AJAX steps from the browser, so it works where WP-Cron is off. The header shows a progress bar (pages done, time left, Cancel). A scan already running shows at its stored position; leaving the screen is safe, as the queue carries on in WP-Cron. At the end the list refreshes in place and says how many issues more or fewer there are.
 
-AI SEO Assistant can connect to Google Search Console through Google OAuth and use Search Console data to support page-level recommendations.
+Opening a page review also rescans that page if it was edited since its last scan. Apply, Undo and a page type change rescan the page in the same request, without network calls (link checks and the sitemap are left to the next queued run).
 
-Search Console data may be used to identify:
+### Opportunity
 
-* Top queries
-* Existing visibility
-* Search intent patterns
-* Content gaps
-* Missed topic opportunities
-* Page-level optimization priorities
+Pages are ranked by the extra visits a year a better listing could win (`src/Scan/Opportunity.php`, `src/Scan/Intent.php`; decisions 2026-10-06).
 
-### SEO Focus Autofill
+A search Google answers on the results page itself (weather, time, distances, codes…) is **zero-click**: at position 5 or better, 300+ impressions in 90 days, and clicked under a sixth of what that position earns on the built-in curve. Words such as "weather" or "how far" count only when the search also under-clicks (page 1, 100+ impressions, under a third). A zero-click search weighs 0.1 (filter `ai_seo_assistant_zero_click_weight`), is left out of the site's click curve, and the review says "Google answers this search itself (few clicks possible)".
 
-The plugin includes an Autofill SEO Focus feature for editor/admin workflows.
+```
+quick win (a year) = Σ per top search: impressions × max(0, expected CTR at its position − its CTR) × reach × 365/90
+                     + the unnamed rest at the page's average position
+top-3 prize        = the same at position 3
+value              = Σ quick win × intent weight × page-type value × (1 + ln(1 + enquiries))
+tier               = High: the top pages holding half the site's total value; Medium: the next quarter; Low: the rest
+                     (floors: High ≥ 24, Medium ≥ 8 weighted visits a year; filter: ai_seo_assistant_opportunity_floors)
+mode               = "Quick wins" (rank by the quick win; default) or "Biggest prizes" (rank by the top-3 prize), per user
+```
 
-Autofill can use:
+- **Intent weights:** lead 3, commercial 2, informational 1, navigational 0.5.
+  - Searches are sorted by keyword rules first (filter: `ai_seo_assistant_intent_rules`).
+  - Searches the rules leave go to Claude Haiku 4.5 once per push. The call counts toward the cap and the answers are cached.
+- **Page-type value** comes from AJR Core's page type (`_ajr_page_type`): service and contact 1.5, area 1.2, article, FAQ and team member 0.6, other 1.0.
+  - Without a page type: posts and post listings count as information; forms, booking embeds, AJR Core's booking page and top-level menu pages count as money.
+- **Enquiry estimate:** "≈ N enquiries a year", shown only when the site tracked 10 or more enquiries in 90 days.
+- **Expected CTR:** the site's own when there is enough data. Thin buckets are scaled to the site's level and the curve never rises as position falls. The `ai_seo_assistant_expected_ctr` filter overrides it.
 
-1. Google Search Console data
-2. Existing page content
-3. Global plugin settings
-4. Site-level SEO context
+### What Google reads and the Google listing
 
-By default, autofill should only populate empty fields unless overwrite behavior is explicitly enabled.
+- **Schema is never an editor job.** AJR Core prints the structured data from the page type and the business details. The scan's only page-level schema finding is "Page type not set" (one click), and Claude never writes schema advice.
+- **Page types are set automatically when AJR Core is sure** (0.22: the booking page, a blog post, a title that is one of the services…). Each is logged in Changes as "Automatic" with Undo. "Page type not set" is an issue only when AJR Core is unsure; such pages are in the scan's "Review and apply all" list. A page with nothing pointing anywhere counts as "other". Any manual change or Undo makes the page manual, and auto-apply never touches it again. Settings → "Set obvious page types automatically" (on by default) turns it off. A type set outside the plugin clears "Page type not set" at once.
+- **The review's "What Google reads on this page" panel** shows:
+  - the page type, with AJR Core's suggestion;
+  - the link to the business;
+  - the structured data on the rendered page, in plain words;
+  - a link to the Rich Results Test.
+- **The SEO scan's "Google listing" group** lists the pushed `business_profile_check`. Differences pinned in the Business details row of AJR Core → Your essentials are "Kept on purpose" and not counted.
+- **Hand-over to AJR Core:** the plugin returns the stored check on `ajr_core_business_profile_check`, with the profile check's `suggestions` and `suggestions_unchecked`. AJR Core lists them; the scan shows one line, "N suggested edits for your Google listing".
 
-### Content Placement Suggestions
+### Page review
 
-The plugin can return conservative content insertion suggestions when a page appears to be missing an important concept, term, or supporting topic.
+**Generate** sends Claude the page's text, its real searches, its figures and the business facts from AJR Core. It also sends the images themselves, as image blocks, so the alt text describes the actual photo and names landmarks.
 
-These suggestions are intended to be:
+* Claude suggests a title, description, keyphrase and alt text, each with Accept, Edit or Skip.
+* A good alt is never replaced blind: an image whose alt is already good is only checked.
+* **Generate for selected** on the list shows a cost estimate first.
 
-* Limited
-* Practical
-* Page-specific
-* Reviewable by an admin or editor
+**Apply** writes through the SEO plugin in use (Yoast, Rank Math or The SEO Framework).
 
-The plugin should avoid repeating the same content suggestion endlessly for the same page issue.
+* Alt text goes to the Media Library **and** to where the page prints it: a Divi image, full-width image, blurb or slide module, a core image block, or a classic `<img>`.
+* Content writes are guarded:
+  * the content is backed up in the change log first;
+  * the edit must match exactly one place;
+  * it runs only for a user with `unfiltered_html`, with `wp_slash` and no kses;
+  * it is read back after saving, and rolled back if it does not match.
+* After Apply, the rendered page is checked. An alt that does not appear is marked **Not visible on the page**, with the reason.
 
-### SEO Plugin Integration
+**Undo** restores the content byte for byte. It never overwrites a field changed again since.
 
-AI SEO Assistant auto-detects the active SEO plugin. No manual configuration is required.
+Issues Claude cannot fix are shown as **N left · do in the editor**, with an **Applied** badge.
 
-Supported plugins:
+### In the post editor: "SEO to-do for this page"
 
-* The SEO Framework
-* Yoast SEO
-* Rank Math
+Agency users see one small box in the editor sidebar (block and classic editor):
 
-When a supported plugin is active, generated metadata is written directly to that plugin's meta fields. If no supported plugin is detected, a notice is shown in the admin and the audit, report, and indexing pages are hidden until a supported plugin is activated.
+* one line: the page's tier, the number of to-dos, when it was last scanned, and **Open full review →**;
+* the scan's findings for headings, links and content, each with the review's advice for it, plus any other editor advice from the latest review;
+* a **Done** tick on each. It marks the to-do done and queues the page for a rescan. A done finding shows "Done <date>" until the rescan, which either no longer finds it (it goes) or still does (it opens again).
 
-In the block editor, the active SEO plugin's snippet preview updates live after metadata is generated, without requiring a hard refresh.
+Nothing is generated or written from the editor, and the plugin does nothing when a post is saved. Titles, descriptions and alt text are written from the page review, with Apply and Undo. The page type is set in AJR Core's own box. Notes typed into the 4.x box's "Local SEO Focus" fields are no longer shown, but the review still reads them as context until someone clears them.
 
-### Markdown and LLMs.txt
+### Spend cap
 
-> **4.3.2: a site's own core plugin can take it too.** Besides AJR Core, any site core can take over Markdown for AI and redirects by answering two filters, `ai_seo_assistant_core_owns_markdown` and `ai_seo_assistant_core_owns_redirects`, from plugin-file load time. It must only answer true for Markdown while its copy is serving, and it must stand its copy down beside an AI SEO Assistant older than 4.3.2, so the two never both serve and never both go quiet. `ocb-core` 1.8.0 (Office Coffee Break) is the first. This plugin never steps back from redirects while it holds enabled rules of its own, because a site core does not copy them across the way AJR Core does.
-
-> **4.2.0: moved to AJR Core.** On a site running AJR Core 0.8.0 or later, AJR Core serves every endpoint below and its screen is **AJR Core → Markdown for AI**. This plugin stands its copy down, the same hand-over redirects made in 4.1.0. Both plugins read the same `wpmai_settings`, caches and filters, so nothing migrates, and either update order is safe: AJR Core stays quiet while this plugin is older than 4.2.0. On a site without AJR Core, this plugin keeps serving exactly as before. The code is removed in 5.0.
-
-The plugin can generate a machine-readable Markdown index and full-content export of the site for use with AI tools and LLM context.
-
-Generated endpoints:
-
-* `/llms.txt` — index of public post titles and URLs
-* `/llms-full.txt` — full post content export, paginated across multiple pages (`/llms-full-2.txt`, `/llms-full-3.txt`, etc.)
-
-Output is cached using WordPress transients. Cache is flushed automatically when posts are saved or the plugin settings change.
-
-### SEO Audit Tools
-
-The plugin includes admin audit tools for reviewing page-level SEO status, metadata, content coverage, and available Search Console signals.
-
-The audit logic is intended to support concept-aware matching, so related terms and multilingual equivalents can be treated as coverage where appropriate.
-
-### Indexing Tools
-
-The plugin includes indexing-related admin tools for reviewing and applying noindex recommendations.
-
-Indexing tools are handled separately from metadata and content recommendations.
-
-Potential noindex candidates may include:
-
-* Policy pages
-* Legal pages
-* Utility pages
-* Thank-you pages
-* Internal system pages
-* WooCommerce system pages, where applicable
-
-Indexing recommendations should always be reviewed before applying changes to a production site.
-
-### Redirects
-
-A **Redirects** admin page (under the AI SEO Assistant menu) lets you send old or broken URLs to a new destination so visitors and search engines get a real page instead of a 404.
-
-* Match is on the exact request path, with the trailing slash ignored and matching case-insensitive by default (filterable via `ai_seo_assistant_redirects_case_insensitive`).
-* Supported types: `301` permanent, `302` temporary, `307` temporary (method preserved), and `410` Gone (no destination).
-* Redirects are stored in a dedicated table and served from a compact, autoloaded lookup map, so a normal front-end request performs no extra database query and no write.
-* When Google Search Console is connected, the page surfaces cached GSC URLs that no longer resolve on the site as one-click redirect suggestions (some archive or term URLs can appear here even when valid, so review before creating a redirect).
+Claude calls are priced from their real token usage and counted against a cap per billing month: $10 by default, set in Settings. The month starts on the client's billing day, taken from the push or from Settings. Once the cap is reached, generating stops until the next billing month. Opus 5 is the default model: about 2–3¢ a page, about 6¢ with recommendations.
 
 ## Requirements
 
-* WordPress 6.0+
-* PHP 8.0+
-* Administrator access to WordPress
-* Claude API key (from the Claude Console) for AI-powered generation
-* Google Cloud OAuth credentials for Search Console integration
-* Verified Google Search Console property for the site
+* WordPress 6.5+, PHP 8.0+
+* AJR Core (active)
+* Yoast SEO, Rank Math or The SEO Framework for titles and descriptions
+* A Claude API key (Settings, or `AI_SEO_ASSISTANT_ANTHROPIC_API_KEY` in `wp-config.php`)
 
-## Installation
+Secrets saved on the settings screens (the Claude key and the report push key) are sealed with libsodium `secretbox`, using a key derived from the site's `AUTH_*` and `SECURE_AUTH_*` salts. The fields are write-only. A `wp-config.php` constant always wins over a saved value. Every write to a secret option is checked and sealed on every request, so options.php or another plugin cannot swap in a plain-text key. None of this protects against a hostile Administrator, who can install code or read `wp-config.php`.
 
-> **Recommended:** download the latest **`ai-seo-assistant.zip`** from the [Releases page](https://github.com/andrew-ajrwebdesign/ai-seo-assistant/releases). It is built automatically (on every push to `main` and on version tags), packaged with the correct `ai-seo-assistant/` folder name and the Composer autoloader bundled, and installs on any WordPress site with **no build step**. In WP admin: **Plugins → Add New → Upload Plugin**.
+## Install and release
 
-> Installing from a **source checkout** instead (a `git clone` or the code-page "Download ZIP") requires generating the autoloader first, because `vendor/` is not committed: run `composer install --no-dev` in the plugin folder before activating. For a target site, prefer the release zip above.
+* The release zip is built by CI (`.github/workflows/release.yml`). It has **no `vendor/` directory**: the plugin autoloads its own classes, and Composer is for development only.
+* Upload the zip under **Plugins → Add New → Upload Plugin**.
+* **Upgrading from 4.x keeps your redirects.** Enabled redirect rules are never deleted. The old table stays until **Settings** confirms that every enabled rule is in AJR Core's redirect map.
 
-### Option 1: Install from a Zip File
+## Development
 
-1. Download or create a zip of the plugin folder.
-2. In WordPress admin, go to **Plugins → Add New Plugin → Upload Plugin**.
-3. Upload the plugin zip file.
-4. Activate **AI SEO Assistant**.
+Tests: `vendor/bin/phpunit` and `node --test tests/js/*.test.mjs` (no dependencies). Both run in CI with phpcs.
 
-### Option 2: Install Manually
-
-Upload the plugin folder to:
-
-```text
-wp-content/plugins/ai-seo-assistant
-```
-
-Then activate the plugin from:
-
-```text
-WordPress Admin → Plugins
-```
-
-### Option 3: Install with Git
-
-From the WordPress plugins directory:
 
 ```bash
-cd wp-content/plugins
-git clone git@github.com:andrew-ajrwebdesign/ai-seo-assistant.git
-cd ai-seo-assistant
-composer install --no-dev
+composer install            # dev tools only (PHPUnit, WP_Mock, PHPCS)
+vendor/bin/phpunit          # unit tests (WP_Mock)
+vendor/bin/phpcs            # WordPress standards, on the files listed in phpcs.xml
 ```
 
-The `composer install` step is required — `vendor/` is not committed, and the plugin loads its classes through `vendor/autoload.php`. Then activate the plugin in WordPress admin. (If you would rather not run Composer, use the release zip from Option 1 instead.)
-
-## API Key Configuration
-
-For security, API keys should be stored in `wp-config.php`, not committed to Git and not hard-coded into plugin files.
-
-Add configuration constants above this line in `wp-config.php`:
-
-```php
-/* That's all, stop editing! Happy publishing. */
-```
-
-### Claude API Key
-
-Create a key in the Claude Console (console.anthropic.com → API keys). Give each client site its own key, ideally in its own workspace with a monthly spend limit, so one site's key can be revoked without affecting the others.
-
-```php
-define( 'AI_SEO_ASSISTANT_ANTHROPIC_API_KEY', 'sk-ant-...' );
-```
-
-Pasting the key on the settings screen also works; the `wp-config.php` constant takes priority when both exist. Use **Test Claude connection** on the settings screen to confirm it.
-
-Do not commit a real API key to this repository.
-
-### Keys saved on the settings screens are encrypted (4.4.0)
-
-Every secret the plugin stores in the database (the Claude key, the Google client ID and secret, the Search Console tokens, the report push key) is sealed with libsodium `secretbox` before it is written, with a key derived from the site's `AUTH_*` and `SECURE_AUTH_*` salts in `wp-config.php` (`Core\Secret_Store`). A database backup on its own cannot open them. The fields are write-only: a saved secret shows as "Saved · ends …XXXX" (the Google client ID, which is not secret and always ends `.apps.googleusercontent.com`, shows its start instead) with Replace and Clear, and is never sent back to the browser.
-
-* **Upgrading from 4.3.x:** the first admin page load by an Administrator after the update seals any plain-text secret in place, overwriting the plain text in the same row (recorded at level 4.4.0 in `ai_seo_assistant_settings_version`). If the server cannot encrypt (no libsodium), the attempt is recorded, agency users are told, and it is retried once a day rather than on every admin page.
-* **Plain text found later** (an update run from cron or WP-CLI, a restored backup) is sealed the first time it is read in wp-admin, cron or WP-CLI (never on a visitor's page view), and agency users are told once.
-* **Who may change a key:** every write to a secret option, from any screen (WordPress's generic `options.php` form included), plugin, cron job or REST call, is refused unless it comes from a user with the agency tools capability, from WP-CLI, or from the plugin's own code; an allowed plain-text write is sealed on the way in (`Core\Secret_Guard`).
-* **Rotating the salts** makes saved secrets unreadable: the plugin treats them as missing and tells agency users which one to re-enter.
-* **Salts not in `wp-config.php`** (missing, the sample phrase, or one value shared by two salt constants, which `wp_salt()` treats as unset): WordPress then keeps them in the database, so the secrets are only obfuscated; agency users see a warning.
-* The rules are shared with AJR Core's copy of the scheme through `tests/fixtures/secret-store-cases.json`, kept byte-identical in both repos.
-* A `wp-config.php` constant still wins over a saved value. **Disconnect** in Search Console, and deleting the plugin, revoke the Google grant at Google before deleting the tokens.
-
-### Model
-
-The settings screen offers Claude Opus 5 (default, best quality), Claude Sonnet 5 and Claude Haiku 4.5 (faster and cheaper). Metadata runs at low effort and recommendations at medium; the `ai_seo_assistant_claude_effort` filter overrides either.
-
-On Opus 5 the plugin opts into Anthropic's server-side refusal fallback: a request the model declines is re-run on Anthropic's recommended fallback model instead of failing, and the generation log records the model that actually answered.
-
-### Upgrading from 3.x (OpenAI)
-
-4.0.0 removed the OpenAI integration. On the first admin page load after the update (once per site, recorded in the `ai_seo_assistant_settings_version` option), the plugin deletes the old `ai_seo_assistant_api_key` option (an OpenAI secret nothing reads any more) and resets a stored OpenAI model name to the Claude default. Until a Claude key is added, metadata generation falls back to placeholders; nothing errors. Remove any `AI_SEO_ASSISTANT_OPENAI_API_KEY` line from `wp-config.php`.
-
-## Google Search Console OAuth Setup
-
-To connect Google Search Console, create a Google OAuth client in Google Cloud Console.
-
-### Required Google Cloud Steps
-
-1. Go to **Google Cloud Console**.
-2. Create or select a project.
-3. Enable the **Google Search Console API**.
-4. Configure the OAuth consent screen.
-5. Create an OAuth client ID.
-6. Set the application type to **Web application**.
-7. Add the required authorized redirect URI for the WordPress site.
-
-The redirect URI will typically look like:
+CI runs both on every pull request.
 
 ```text
-https://your-site.com/wp-admin/admin-post.php?action=ai_seo_assistant_gsc_callback
+src/
+├── Core/       Plugin (wiring), Schema (custom tables), Upgrade, Secret_Store, Secret_Guard
+├── Adapters/   Yoast, Rank Math, The SEO Framework
+├── AI/         Claude_Client, Prompt_Builder (the review's prompt), Spend
+├── Content/    Business (AJR Core facts), Content_Extractor
+├── Report/     Snapshot (v1), Snapshot_V2, Snapshot_Store, Push_Endpoint, Report_Page, views, Access
+├── Search/     Page_Data (per-page search data)
+├── Scan/       Page_Fetcher, Html_Parser, Rules, Scanner, Scheduler, Opportunity, Page_Role, Ranking
+├── Review/     Page_Review, Alt_Writer
+├── Changes/    Change_Log
+└── Admin/      Menu, Ui, Scan_Page, Search_Console_Page, Changes_Page, Settings_Page, Tools_Actions, Editor_Box
 ```
 
-Replace `your-site.com` with the domain where the plugin is installed.
-
-If using the same Google OAuth app across multiple sites, each site must be added as an authorized redirect URI.
-
-### Optional Google Credential Constants
-
-Depending on plugin configuration, Google OAuth credentials may be stored in `wp-config.php` using constants such as:
-
-```php
-define( 'AI_SEO_ASSISTANT_GOOGLE_CLIENT_ID', 'your-google-client-id-here' );
-define( 'AI_SEO_ASSISTANT_GOOGLE_CLIENT_SECRET', 'your-google-client-secret-here' );
-```
-
-Do not commit a real Google client secret to this repository.
-
-## OAuth Troubleshooting
-
-### Error: redirect_uri_mismatch
-
-This means the redirect URI sent by WordPress does not exactly match one of the authorized redirect URIs in Google Cloud Console.
-
-Check for differences in:
-
-* `http` vs `https`
-* `www` vs non-`www`
-* trailing slashes
-* query strings
-* staging vs production domains
-* incorrect callback action names
-
-The authorized redirect URI should match the value sent in the OAuth request exactly.
-
-### Error: access_denied
-
-This may happen if the Google OAuth app is still in Testing mode and the Google account trying to connect has not been added as a test user.
-
-In Google Cloud Console, go to the OAuth consent screen settings and add the connecting Google account as an approved test user.
-
-### OAuth App Testing Mode
-
-If the OAuth app is in Testing mode, only approved test users can connect.
-
-For private or internal use, adding approved test users is usually enough.
-
-For wider public use, the OAuth app may need to be published and may require Google verification depending on the scopes requested.
-
-## Initial Plugin Setup
-
-After activation, follow this setup order:
-
-1. Add the Claude API key and click **Test Claude connection**.
-2. Configure Google OAuth credentials, if Search Console integration is needed.
-3. Connect Google Search Console.
-4. Select the correct Search Console property.
-5. Configure site-level SEO context.
-6. Configure priority services, locations, tone, and avoided phrases where applicable.
-7. Test metadata generation on a draft or low-risk page.
-8. Run SEO recommendations on one real page.
-9. Review audit and indexing tools before applying broad changes.
-
-## Recommended Production Testing
-
-Before using the plugin broadly on a live site:
-
-1. Activate the plugin.
-2. Confirm no fatal errors appear.
-3. Confirm **Test Claude connection** succeeds.
-4. Generate metadata for one test page.
-5. Connect Google Search Console.
-6. Sync Search Console data.
-7. Generate SEO recommendations for one page.
-8. Review the quality of recommendations.
-9. Confirm content insertion suggestions are relevant and not repetitive.
-10. Confirm audit and indexing tools behave as expected.
-
-## Development Workflow
-
-### Local Development
-
-Clone or place the plugin inside a local WordPress install:
-
-```bash
-cd wp-content/plugins/ai-seo-assistant
-```
-
-Check repository status:
-
-```bash
-git status
-```
-
-### Normal Git Workflow
-
-```bash
-git status
-git add .
-git commit -m "Describe the change"
-git push
-```
-
-### Feature Branch Workflow
-
-For larger changes:
-
-```bash
-git checkout -b feature/prompt-builder-upgrade
-```
-
-Commit and push:
-
-```bash
-git add .
-git commit -m "Improve prompt builder framework"
-git push -u origin feature/prompt-builder-upgrade
-```
-
-## Creating a Clean Plugin Zip
-
-> Most of the time you do not need to build a zip by hand — the [Releases page](https://github.com/andrew-ajrwebdesign/ai-seo-assistant/releases) has a ready-to-install `ai-seo-assistant.zip` (built by CI on every push). Build one manually only if you need a local package.
-
-> **The `vendor/` directory must be included.** The plugin loads all of its classes through `vendor/autoload.php`, so a zip without it fails to activate with a fatal error. `vendor/` is not committed, so run `composer install --no-dev -o` first to generate it, then build the zip.
-
-From the parent `plugins` directory (after `composer install --no-dev -o`):
-
-```bash
-zip -r ai-seo-assistant.zip ai-seo-assistant \
-  -x "ai-seo-assistant/.git/*" \
-  -x "ai-seo-assistant/.claude/*" \
-  -x "ai-seo-assistant/.env" \
-  -x "ai-seo-assistant/.env.*" \
-  -x "*/.DS_Store"
-```
-
-If you are building from a fresh checkout, regenerate the autoloader first so `vendor/` matches `composer.json`:
-
-```bash
-composer install --no-dev -o
-```
-
-Upload the generated zip through **Plugins → Add New → Upload Plugin**.
-
-## Security Notes
-
-This repository is public.
-
-Do not commit:
-
-* Claude (Anthropic) API keys
-* Google client secrets
-* OAuth refresh tokens
-* Site-specific private data
-* Client credentials
-* Server credentials
-* Debug logs containing sensitive data
-* Exported settings containing secrets
-
-Before committing, check for obvious secret patterns:
-
-```bash
-grep -R "sk-ant-" .
-grep -R "GOOGLE_CLIENT_SECRET" .
-grep -R "ANTHROPIC_API_KEY" .
-```
-
-It is normal for the plugin to contain constant names and placeholders such as:
-
-```text
-AI_SEO_ASSISTANT_ANTHROPIC_API_KEY
-sk-ant-...
-```
-
-It is not okay for real key values to be committed.
-
-To check Git history before making a public release:
-
-```bash
-git log --all -p | grep "sk-ant-api"
-```
-
-If a real key was ever committed, remove it from Git history and rotate the key immediately.
-
-## Repository Structure
-
-The plugin follows a PSR-4 layout. Every class lives under the single root
-namespace `AJR\SEOAssistant\` (mapped to `src/`) and is autoloaded by Composer.
-
-```text
-ai-seo-assistant/
-├── ai-seo-assistant.php        # Thin bootstrap: headers, constants, autoload, kickoff
-├── composer.json               # PSR-4: AJR\SEOAssistant\ => src/
-├── composer.lock
-├── README.md
-├── LICENSE
-├── .gitignore
-├── assets/
-│   ├── css/
-│   └── js/
-│       ├── admin.js
-│       └── wpmai-admin.js
-├── languages/                  # Translation files for the ai-seo-assistant text domain
-├── src/
-│   ├── Core/                   # Plugin (wiring), Utils, Logger
-│   ├── Adapters/               # SEO plugin adapters (TSF, Yoast, Rank Math) + resolver
-│   ├── AI/                     # Claude_Client, Prompt_Builder, Metadata_Generator
-│   ├── Content/                # Content_Extractor, Local_SEO_Context
-│   ├── Admin/                  # Admin, Ajax, Audit/Report/Indexing/Markdown/Redirects pages
-│   ├── GSC/                    # Google Search Console client + page
-│   ├── Redirects/              # Redirect manager (Redirect_Store + Redirect_Handler)
-│   └── Markdown/               # Markdown-for-AI module (Module, endpoints, settings, cache)
-└── vendor/                     # Composer dependencies (league/html-to-markdown)
-```
-
-## Architecture Notes
-
-### Main Plugin Bootstrap
-
-```text
-ai-seo-assistant.php
-```
-
-A thin entry point: defines constants, requires the Composer autoloader, then
-boots `Core\Plugin` and the `Markdown\Module` on `plugins_loaded`.
-
-### Admin UI
-
-```text
-src/Admin/Admin.php
-```
-
-Handles admin screens, settings, editor metaboxes, and admin-facing actions.
-
-### Claude Client
-
-```text
-src/AI/Claude_Client.php
-```
-
-Sends prompts to the Anthropic Messages API through the WordPress HTTP API (no bundled SDK, so no dependency clashes with other plugins). Each request carries a JSON schema from `Prompt_Builder`, so replies are structured output rather than parsed free text. Handles the key (wp-config constant first), the model allow-list, per-task effort, the Opus 5 refusal fallback, and turns every API failure into a masked, plain-English `WP_Error`.
-
-### Metadata Generator
-
-```text
-src/AI/Metadata_Generator.php
-```
-
-Handles metadata generation, SEO recommendations, content placement suggestions, and AI response processing.
-
-### Prompt Builder
-
-```text
-src/AI/Prompt_Builder.php
-```
-
-Builds structured prompts using site context, page content, SEO focus fields, Search Console data, and recommendation guidance.
-
-### Audit Page
-
-```text
-src/Admin/Audit_Page.php
-```
-
-Displays audit rows and page-level SEO visibility information.
-
-### Indexing Tools
-
-```text
-src/Admin/Indexing_Tools_Page.php
-```
-
-Handles noindex recommendations and indexing-related admin tools.
-
-### Markdown-for-AI Module
-
-```text
-src/Markdown/Module.php
-```
-
-Boots the AI-discovery endpoints (`/llms.txt`, `?format=markdown`, REST API, sitemap), the settings screen, and cache invalidation. Kept as a self-contained module under `AJR\SEOAssistant\Markdown\`.
-
-### Redirects
-
-```text
-src/Redirects/Redirect_Store.php
-src/Redirects/Redirect_Handler.php
-src/Admin/Redirects_Page.php
-```
-
-`Redirect_Store` owns the custom redirects table, path normalization, and a compact autoloaded lookup map. `Redirect_Handler` runs early on `template_redirect` and serves the redirect from that map, so a normal front-end request performs no extra database query and no write. `Redirects_Page` provides the admin UI and, when Search Console is connected, the 404 suggestions.
-
-### Utilities
-
-```text
-src/Core/Utils.php
-```
-
-Contains shared helper methods, including methods for masking sensitive data before logging or displaying errors.
-
-## Prompt Strategy
-
-The plugin is moving toward a structured default prompt framework that can work across different client sites.
-
-The intended prompt context includes:
-
-* Business Profile
-* Ideal Customer / Audience
-* Voice DNA
-* Page Goal / Content Intent
-* SEO Focus / Strategic Directives
-* Real-World Signals / Search Console
-* Page Content
-
-The goal is to produce recommendations that are practical, site-specific, and based on real page context instead of generic SEO advice.
-
-## Recommendation Principles
-
-Recommendations should be:
-
-* Specific
-* Actionable
-* Page-aware
-* Search-intent-aware
-* Conservative with content insertion
-* Clear about what should change and why
-
-Recommendations should avoid:
-
-* Generic SEO filler
-* Invented search demand
-* Over-optimization
-* Repeating the same suggestion endlessly
-* Suggesting metadata changes when existing metadata is already clear and relevant
-* Treating lack of Search Console data as proof that a page is perfect
-
-## Content Placement Principles
-
-Content placement suggestions should:
-
-* Recommend no more than one primary insertion at a time
-* Focus on the most important missing topic or concept
-* Include a clear recommended location
-* Explain the reason in admin-friendly language
-* Avoid repeating the same suggestion if it has already been shown
-* Respect the language of the page for suggested page copy
-
-Admin-facing explanation fields should remain in English for consistency.
-
-## Language Handling
-
-Admin-facing explanations should be in English.
-
-If the page content is in another language, suggested inserted copy may match the page language, but admin fields such as `reason`, `recommended_location`, and implementation notes should remain in English.
-
-## Status
-
-This plugin is in active development.
-
-It should be tested on staging or on a low-risk page before using it broadly on a production site.
+This repository is public: never commit a key. A real key that was ever committed must be rotated.
 
 ## License
 

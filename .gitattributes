@@ -1,0 +1,12 @@
+# Development files stay out of `git archive` (deploy-export.cmd ships the archive verbatim), the same
+# set .github/workflows/release.yml leaves out of the release zip.
+/.github export-ignore
+/.gitignore export-ignore
+/.gitattributes export-ignore
+/tests export-ignore
+/phpunit.xml export-ignore
+/phpcs.xml export-ignore
+/composer.json export-ignore
+/composer.lock export-ignore
+/CHANGELOG.md export-ignore
+/PRODUCT.md export-ignore

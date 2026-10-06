@@ -40,6 +40,9 @@ class Snapshot {
 	/** Largest accepted JSON body, in bytes. A real week is a few KB. */
 	public const MAX_BYTES = 131072;
 
+	/** Largest v2 body, 2 MiB: per-page search data for up to 500 pages (schema doc, Snapshot_V2). */
+	public const MAX_BYTES_V2 = 2097152;
+
 	/** Points in a trend line (12 weeks). */
 	public const MAX_SERIES = 12;
 
@@ -65,13 +68,21 @@ class Snapshot {
 	 */
 	public static function from_json( string $json, array &$errors, ?int $now = null ): ?array {
 		$errors = [];
-		if ( strlen( $json ) > self::MAX_BYTES ) {
-			$errors[] = 'body is larger than ' . self::MAX_BYTES . ' bytes';
+		if ( strlen( $json ) > self::MAX_BYTES_V2 ) {
+			$errors[] = 'body is larger than ' . self::MAX_BYTES_V2 . ' bytes';
 			return null;
 		}
 		$data = json_decode( $json, true );
 		if ( ! is_array( $data ) ) {
 			$errors[] = 'body is not a JSON object';
+			return null;
+		}
+		// 5.0: schema 2 (per-page data, months, enquiry kinds) is read by its own class; v1 stays as it was.
+		if ( Snapshot_V2::SCHEMA_V2 === ( $data['schema'] ?? null ) ) {
+			return Snapshot_V2::clean_v2( $data, $errors, $now );
+		}
+		if ( strlen( $json ) > self::MAX_BYTES ) {
+			$errors[] = 'body is larger than ' . self::MAX_BYTES . ' bytes';
 			return null;
 		}
 
@@ -95,7 +106,7 @@ class Snapshot {
 		$now    = $now ?? time();
 
 		if ( self::SCHEMA !== ( $raw['schema'] ?? null ) ) {
-			$errors[] = 'schema must be ' . self::SCHEMA;
+			$errors[] = 'schema must be ' . self::SCHEMA . ' or ' . Snapshot_V2::SCHEMA_V2;
 		}
 
 		$site = self::text( $raw['site'] ?? null, 253 );

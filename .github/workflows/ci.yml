@@ -3,8 +3,8 @@ name: CI
 on:
   push:
     branches: [main]
+  # Every PR, stacked ones too (Andrew, 2026-10-06): a PR into a feature branch is checked as well.
   pull_request:
-    branches: [main]
 
 jobs:
   phpcs:
@@ -27,6 +27,17 @@ jobs:
       # modules join as they are cleaned.
       - name: Run PHPCS
         run: ./vendor/bin/phpcs
+
+      # strip_shortcodes() deletes a builder module's whole text (Divi pages read as empty): only with
+      # "// builder-safe: <reason>" on its line.
+      - name: Builder-safe text check
+        run: php bin/check-builder-safe.php
+
+      # A write to the plugin's tables must follow Schema::ensure() in its function (an update that skipped
+      # install() would write a column that is not there yet), unless the line says
+      # "// schema-guard: <reason>".
+      - name: Schema-guard check
+        run: php bin/check-schema-guard.php
 
   phpunit:
     name: Unit Tests
@@ -51,3 +62,6 @@ jobs:
 
       - name: Run PHPUnit
         run: ./vendor/bin/phpunit
+
+      - name: Run the script tests (node's built-in runner, no dependencies)
+        run: node --test tests/js/*.test.mjs

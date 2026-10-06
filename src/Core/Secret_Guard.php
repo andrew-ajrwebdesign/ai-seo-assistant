@@ -12,6 +12,11 @@
  * request (cron and REST write too, not only wp-admin). The callbacks live in Secret_Store; this class only
  * registers them, so a visitor's page view loads this file and not the cipher code.
  *
+ * WHAT IT IS NOT. It keeps secrets sealed and stops the ordinary routes (options.php, another plugin's
+ * update_option()) from swapping them. It is not a boundary against a hostile Administrator: anyone who can
+ * install a plugin, edit wp-config.php or run code can remove these filters or read the salts. The tools
+ * menu is the same: who sees it is tidiness for the client, not security.
+ *
  * @package AJR\SEOAssistant
  */
 

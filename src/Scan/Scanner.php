@@ -1,0 +1,866 @@
+<?php
+/**
+ * Scanner — runs the SEO scan: per-page facts, then the site-wide pass that turns facts into issues.
+ *
+ * TWO PHASES, so a 500-page site never has to finish in one request:
+ *
+ * 1. scan_page( $id ): fetch the page as served (Page_Fetcher), read its facts (Html_Parser), store them.
+ *    When the fetch fails it reads the post content and the SEO plugin's fields instead and records why,
+ *    so the screen can say "checked from the post content" for that page. Scheduler calls this in batches.
+ * 2. finalize(): with every page's facts in hand, work out what needs the whole site (duplicate titles and
+ *    descriptions, links into each page, broken links and links through AJR Core's redirects, the sitemap,
+ *    each page's main search from the pushed data, whether it is a service page) and store each page's
+ *    issues (Rules). No page is fetched here except at most MAX_LINK_CHECKS unknown link targets (HEAD).
+ *
+ * Runs in cron or on the agency's "Rescan now" requests only; nothing here runs for a visitor.
+ *
+ * @package AJR\SEOAssistant
+ */
+
+declare( strict_types=1 );
+
+namespace AJR\SEOAssistant\Scan;
+
+use AJR\SEOAssistant\Adapters\RankMath_Adapter;
+use AJR\SEOAssistant\Adapters\SEO_Adapter_Resolver;
+use AJR\SEOAssistant\Adapters\TSF_Adapter;
+use AJR\SEOAssistant\Adapters\Yoast_Adapter;
+use AJR\SEOAssistant\Search\Page_Data;
+
+defined( 'ABSPATH' ) || exit;
+
+/**
+ * The SEO scan.
+ */
+class Scanner {
+
+	/** Most unknown internal link targets checked (HEAD) in one site-wide pass. */
+	public const MAX_LINK_CHECKS = 40;
+
+	/** Transient: link target path => HTTP status, kept a day. */
+	public const LINK_CACHE = 'aisa_scan_link_status';
+
+	/** Transient: the sitemap's URLs (bare), kept an hour. */
+	public const SITEMAP_CACHE = 'aisa_scan_sitemap';
+
+	/** Most pages scanned (the queries elsewhere cap lists at 500; the scan allows a little more). */
+	public const MAX_PAGES = 1000;
+
+	/** Most links to one page kept (scan.inbound, read by the editor's link to-dos). */
+	public const MAX_INBOUND = 200;
+
+	/**
+	 * Storage.
+	 *
+	 * @var Scan_Store
+	 */
+	protected Scan_Store $store;
+
+	/**
+	 * Attachment IDs found for image URLs in this scan.
+	 *
+	 * @var array<string,int>
+	 */
+	protected array $attachment_ids = [];
+
+	/**
+	 * Constructor.
+	 *
+	 * @param Scan_Store|null $store Storage.
+	 */
+	public function __construct( ?Scan_Store $store = null ) {
+		$this->store = $store ?? new Scan_Store();
+	}
+
+	/**
+	 * Post types the scan covers: the 4.x setting (default post + page), filterable.
+	 *
+	 * @return array<int,string>
+	 */
+	public static function post_types(): array {
+		$types = get_option( 'ai_seo_assistant_post_types', [ 'post', 'page' ] );
+		$types = is_array( $types ) && [] !== $types ? array_values( array_filter( array_map( 'sanitize_key', $types ) ) ) : [ 'post', 'page' ];
+
+		/**
+		 * Filters the post types the SEO scan covers.
+		 *
+		 * @param array<int,string> $types Post types.
+		 */
+		return (array) apply_filters( 'ai_seo_assistant_scan_post_types', $types );
+	}
+
+	/**
+	 * Every published page the scan covers, newest change first.
+	 *
+	 * @return array<int,int>
+	 */
+	public static function published_ids(): array {
+		$query = new \WP_Query(
+			[
+				'post_type'              => self::post_types(),
+				'post_status'            => 'publish',
+				'has_password'           => false,
+				'posts_per_page'         => self::MAX_PAGES,
+				'orderby'                => 'modified',
+				'order'                  => 'DESC',
+				'fields'                 => 'ids',
+				'no_found_rows'          => true,
+				'update_post_meta_cache' => false,
+				'update_post_term_cache' => false,
+			]
+		);
+
+		return array_map( 'intval', $query->posts );
+	}
+
+	/**
+	 * The active SEO plugin's adapter (The SEO Framework when none is detected).
+	 *
+	 * @return object
+	 */
+	public static function adapter() {
+		$tsf = new TSF_Adapter();
+
+		return ( new SEO_Adapter_Resolver( $tsf, new Yoast_Adapter(), new RankMath_Adapter() ) )->get_adapter() ?? $tsf;
+	}
+
+	/**
+	 * Phase 1: read and store one page's facts.
+	 *
+	 * @param int                  $post_id Post ID.
+	 * @param array<string,string> $known   Title / description known to be stored now, which replace the
+	 *                                      fetched ones (Page_Review: Yoast prints a changed title only from
+	 *                                      the next request on).
+	 * @return string 'rendered' | 'content' | 'skipped'
+	 */
+	public function scan_page( int $post_id, array $known = [] ): string {
+		$post = get_post( $post_id );
+		if ( ! $post instanceof \WP_Post || 'publish' !== $post->post_status || '' !== (string) $post->post_password || ! in_array( $post->post_type, self::post_types(), true ) ) {
+			$this->store->delete( $post_id ); // Password-protected pages are never scanned (their words are private).
+			return 'skipped';
+		}
+		$url     = (string) get_permalink( $post );
+		$fetched = Page_Fetcher::fetch( $url );
+		if ( $fetched['ok'] ) {
+			$facts  = Html_Parser::parse( $fetched['html'], home_url( '/' ) );
+			$source = 'rendered';
+		} else {
+			$facts                = $this->from_content( $post );
+			$facts['fetch_error'] = $fetched['error'];
+			$source               = 'content';
+		}
+		foreach ( [ 'title', 'description' ] as $field ) {
+			if ( isset( $known[ $field ] ) && '' !== $known[ $field ] ) {
+				$facts[ $field ] = Html_Parser::clean( $known[ $field ] );
+			}
+		}
+		$facts['url']      = $url;
+		$facts['images']   = $this->resolve_images( (array) $facts['images'] );
+		$facts['modified'] = (string) $post->post_modified_gmt;
+
+		// What the page role needs from the content (a list of posts, a form), worked out once here rather
+		// than on every load of the list.
+		$this->store->save_facts( $post_id, Page_Data::path_of( $url ), $post->post_type, $source, $facts, Page_Role::flags( (string) $post->post_content ) );
+
+		return $source;
+	}
+
+	/**
+	 * Facts from the post content and the SEO plugin's fields, when the rendered page cannot be fetched.
+	 *
+	 * @param \WP_Post $post Post.
+	 * @return array<string,mixed>
+	 */
+	protected function from_content( \WP_Post $post ): array {
+		$adapter = self::adapter();
+		$html    = (string) apply_filters( 'the_content', $post->post_content ); // phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core's hook, rendering the content as the theme would.
+		$facts   = Html_Parser::parse( '<html><head></head><body><main><h1>' . esc_html( get_the_title( $post ) ) . '</h1>' . $html . '</main></body></html>', home_url( '/' ) );
+
+		$title = (string) $adapter->get_title( $post->ID );
+		$desc  = (string) $adapter->get_description( $post->ID );
+		// SEO plugins store templates such as "%%title%% %%sep%% %%sitename%%"; the scan cannot expand them
+		// without rendering, so it uses what WordPress would print by default instead.
+		if ( '' === $title || false !== strpos( $title, '%%' ) ) {
+			$title = wp_strip_all_tags( get_the_title( $post ) ) . ' - ' . wp_specialchars_decode( (string) get_bloginfo( 'name' ), ENT_QUOTES );
+		}
+		$facts['title']       = Html_Parser::clean( $title );
+		$facts['description'] = false !== strpos( $desc, '%%' ) ? '' : Html_Parser::clean( $desc );
+		$facts['noindex']     = method_exists( $adapter, 'is_noindex' ) && (bool) $adapter->is_noindex( $post->ID );
+		$facts['og_image']    = has_post_thumbnail( $post ) ? (string) get_the_post_thumbnail_url( $post, 'full' ) : '';
+		$facts['schema']      = [ 'unknown' ]; // Schema is printed by plugins on the rendered page only: not judged from content.
+
+		return $facts;
+	}
+
+	/**
+	 * The attachment ID for an image URL (attachment_url_to_postid()), remembered for this scan (a header logo or a shared photo is on every
+	 * page: one query each, not one per page).
+	 *
+	 * @param string $url Image URL.
+	 */
+	protected function attachment_id( string $url ): int {
+		if ( ! array_key_exists( $url, $this->attachment_ids ) ) {
+			$this->attachment_ids[ $url ] = (int) attachment_url_to_postid( $url );
+		}
+
+		return $this->attachment_ids[ $url ];
+	}
+
+	/**
+	 * Attachment IDs and file weight for each content image.
+	 *
+	 * @param array<int,array<string,mixed>> $images Images from the parser.
+	 * @return array<int,array<string,mixed>>
+	 */
+	protected function resolve_images( array $images ): array {
+		$uploads = wp_get_upload_dir();
+		$base    = (string) $uploads['baseurl'];
+		foreach ( $images as $i => $img ) {
+			$src = (string) $img['src'];
+			if ( 0 === strpos( $src, '//' ) ) {
+				$src = ( is_ssl() ? 'https:' : 'http:' ) . $src;
+			}
+			if ( empty( $img['id'] ) && false !== strpos( $src, '/uploads/' ) ) {
+				$full               = (string) preg_replace( '/-\d+x\d+(?=\.[a-z0-9]+$)/i', '', strtok( $src, '?' ) );
+				$id                 = $this->attachment_id( $full );
+				$images[ $i ]['id'] = $id ? $id : $this->attachment_id( (string) strtok( $src, '?' ) );
+			}
+			// The served file's weight: the uploads URL maps onto the uploads folder.
+			$kb  = 0;
+			$rel = '' !== $base && 0 === strpos( preg_replace( '#^https?:#', '', $src ), preg_replace( '#^https?:#', '', $base ) ) ? substr( preg_replace( '#^https?:#', '', strtok( $src, '?' ) ), strlen( preg_replace( '#^https?:#', '', $base ) ) ) : '';
+			if ( '' !== $rel && false === strpos( $rel, '..' ) ) {
+				$file = $uploads['basedir'] . $rel;
+				$kb   = is_readable( $file ) ? (int) round( filesize( $file ) / 1024 ) : 0;
+			}
+			$images[ $i ]['kb'] = $kb;
+			// The Media Library's own alt, so a good one is never replaced and a builder that does not print it is flagged.
+			$images[ $i ]['stored_alt'] = ! empty( $images[ $i ]['id'] ) ? mb_substr( trim( (string) get_post_meta( (int) $images[ $i ]['id'], '_wp_attachment_image_alt', true ) ), 0, 200 ) : '';
+		}
+
+		return $images;
+	}
+
+	/**
+	 * Phase 2: every page's issues, from every page's facts.
+	 *
+	 * @param bool $network False for an inline rescan: cached link checks and sitemap only.
+	 * @return array{pages:int,issues:int,rendered:int,fallback:int}
+	 */
+	public function finalize( bool $network = true ): array {
+		$rows = $this->store->all_facts( true );
+		if ( function_exists( 'update_meta_cache' ) ) {
+			update_meta_cache( 'post', array_keys( $rows ) ); // Page types and SEO meta, one query for all pages.
+		}
+		$data   = ( new Page_Data() )->all();
+		$titles = [];
+		$descs  = [];
+		$in     = [];
+		$links  = [];
+		$menu   = [];
+		foreach ( $rows as $id => $row ) {
+			$f = $row['facts'];
+			foreach ( (array) ( $f['nav_links'] ?? [] ) as $nav ) {
+				$menu[ self::norm_path( (string) $nav ) ] = true; // The menu or footer of any page: on every page.
+			}
+			$t = mb_strtolower( (string) ( $f['title'] ?? '' ) );
+			$d = mb_strtolower( (string) ( $f['description'] ?? '' ) );
+			if ( '' !== $t ) {
+				$titles[ $t ][] = $id;
+			}
+			if ( '' !== $d ) {
+				$descs[ $d ][] = $id;
+			}
+			foreach ( array_unique( array_column( (array) ( $f['links'] ?? [] ), 'p' ) ) as $path ) {
+				$path = self::norm_path( (string) $path );
+				if ( self::norm_path( $row['path'] ) !== $path ) {
+					$in[ $path ][]  = $row['path'];
+					$links[ $path ] = true;
+				}
+			}
+		}
+
+		$known   = [];
+		$by_path = [];
+		foreach ( $rows as $id => $row ) {
+			$known[ self::norm_path( $row['path'] ) ]   = true;
+			$by_path[ self::norm_path( $row['path'] ) ] = $id;
+		}
+		$redirects = self::redirect_map();
+		// An inline rescan (Apply, Undo, a page type) reads only what is cached: no link checks, no sitemap
+		// fetch in the agency's request. The next queued run does the network part.
+		$link_state = $network ? $this->check_unknown_links( array_keys( $links ), $known, $redirects ) : self::cached_links();
+		$sitemap    = $network ? $this->sitemap() : self::cached_sitemap();
+		$services   = self::service_names();
+		$schema_on  = self::custom_schema_on();
+		$front      = (int) get_option( 'page_on_front' );
+		$discourage = '0' === (string) get_option( 'blog_public', '1' );
+		$popular    = self::popular_paths( $data );
+		$topics     = self::topics( $rows );
+		$template   = Rules::template_images( $rows );
+		$common     = self::common_words( $rows );
+		$has_types  = Page_Role::core();
+		$type_names = $has_types ? array_map( static fn( $t ) => $t['label'], Page_Role::types() ) : [];
+
+		$all      = [];
+		$auto     = [];
+		$review   = [];
+		$rendered = 0;
+		foreach ( $rows as $id => $row ) {
+			$now     = $has_types ? Page_Role::type_of( (int) $id ) : '';
+			$verdict = $has_types && '' === $now ? Page_Role::verdict( (int) $id ) : [
+				'type'       => '',
+				'confidence' => 'none',
+				'reason'     => '',
+			];
+			if ( 'high' === $verdict['confidence'] && Auto_Types::enabled() && 'manual' !== Page_Role::source( (int) $id ) ) {
+				$auto[ $id ] = $verdict['type'];
+			} elseif ( 'high' === $verdict['confidence'] || 'medium' === $verdict['confidence'] ) {
+				$review[ $id ]         = [ $verdict['type'], $verdict['reason'] ];
+				$verdict['confidence'] = 'medium'; // Auto-apply off or refused: the agency decides, so it is an issue.
+			}
+			$f    = $row['facts'];
+			$path = self::norm_path( $row['path'] );
+			$key  = strtolower( (string) $row['path'] ); // Pushed data is keyed lower-case (Page_Data::keyed()).
+			$page = $data[ $key ] ?? $data[ trailingslashit( $key ) ] ?? $data[ untrailingslashit( $key ) ] ?? null;
+			$ctx  = [
+				'post_type'        => $row['post_type'],
+				'title_dupes'      => count( $titles[ mb_strtolower( (string) ( $f['title'] ?? '' ) ) ] ?? [] ) - 1,
+				'desc_dupes'       => '' === (string) ( $f['description'] ?? '' ) ? 0 : count( $descs[ mb_strtolower( (string) $f['description'] ) ] ?? [] ) - 1,
+				'inbound'          => count( array_unique( $in[ $path ] ?? [] ) ),
+				'in_menu'          => isset( $menu[ $path ] ),
+				'suggest_from'     => self::related_from( $path, $topics, $popular, $in[ $path ] ?? [] ),
+				'broken'           => [],
+				'redirected'       => [],
+				'in_sitemap'       => null === $sitemap ? null : isset( $sitemap[ Rules::bare_url( (string) ( $f['url'] ?? '' ) ) ] ),
+				'self_url'         => (string) ( $f['url'] ?? '' ),
+				'impressions'      => (int) ( $page['gsc']['impressions'] ?? 0 ),
+				'top_query'        => self::main_query( $page, (string) ( $f['title'] ?? '' ) . ' ' . str_replace( [ '/', '-' ], ' ', $path ), $common ),
+				'is_front'         => $id === $front || '/' === $path,
+				'is_utility'       => (bool) preg_match( '#/(contact|privacy|terms|cookie|thank|accessibility|sitemap|login|account|cart|checkout)#i', $path ),
+				'is_tool'          => false !== strpos( (string) ( $row['flags'] ?? '' ), 'form' ) || (bool) preg_match( '/\b(calculator|estimator|quiz|form)\b/i', $path . ' ' . (string) ( $f['title'] ?? '' ) ),
+				'is_service'       => 'page' === $row['post_type'] && self::matches_service( $f, $path, $services ),
+				'custom_schema_on' => $schema_on,
+				'page_types'       => $has_types,
+				'page_type'        => '' !== $now ? $now : ( $auto[ $id ] ?? '' ),
+				'suggested_type'   => $verdict['type'],
+				'type_confidence'  => $verdict['confidence'],
+				'type_labels'      => $type_names,
+				'discouraged'      => $discourage,
+				'heavy'            => [],
+				'template_files'   => array_keys( $template ),
+			];
+			foreach ( array_unique( array_column( (array) ( $f['links'] ?? [] ), 'p' ) ) as $target ) {
+				$norm = self::norm_path( (string) $target );
+				if ( isset( $redirects[ $norm ] ) ) {
+					$ctx['redirected'][] = [ $target, $redirects[ $norm ] ];
+				} elseif ( isset( $link_state[ $norm ] ) && in_array( $link_state[ $norm ], [ 404, 410 ], true ) ) {
+					$ctx['broken'][] = $target;
+				}
+			}
+			foreach ( (array) ( $f['images'] ?? [] ) as $img ) {
+				if ( (int) ( $img['kb'] ?? 0 ) > Rules::HEAVY_KB ) {
+					$ctx['heavy'][] = [ (string) $img['file'], (int) $img['kb'] ];
+				}
+			}
+			$all[ $id ] = Rules::evaluate( $f, $ctx );
+			$rendered  += 'rendered' === $row['source'] ? 1 : 0;
+		}
+
+		// Obvious page types are set now (or wait for the agency's next visit when this pass has no user).
+		// A full run sets them all; an inline refresh (an editor or review load) at most a batch, like the
+		// scan screen's run_pending(): the rest wait.
+		$network ? Auto_Types::apply( $auto ) : Auto_Types::apply( $auto, null, Auto_Types::PENDING_BATCH, 5.0 );
+
+		// A finding on most pages belongs to the template (the author box, the theme's heading order): it is
+		// reported once for the site and taken off the pages.
+		$site = Rules::site_wide( $all );
+		$tpl  = Rules::template_alt_issue( $template );
+		if ( null !== $tpl ) {
+			$site['template_alt'] = $tpl; // Never on a page: it is reported here only.
+		}
+		$total = 0;
+		foreach ( $all as $id => $issues ) {
+			$issues = array_values( array_filter( $issues, static fn( $i ) => ! isset( $site[ $i['code'] ] ) ) );
+			if ( (string) wp_json_encode( $issues ) !== (string) ( $rows[ $id ]['issues_json'] ?? '' ) ) {
+				$this->store->save_issues( $id, $issues ); // Unchanged pages are not rewritten.
+			}
+			$total += count( $issues );
+		}
+		$this->save_inbound( $rows );
+
+		$summary = [
+			'finished_at'  => time(),
+			'pages'        => count( $rows ),
+			'issues'       => $total,
+			'rendered'     => $rendered,
+			'fallback'     => count( $rows ) - $rendered,
+			'sitemap'      => null !== $sitemap,
+			'discouraged'  => $discourage,
+			'type_review'  => array_map(
+				static fn( $r ) => [
+					'type'   => (string) $r[0],
+					'reason' => (string) $r[1],
+				],
+				array_filter( $review, static fn( $r ) => '' !== $r[0] )
+			),
+			'common_words' => array_slice( $common, 0, 40 ), // For main_query() outside the scan.
+			'site_issues'  => array_values(
+				array_map(
+					static fn( $s ) => [
+						'title'  => (string) $s['issue']['title'],
+						'detail' => (string) $s['issue']['detail'],
+						'fix'    => (string) $s['issue']['fix'],
+						'kind'   => (string) $s['issue']['kind'],
+						'pages'  => (int) $s['pages'],
+					],
+					$site
+				)
+			),
+		];
+		update_option( Scan_Store::META_OPTION, $summary, false );
+
+		return [
+			'pages'    => $summary['pages'],
+			'issues'   => $total,
+			'rendered' => $rendered,
+			'fallback' => $summary['fallback'],
+		];
+	}
+
+	/**
+	 * Who links to whom, with the link text, keyed by the target's path: built once per site-wide pass, so
+	 * the editor reads one page's list (scan.inbound) instead of every page's facts.
+	 *
+	 * @param array<int,array<string,mixed>> $rows all_facts() rows.
+	 * @return array<string,array<int,array{0:string,1:string}>>
+	 */
+	public static function inbound_map( array $rows ): array {
+		$map = [];
+		foreach ( $rows as $row ) {
+			$from = self::norm_path( (string) $row['path'] );
+			foreach ( (array) ( $row['facts']['links'] ?? [] ) as $link ) {
+				$to   = self::norm_path( (string) ( $link['p'] ?? '' ) );
+				$pair = [ (string) $row['path'], (string) ( $link['t'] ?? '' ) ];
+				// Keyed by source and words: the same link twice (a menu and a body link with the same words)
+				// counts once, before the cap.
+				if ( $from !== $to && count( $map[ $to ] ?? [] ) < self::MAX_INBOUND + 1 ) {
+					$map[ $to ][ $pair[0] . '|' . $pair[1] ] = $pair;
+				}
+			}
+		}
+
+		// One past the cap is kept, so the editor can tell the list is not complete (Page_Review::editor_context()).
+		return array_map( 'array_values', $map );
+	}
+
+	/**
+	 * Store each page's inbound links where they changed (an unchanged list is not rewritten).
+	 *
+	 * @param array<int,array<string,mixed>> $rows all_facts() rows.
+	 */
+	public function save_inbound( array $rows ): void {
+		$map = self::inbound_map( $rows );
+		foreach ( $rows as $id => $row ) {
+			if ( null === ( $row['inbound_hash'] ?? null ) ) {
+				continue; // The column is not there yet (the table update is pending).
+			}
+			$list = $map[ self::norm_path( (string) $row['path'] ) ] ?? [];
+			if ( Scan_Store::inbound_hash( $list ) !== $row['inbound_hash'] ) {
+				$this->store->save_inbound( (int) $id, $list );
+			}
+		}
+	}
+
+	/**
+	 * Rescan one page now when it was edited after its last scan (the on-save queue may not have run: no
+	 * cron on a local copy, a busy site). The page is fetched; the site-wide pass makes no network calls.
+	 *
+	 * @param int         $post_id    Post ID.
+	 * @param string|null $scanned_at Its row's scanned_at when the caller has it (null: read here).
+	 * @return bool Whether it was rescanned.
+	 */
+	public static function refresh_if_stale( int $post_id, ?string $scanned_at = null ): bool {
+		$store      = new Scan_Store();
+		$scanned_at = $scanned_at ?? $store->scanned_at( $post_id ); // One column: the caller usually has the row already.
+		$post       = get_post( $post_id );
+		if ( null === $scanned_at || ! $post instanceof \WP_Post || $post->post_modified_gmt <= $scanned_at ) {
+			return false;
+		}
+		if ( ! Scheduler::acquire( 120 ) ) {
+			return false; // A scan step (or another refresh) holds the lock: never two site-wide passes at once.
+		}
+		try {
+			$scanner = new self( $store );
+			$scanner->scan_page( $post_id );
+			$scanner->finalize( false );
+		} finally {
+			Scheduler::release(); // Ours only: a lock someone else holds is never removed.
+		}
+
+		return true;
+	}
+
+	/**
+	 * A path for comparison: lower case, one trailing slash.
+	 *
+	 * @param string $path Path.
+	 */
+	public static function norm_path( string $path ): string {
+		return '/' === $path ? '/' : trailingslashit( strtolower( $path ) );
+	}
+
+	/**
+	 * The page's main search, the one the title should lead with: by clicks then impressions, the first that
+	 * - has 3+ clicks or a fifth of the page's impressions;
+	 * - is a short phrase (5 words or fewer: a title can lead with it);
+	 * - is not one Google answers itself (Opportunity::zero_click(): "time in boise idaho");
+	 * - is not a business's name (this one's or a competitor's);
+	 * - is about the page, once the words most pages share (the town, the state: common_words()) are set
+	 *   aside: a learning search needs most of its other words in the title or path, any other search one.
+	 * '' when none qualifies: then no "title misses the main search" finding, and Claude writes for what the
+	 * page is for.
+	 *
+	 * @param array<string,mixed>|null $page   Page data.
+	 * @param string                   $topic  The page's title and path ('' skips the topic check).
+	 * @param array<int,string>|null   $common Words most pages share (null: the last scan's).
+	 */
+	public static function main_query( ?array $page, string $topic = '', ?array $common = null ): string {
+		$queries = (array) ( $page['gsc']['queries'] ?? [] );
+		if ( [] === $queries ) {
+			return '';
+		}
+		if ( null === $common ) {
+			$common = function_exists( 'get_option' ) ? array_map( 'strval', (array) ( Scan_Store::meta()['common_words'] ?? [] ) ) : [];
+		}
+		usort( $queries, static fn( $a, $b ) => [ $b['clicks'], $b['impressions'] ] <=> [ $a['clicks'], $a['impressions'] ] );
+		$shown = (int) ( $page['gsc']['impressions'] ?? 0 );
+		foreach ( $queries as $q ) {
+			$query = (string) ( $q['query'] ?? '' );
+			// Enough of the page's traffic to matter: 3 clicks, or a fifth of its impressions.
+			if ( (int) ( $q['clicks'] ?? 0 ) < 3 && ( $shown <= 0 || (int) ( $q['impressions'] ?? 0 ) < 0.2 * $shown ) ) {
+				continue;
+			}
+			if ( count( preg_split( '/\s+/u', trim( $query ) ) ) > 5 ) {
+				continue; // A sentence is not something a title leads with.
+			}
+			if ( Opportunity::zero_click( $query, (int) ( $q['impressions'] ?? 0 ), (int) ( $q['clicks'] ?? 0 ), (float) ( $q['position'] ?? 0 ) ) ) {
+				continue; // Google answers it itself: no title wins its clicks.
+			}
+			$intent = Intent::of( $query );
+			if ( 'navigational' === $intent ) {
+				continue; // Never a business's name (this one's or a competitor's).
+			}
+			if ( '' !== $topic && ! Rules::shares_topic( $query, $topic, $common, 'informational' === $intent ) ) {
+				continue; // Not about what the page is about (the town alone does not count).
+			}
+
+			return $query;
+		}
+
+		return '';
+	}
+
+	/**
+	 * The site's most-seen pages (by impressions), to suggest as places to link from.
+	 *
+	 * @param array<string,array<string,mixed>> $data Page data.
+	 * @return array<int,string>
+	 */
+	protected static function popular_paths( array $data ): array {
+		uasort( $data, static fn( $a, $b ) => (int) ( $b['gsc']['impressions'] ?? 0 ) <=> (int) ( $a['gsc']['impressions'] ?? 0 ) );
+		$data = array_filter( $data, static fn( $p ) => (int) ( $p['gsc']['impressions'] ?? 0 ) > 0 );
+
+		return array_slice( array_keys( $data ), 0, 25 ); // Wide enough that a related page is usually in it.
+	}
+
+	/**
+	 * Each page's topic words (title and path, stemmed), without the words most pages share (the town, the
+	 * business): what makes a link suggestion related rather than just popular.
+	 *
+	 * @param array<int,array<string,mixed>> $rows all_facts() rows.
+	 * @return array<string,array<int,string>> norm_path => stems.
+	 */
+	protected static function topics( array $rows ): array {
+		$stems = [];
+		foreach ( $rows as $row ) {
+			$path           = self::norm_path( (string) $row['path'] );
+			$stems[ $path ] = Rules::stems( (string) ( $row['facts']['title'] ?? '' ) . ' ' . str_replace( [ '/', '-' ], ' ', $path ) );
+		}
+		$common = array_flip( self::common_words( $rows ) );
+		foreach ( $stems as $path => $list ) {
+			$stems[ $path ] = array_values( array_filter( $list, static fn( $s ) => ! isset( $common[ $s ] ) && mb_strlen( $s ) > 2 ) );
+		}
+
+		return $stems;
+	}
+
+	/**
+	 * Words (stemmed) in the titles and paths of 30% or more of the pages (at least 3): the town, the state,
+	 * the business. They say nothing about what one page is about.
+	 *
+	 * @param array<int,array<string,mixed>> $rows all_facts() rows.
+	 * @return array<int,string>
+	 */
+	public static function common_words( array $rows ): array {
+		$df = [];
+		foreach ( $rows as $row ) {
+			$path = self::norm_path( (string) $row['path'] );
+			foreach ( Rules::stems( (string) ( $row['facts']['title'] ?? '' ) . ' ' . str_replace( [ '/', '-' ], ' ', $path ) ) as $stem ) {
+				$df[ $stem ] = ( $df[ $stem ] ?? 0 ) + 1;
+			}
+		}
+		$limit = max( 3, (int) ceil( count( $rows ) * 0.3 ) );
+
+		return array_keys( array_filter( $df, static fn( $n ) => $n >= $limit ) );
+	}
+
+	/**
+	 * Up to two pages to link FROM: well-visited pages on a related topic that do not link here yet.
+	 * Nothing when none is related (a generic "link from the home page" for every page is noise).
+	 *
+	 * @param string                          $path    This page (norm_path).
+	 * @param array<string,array<int,string>> $topics  topics().
+	 * @param array<int,string>               $popular Most-seen paths.
+	 * @param array<int,string>               $linking Paths already linking here.
+	 * @return array<int,string>
+	 */
+	protected static function related_from( string $path, array $topics, array $popular, array $linking ): array {
+		$mine    = $topics[ $path ] ?? [];
+		$linking = array_map( [ self::class, 'norm_path' ], $linking );
+		$out     = [];
+		foreach ( $popular as $candidate ) {
+			$norm = self::norm_path( (string) $candidate );
+			if ( $norm === $path || in_array( $norm, $linking, true ) ) {
+				continue;
+			}
+			if ( [] !== array_intersect( $mine, $topics[ $norm ] ?? [] ) ) {
+				$out[] = (string) $candidate;
+			}
+			if ( count( $out ) >= 2 ) {
+				break;
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * AJR Core's redirect map, normalised path => target.
+	 *
+	 * @return array<string,string>
+	 */
+	public static function redirect_map(): array {
+		$map = get_option( 'ajr_core_redirect_map', [] );
+		$out = [];
+		foreach ( is_array( $map ) ? $map : [] as $source => $rule ) {
+			$target = is_array( $rule ) ? (string) ( $rule['target'] ?? '' ) : (string) $rule;
+			if ( '' !== $target ) {
+				$out[ self::norm_path( (string) $source ) ] = $target;
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Status of internal link targets that are not a scanned page or a redirect (cached a day).
+	 *
+	 * @param array<int,string>    $targets   Normalised link paths.
+	 * @param array<string,true>   $known     Scanned page paths.
+	 * @param array<string,string> $redirects Redirect map.
+	 * @return array<string,int> Path => status.
+	 */
+	protected function check_unknown_links( array $targets, array $known, array $redirects ): array {
+		$cache   = self::cached_links();
+		$checked = 0;
+		foreach ( $targets as $path ) {
+			if ( isset( $known[ $path ] ) || isset( $redirects[ $path ] ) || isset( $cache[ $path ] ) || '/' === $path ) {
+				continue;
+			}
+			if ( $checked >= self::MAX_LINK_CHECKS ) {
+				break;
+			}
+			++$checked;
+			$cache[ $path ] = Page_Fetcher::fetch( home_url( $path ), 'HEAD' )['status'];
+		}
+		if ( $checked > 0 ) {
+			// Written only when something new was checked, so a day-old answer still expires a day after it
+			// was learned (rewriting it on every pass kept stale results alive for ever).
+			set_transient( self::LINK_CACHE, $cache, DAY_IN_SECONDS );
+		}
+
+		return $cache;
+	}
+
+	/**
+	 * The link checks already made (path => status), without checking anything new.
+	 *
+	 * @return array<string,int>
+	 */
+	protected static function cached_links(): array {
+		$cache = get_transient( self::LINK_CACHE );
+
+		return is_array( $cache ) ? $cache : [];
+	}
+
+	/**
+	 * The sitemap as last read, or null when it was not read (then nothing is "not in the sitemap").
+	 *
+	 * @return array<string,true>|null
+	 */
+	protected static function cached_sitemap(): ?array {
+		$cached = get_transient( self::SITEMAP_CACHE );
+
+		return is_array( $cached ) && is_array( $cached['urls'] ?? null ) ? $cached['urls'] : null;
+	}
+
+	/**
+	 * Every URL in the site's sitemap (bare form), or null when there is none to read.
+	 *
+	 * Reads the SEO plugin's index (Yoast /sitemap_index.xml, Rank Math the same, The SEO Framework and core
+	 * /wp-sitemap.xml) over loopback and follows its child sitemaps (up to 30). Cached for an hour.
+	 *
+	 * @return array<string,true>|null
+	 */
+	protected function sitemap(): ?array {
+		$cached = get_transient( self::SITEMAP_CACHE );
+		if ( is_array( $cached ) ) {
+			return $cached['urls'] ?? null;
+		}
+		$urls = null;
+		foreach ( [ '/sitemap_index.xml', '/wp-sitemap.xml', '/sitemap.xml' ] as $index ) {
+			$got = self::fetch_xml( home_url( $index ) );
+			if ( '' === $got['html'] || false === stripos( $got['html'], '<loc>' ) ) {
+				continue;
+			}
+			$locs = self::locs( $got['html'] );
+			$urls = [];
+			$kids = 0;
+			foreach ( $locs as $loc ) {
+				if ( preg_match( '/\.xml(\?|$)/i', $loc ) && $kids < 30 ) {
+					++$kids;
+					$child = self::fetch_xml( $loc );
+					if ( '' === $child['html'] ) {
+						// A child sitemap that did not load: the list is incomplete, so no page may be called
+						// "not in the sitemap", and nothing is cached (the next run tries again).
+						return null;
+					}
+					foreach ( self::locs( $child['html'] ) as $page ) {
+						$urls[ Rules::bare_url( $page ) ] = true;
+					}
+				} else {
+					$urls[ Rules::bare_url( $loc ) ] = true;
+				}
+			}
+			break;
+		}
+		set_transient( self::SITEMAP_CACHE, [ 'urls' => $urls ], HOUR_IN_SECONDS );
+
+		return $urls;
+	}
+
+	/**
+	 * Fetch an XML document from this site (sitemaps answer with an XML content type).
+	 *
+	 * @param string $url URL.
+	 * @return array{ok:bool,status:int,html:string,error:string}
+	 */
+	protected static function fetch_xml( string $url ): array {
+		if ( ! Page_Fetcher::is_own( $url ) ) {
+			return [
+				'ok'     => false,
+				'status' => 0,
+				'html'   => '',
+				'error'  => '',
+			];
+		}
+		$response = wp_remote_get(
+			$url,
+			[
+				'timeout'             => Page_Fetcher::TIMEOUT,
+				'redirection'         => 0, // Never followed: a redirect is reported as one, and cannot lead off this site.
+				'sslverify'           => (bool) apply_filters( 'https_local_ssl_verify', false ),
+				'limit_response_size' => Page_Fetcher::MAX_BYTES,
+			]
+		);
+		$status   = is_wp_error( $response ) ? 0 : (int) wp_remote_retrieve_response_code( $response );
+
+		return [
+			'ok'     => 200 === $status,
+			'status' => $status,
+			'html'   => 200 === $status ? (string) wp_remote_retrieve_body( $response ) : '',
+			'error'  => '',
+		];
+	}
+
+	/**
+	 * The <loc> values of a sitemap document.
+	 *
+	 * @param string $xml XML.
+	 * @return array<int,string>
+	 */
+	protected static function locs( string $xml ): array {
+		preg_match_all( '#<loc>\s*(?:<!\[CDATA\[)?\s*([^<\]]+?)\s*(?:\]\]>)?\s*</loc>#i', $xml, $m );
+
+		return array_map( 'html_entity_decode', $m[1] ?? [] );
+	}
+
+	/**
+	 * AJR Core's service names (business.services, one per line, "Name | description").
+	 *
+	 * @return array<int,string>
+	 */
+	public static function service_names(): array {
+		$config = 'AJR\Core\Framework\Config';
+		if ( ! class_exists( $config ) ) {
+			return [];
+		}
+		try {
+			$raw = (string) $config::get( 'business.services', '' );
+		} catch ( \Throwable $e ) {
+			return [];
+		}
+		$names = [];
+		foreach ( preg_split( '/\R/', $raw ) as $line ) {
+			$name = trim( explode( '|', (string) $line, 2 )[0] );
+			if ( '' !== $name ) {
+				$names[] = $name;
+			}
+		}
+
+		return $names;
+	}
+
+	/**
+	 * Whether AJR Core's Custom schema module is switched on.
+	 */
+	public static function custom_schema_on(): bool {
+		$modules = 'AJR\Core\Framework\Modules';
+		if ( ! class_exists( $modules ) || ! method_exists( $modules, 'enabled' ) ) {
+			return false;
+		}
+		try {
+			return (bool) $modules::enabled( 'custom_schema' );
+		} catch ( \Throwable $e ) {
+			return false;
+		}
+	}
+
+	/**
+	 * Whether a page is about one of the business's services (its title, H1 or address names one).
+	 *
+	 * @param array<string,mixed> $facts    Facts.
+	 * @param string              $path     Path.
+	 * @param array<int,string>   $services Service names.
+	 */
+	protected static function matches_service( array $facts, string $path, array $services ): bool {
+		$hay = mb_strtolower( (string) ( $facts['title'] ?? '' ) . ' ' . implode( ' ', (array) ( $facts['h1'] ?? [] ) ) . ' ' . str_replace( '-', ' ', $path ) );
+		foreach ( $services as $service ) {
+			if ( Rules::contains_query( $hay, $service ) ) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+}

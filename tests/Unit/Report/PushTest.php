@@ -162,7 +162,7 @@ class PushTest extends TestCase {
 		$response = $endpoint->handle( $request );
 
 		$this->assertSame( 200, $response->get_status() );
-		$this->assertSame( [ 'result' => 'stored', 'week' => '2026-09-21' ], $response->get_data() );
+		$this->assertSame( [ 'result' => 'stored', 'week' => '2026-09-21', 'period' => 'week', 'start' => '2026-09-21', 'pages' => 0, 'pages_stored' => null ], $response->get_data(), 'no page data in a v1 push: nothing to store' );
 		$this->assertArrayHasKey( '2026-09-21', $this->options[ Snapshot_Store::OPTION ] );
 		$this->assertGreaterThan( 0, $this->options[ Snapshot_Store::LAST_PUSH ] );
 	}

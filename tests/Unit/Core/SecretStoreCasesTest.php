@@ -10,7 +10,9 @@
  *
  * - salts:    Secret_Store::salts_usable() (what salts_in_config() runs on the real constants).
  * - read:     the report push key option, written with Secret_Store::set(), tampered, read with get().
- * - write:    the Google client secret through its real save path, GSC_Page::save_settings().
+ * - write:    the Claude key through its real 5.0 save path, Admin\Settings_Page::save() (the Search
+ *             Console screen that held this case in 4.4 was removed). A Claude key must start with
+ *             "sk-ant-", so the adapter prefixes the fixture's submitted and expected values with it.
  * - legacy:   a plain-text push key on a site already at upgrade level 4.4.0 (left by an update that ran
  *             from cron or WP-CLI), read with get() in the given request context.
  * - constant: the Claude key, Claude_Client::get_api_key(), AI_SEO_ASSISTANT_ANTHROPIC_API_KEY.
@@ -27,8 +29,7 @@ namespace AJR\SEOAssistant\Tests\Unit\Core;
 use AJR\SEOAssistant\AI\Claude_Client;
 use AJR\SEOAssistant\Core\Secret_Store;
 use AJR\SEOAssistant\Core\Upgrade;
-use AJR\SEOAssistant\GSC\GSC_Client;
-use AJR\SEOAssistant\GSC\GSC_Page;
+use AJR\SEOAssistant\Admin\Settings_Page;
 use AJR\SEOAssistant\Report\Access;
 use WP_Mock\Tools\TestCase;
 
@@ -94,11 +95,11 @@ class SecretStoreCasesTest extends TestCase {
 	protected string $context = 'admin';
 
 	/**
-	 * The GSC screen's last notice.
+	 * The Settings screen's last result code (from its redirect).
 	 *
-	 * @var array<string,string>
+	 * @var string
 	 */
-	protected array $notice = [];
+	protected string $code = '';
 
 	/**
 	 * Every case in the shared file, keyed by its id.
@@ -170,7 +171,8 @@ class SecretStoreCasesTest extends TestCase {
 		);
 		\WP_Mock::userFunction( 'wp_salt' )->andReturnUsing( fn( $scheme ) => $this->salt . '-' . $scheme );
 		\WP_Mock::userFunction( 'wp_json_encode' )->andReturnUsing( fn( $v ) => json_encode( $v ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- test double.
-		\WP_Mock::userFunction( 'is_admin' )->andReturnUsing( fn() => 'admin' === $this->context );
+		\WP_Mock::userFunction( 'is_admin' )->andReturnUsing( fn() => in_array( $this->context, [ 'admin', 'ajax-logged-out' ], true ) );
+		\WP_Mock::userFunction( 'is_user_logged_in' )->andReturnUsing( fn() => 'admin' === $this->context );
 		\WP_Mock::userFunction( 'wp_doing_cron' )->andReturnUsing( fn() => 'cron' === $this->context );
 		\WP_Mock::userFunction( 'current_user_can' )->andReturnUsing( fn( $cap ) => 'admin' === $this->context && in_array( $cap, [ 'manage_options', Access::TOOLS_CAP ], true ) );
 		\WP_Mock::userFunction( '__' )->andReturnArg( 0 );
@@ -272,29 +274,29 @@ class SecretStoreCasesTest extends TestCase {
 	}
 
 	/**
-	 * Seed, then submit through the Search Console screen's save handler.
+	 * Seed, then submit through the Settings screen's save handler (5.0).
 	 *
 	 * @param array<string,mixed> $given Case input.
 	 * @param array<string,mixed> $then  Expected.
 	 */
 	protected function run_write( array $given, array $then ): void {
-		$option = GSC_Client::OPTION_CLIENT_SECRET;
+		$option = Claude_Client::OPTION_API_KEY;
+		$key    = static fn( string $v ): string => '' === trim( $v ) ? $v : Claude_Client::KEY_PREFIX . $v;
 		if ( '' !== $given['stored'] ) {
-			$this->assertTrue( Secret_Store::set( $option, $given['stored'] ) );
+			$this->assertTrue( Secret_Store::set( $option, $key( $given['stored'] ) ) );
 		}
 		$before = $this->options[ $option ] ?? null;
 
-		\WP_Mock::userFunction( 'wp_verify_nonce' )->andReturn( 1 );
+		\WP_Mock::userFunction( 'check_admin_referer' )->andReturn( 1 );
 		\WP_Mock::userFunction( 'sanitize_text_field' )->andReturnUsing( fn( $s ) => trim( (string) $s ) );
 		\WP_Mock::userFunction( 'wp_unslash' )->andReturnArg( 0 );
-		\WP_Mock::userFunction( 'get_current_user_id' )->andReturn( 1 );
-		\WP_Mock::userFunction( 'set_transient' )->andReturnUsing(
-			function ( $name, $value ) {
-				$this->notice = $value;
-				return true;
+		\WP_Mock::userFunction( 'admin_url' )->andReturnArg( 0 );
+		\WP_Mock::userFunction( 'add_query_arg' )->andReturnUsing(
+			function ( $args ) {
+				$this->code = (string) ( $args['aisa'] ?? '' );
+				return 'url';
 			}
 		);
-		\WP_Mock::userFunction( 'admin_url' )->andReturnArg( 0 );
 		\WP_Mock::userFunction( 'wp_safe_redirect' )->andReturnUsing(
 			static function () {
 				throw new Redirected( 'redirect' );
@@ -302,13 +304,10 @@ class SecretStoreCasesTest extends TestCase {
 		);
 
 		Fixture_Secret_Store::encryption( (bool) $given['encryption'] );
-		$_POST = [
-			'ai_seo_assistant_gsc_nonce' => 'nonce',
-			$option                      => $given['submit'],
-		];
+		$_POST = [ 'api_key' => $key( (string) $given['submit'] ) ];
 		try {
-			( new GSC_Page( new GSC_Client() ) )->save_settings();
-			$this->fail( 'save_settings() did not redirect' );
+			( new Settings_Page() )->save();
+			$this->fail( 'save() did not redirect' );
 		} catch ( Redirected $e ) {
 			unset( $e ); // Reached the redirect: the handler finished.
 		} finally {
@@ -316,9 +315,9 @@ class SecretStoreCasesTest extends TestCase {
 			Fixture_Secret_Store::encryption( true );
 		}
 
-		$this->assertSame( $then['accepted'], 'success' === ( $this->notice['type'] ?? '' ), 'accepted' );
+		$this->assertSame( $then['accepted'], 'saved' === $this->code, 'accepted' );
 		Secret_Store::reset();
-		$this->assertSame( $then['get'], Secret_Store::get( $option ) );
+		$this->assertSame( '' === $then['get'] ? '' : $key( $then['get'] ), Secret_Store::get( $option ) );
 		$this->assertSame( $then['has'], array_key_exists( $option, $this->options ), 'has a row' );
 		if ( array_key_exists( 'row_unchanged', $then ) ) {
 			$this->assertSame( $then['row_unchanged'], ( $this->options[ $option ] ?? null ) === $before, 'row unchanged' );
