@@ -49,6 +49,7 @@ test( 'ticking 3 rows writes the label span, and the icon span stays empty', () 
 	assert.equal( text.textContent, 'Generate for selected (3), about $0.09' );
 	assert.equal( icon.textContent, '', 'the icon span is never written' );
 	assert.equal( status.textContent, 'Generate for selected (3), about $0.09', 'mirrored to the live region' );
+	assert.ok( status.classes.has( 'screen-reader-text' ), 'for screen readers only: not shown twice' );
 	assert.equal( button.disabled, false );
 } );
 

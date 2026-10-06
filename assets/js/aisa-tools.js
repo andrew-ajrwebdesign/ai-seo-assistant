@@ -230,7 +230,9 @@
 					const text = button.querySelector( '[data-aisa-label]' );
 					text.textContent = chosen.length ? fmt( t.generateN, chosen.length, cost ) : button.dataset.label || text.textContent;
 					if ( status && chosen.length ) {
-						status.textContent = text.textContent; // Heard through the bulk bar's live region too.
+						// Heard through the bar's live region, but not shown twice on screen.
+						status.textContent = text.textContent;
+						status.classList.add( 'screen-reader-text' );
 					}
 				}
 			};
@@ -253,6 +255,7 @@
 					for ( let i = 0; i < chosen.length; i++ ) {
 						const row = chosen[ i ].closest( 'tr' );
 						const rowStatus = row.querySelector( '[data-aisa-row-status]' );
+						status.classList.remove( 'screen-reader-text' ); // Progress is worth seeing.
 						status.textContent = fmt( t.writing, i + 1, chosen.length );
 						rowStatus.textContent = '…';
 						const res = await post( 'aisa_generate', { post: chosen[ i ].value } );
