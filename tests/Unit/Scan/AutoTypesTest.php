@@ -138,6 +138,26 @@ class AutoTypesTest extends TestCase {
 	}
 
 	/**
+	 * Last round A14: a screen load sets at most a batch; the rest stay pending for the next one.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_pending_set_in_batches(): void {
+		$log  = $this->log();
+		$want = [];
+		foreach ( range( 101, 112 ) as $id ) {
+			$want[ $id ] = 'service';
+		}
+		$done = Auto_Types::apply( $want, $log, 5 );
+		$this->assertCount( 5, $done );
+		$this->assertCount( 7, Auto_Types::pending(), 'the rest wait' );
+		$this->assertSame( array_slice( array_keys( $want ), 5 ), array_keys( Auto_Types::pending() ) );
+		$this->assertCount( 5, Auto_Types::apply( Auto_Types::pending(), $log, 5 ) );
+		$this->assertCount( 2, Auto_Types::pending() );
+	}
+
+	/**
 	 * High: set and logged as "Automatic" (user 0); a page a person decided is never touched; the toggle
 	 * turns it off; Undo clears the type, marks the page manual, and the next pass leaves it alone.
 	 *

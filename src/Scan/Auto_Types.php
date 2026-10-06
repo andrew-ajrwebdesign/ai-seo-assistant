@@ -44,6 +44,9 @@ class Auto_Types {
 	/** Option: high-confidence types waiting for a user who may set them (post ID => type). Not autoloaded. */
 	public const PENDING = 'ai_seo_assistant_auto_types_pending';
 
+	/** Most waiting page types set on one screen load (run_pending()). */
+	public const PENDING_BATCH = 100;
+
 	/** The change log's field for a page type. */
 	public const FIELD = 'page_type';
 
@@ -57,11 +60,13 @@ class Auto_Types {
 	/**
 	 * Set these high-confidence types now where the current user may; the rest wait in PENDING.
 	 *
-	 * @param array<int,string> $types Post ID => type.
-	 * @param Change_Log|null   $log   Change log (tests pass their own).
+	 * @param array<int,string> $types   Post ID => type.
+	 * @param Change_Log|null   $log     Change log (tests pass their own).
+	 * @param int               $max     Most pages set in this call (0: all); the rest wait in PENDING.
+	 * @param float             $seconds Stop after this long (0: no limit); the rest wait in PENDING.
 	 * @return array<int,string> The ones set now.
 	 */
-	public static function apply( array $types, ?Change_Log $log = null ): array {
+	public static function apply( array $types, ?Change_Log $log = null, int $max = 0, float $seconds = 0.0 ): array {
 		if ( ! self::enabled() || [] === $types ) {
 			return [];
 		}
@@ -69,8 +74,15 @@ class Auto_Types {
 		$done    = [];
 		$batch   = 'auto-' . gmdate( 'YmdHis' );
 		$log     = $log ?? new Change_Log();
+		$until   = $seconds > 0 ? microtime( true ) + $seconds : 0.0;
+		$tried   = 0;
 		foreach ( $types as $id => $type ) {
 			$id = (int) $id;
+			if ( ( $max > 0 && $tried >= $max ) || ( $until > 0 && microtime( true ) > $until ) ) {
+				$pending[ $id ] = (string) $type; // Out of time for this request: set on the next.
+				continue;
+			}
+			++$tried;
 			if ( '' !== Page_Role::type_of( $id ) || 'manual' === Page_Role::source( $id ) ) {
 				unset( $pending[ $id ] ); // Already typed, or a person decided: never touched.
 				continue;
@@ -109,7 +121,8 @@ class Auto_Types {
 	public static function run_pending(): array {
 		$pending = self::pending();
 
-		return [] === $pending ? [] : self::apply( $pending );
+		// On the agency's screen load: at most 100 pages or 5 seconds, the rest on the next load.
+		return [] === $pending ? [] : self::apply( $pending, null, self::PENDING_BATCH, 5.0 );
 	}
 
 	/**
