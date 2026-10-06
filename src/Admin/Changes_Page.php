@@ -153,6 +153,7 @@ class Changes_Page {
 		$post  = isset( $_GET['post'] ) ? absint( $_GET['post'] ) : 0;
 		$field = isset( $_GET['field'] ) ? sanitize_key( wp_unslash( $_GET['field'] ) ) : '';
 		// phpcs:enable
+		$log    = new Change_Log(); // Content rows are listed lean; their summary reads them whole.
 		$counts = [
 			''         => count( $rows ),
 			'measured' => 0,

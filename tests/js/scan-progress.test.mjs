@@ -16,7 +16,13 @@ import { El } from './fake-dom.mjs';
 
 const root = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), '../..' );
 
-test( 'a running scan resumes at its stored position and finishes with the issue difference', async () => {
+/**
+ * Load the script against a fake header and a scripted run of step answers.
+ *
+ * @param {Array<Object>} steps Answers to aisa_scan_step, in order.
+ * @return {Object} The bar's parts, what was posted, and a promise for the in-place refresh.
+ */
+function harness( steps ) {
 	const button = new El( 'button', {} );
 	const form = new El( 'form', { 'data-aisa-scan': '' }, [ button ] );
 	form.dataset = { running: '1', done: '47', total: '153' };
@@ -34,11 +40,6 @@ test( 'a running scan resumes at its stored position and finishes with the issue
 	const status = new El( 'span', { 'data-aisa-scan-status': '' } );
 	const body = new El( 'body', {}, [ form, status, progress ] );
 
-	const steps = [
-		{ success: true, data: { state: 'working', done: 100, total: 153 } },
-		{ success: true, data: { state: 'working', done: 153, total: 153 } },
-		{ success: true, data: { state: 'done', done: 153, total: 153, result: { issues: 80 }, before: 95 } },
-	];
 	const posted = [];
 	const seen = [];
 	let finished;
@@ -68,7 +69,15 @@ test( 'a running scan resumes at its stored position and finishes with the issue
 		}
 	}
 	vm.runInNewContext( fs.readFileSync( path.join( root, 'assets/js/aisa-tools.js' ), 'utf8' ), { window, document, URLSearchParams, URL, DOMParser, fetch, setTimeout, console } );
+	return { form, progress, track, fill, text, live, posted, seen, done };
+}
 
+test( 'a running scan resumes at its stored position and finishes with the issue difference', async () => {
+	const { form, progress, track, fill, text, live, posted, seen, done } = harness( [
+		{ success: true, data: { state: 'working', done: 100, total: 153 } },
+		{ success: true, data: { state: 'working', done: 153, total: 153 } },
+		{ success: true, data: { state: 'done', done: 153, total: 153, result: { issues: 80 }, before: 95 } },
+	] );
 	assert.equal( track.attrs[ 'aria-valuenow' ], '47', 'resumed at the stored position, before any step' );
 	assert.equal( form.hidden, true, 'the Rescan button gives way to the bar' );
 	assert.equal( progress.hidden, false );
@@ -80,4 +89,14 @@ test( 'a running scan resumes at its stored position and finishes with the issue
 	assert.equal( text.textContent, '153 pages checked just now · 15 fewer issues than before' );
 	assert.equal( live.textContent, text.textContent, 'the end is announced' );
 	assert.equal( fill.style.inlineSize, '100%' );
+} );
+
+test( 'a scan another screen finished is reported as finished, never as stopped', async () => {
+	const { text, done } = harness( [
+		{ success: true, data: { state: 'working', done: 120, total: 153 } },
+		{ success: true, data: { state: 'idle', done: 0, total: 0 } },
+	] );
+	await done;
+	await new Promise( ( r ) => setTimeout( r, 0 ) );
+	assert.equal( text.textContent, '153 pages checked just now' );
 } );

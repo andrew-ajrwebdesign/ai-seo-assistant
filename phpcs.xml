@@ -44,6 +44,12 @@
         </properties>
     </rule>
 
+    <!-- A variable used and never defined is an error (Changes_Page used $log it never set: a 500 that
+         php -l and WPCS both passed). -->
+    <rule ref="VariableAnalysis.CodeAnalysis.VariableAnalysis.UndefinedVariable">
+        <type>error</type>
+    </rule>
+
     <!-- Match the plugin header: Requires at least 6.0, Requires PHP 8.0. -->
     <config name="minimum_supported_wp_version" value="6.0"/>
     <config name="testVersion" value="8.0-"/>

@@ -133,9 +133,12 @@
 		let state = start ? await post( 'aisa_scan_start' ) : { success: true, data: { state: 'working', done: Number( scanForm.dataset.done ) || 0, total: Number( scanForm.dataset.total ) || 0 } };
 		const began = Date.now();
 		const firstDone = state && state.data ? state.data.done : 0;
+		let lastTotal = 0;
 		while ( state && state.success && [ 'working', 'busy' ].includes( state.data.state ) ) {
+			lastTotal = state.data.total;
 			const scanned = state.data.done - firstDone;
-			showProgress( state.data.done, state.data.total, scanned > 0 ? ( Date.now() - began ) / 1000 / scanned : null );
+			// Time left only once this screen has seen ten pages go by (an early guess swings wildly).
+			showProgress( state.data.done, state.data.total, scanned >= 10 ? ( Date.now() - began ) / 1000 / scanned : null );
 			if ( stopRequested ) {
 				const res = await post( 'aisa_scan_cancel' );
 				const d = res && res.data ? res.data : state.data;
@@ -164,6 +167,11 @@
 			}
 			showProgress( total, total, null );
 			await finishScan( line );
+			return;
+		}
+		if ( state && state.success && 'idle' === state.data.state ) {
+			// Finished by another screen or by cron while this one waited: nothing failed.
+			await finishScan( fmt( t.finished, lastTotal ) );
 			return;
 		}
 		progress.querySelector( '[data-aisa-progress-text]' ).textContent = t.failed;
