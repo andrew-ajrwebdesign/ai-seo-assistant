@@ -29,7 +29,7 @@
 				await navigator.clipboard.writeText( text );
 				return true;
 			}
-		} catch ( e ) {
+		} catch {
 			// Fall through to the textarea.
 		}
 		const area = document.createElement( 'textarea' );
@@ -42,7 +42,7 @@
 		let ok = false;
 		try {
 			ok = document.execCommand( 'copy' );
-		} catch ( e ) {
+		} catch {
 			ok = false;
 		}
 		area.remove();
@@ -68,22 +68,37 @@
 				return;
 			}
 			const key = String( event.key ).toLowerCase();
-			const sel = window.getSelection();
+			// The document the key was pressed in (never assumed to be the top one).
+			const doc =
+				( event.target && event.target.ownerDocument ) || document;
+			const sel = doc.defaultView.getSelection();
 			if ( 'c' === key ) {
 				const text = sel ? sel.toString() : '';
 				const panel = sel ? panelOf( sel.anchorNode ) : null;
-				if ( '' === text || ! panel || panel !== panelOf( sel.focusNode ) ) {
+				if (
+					'' === text ||
+					! panel ||
+					panel !== panelOf( sel.focusNode )
+				) {
 					return; // Not ours: leave it to the page (Divi's own copy keeps working).
 				}
 				// Typing somewhere else (a field, a textarea, a module's editable text) keeps its own Ctrl+C,
 				// even with the pointer resting over the panel.
-				const active = document.activeElement;
-				if ( active && ! panel.contains( active ) && ( active.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test( active.tagName ) ) ) {
+				const active = doc.activeElement;
+				if (
+					active &&
+					! panel.contains( active ) &&
+					( active.isContentEditable ||
+						/^(INPUT|TEXTAREA|SELECT)$/.test( active.tagName ) )
+				) {
 					return;
 				}
 				// A selection left in the panel while the person works on a Divi module is not a copy of
 				// ours: only when the pointer or the focus is in the panel too.
-				if ( ! panel.matches( ':hover' ) && ! panel.contains( active ) ) {
+				if (
+					! panel.matches( ':hover' ) &&
+					! panel.contains( active )
+				) {
 					return;
 				}
 				event.stopImmediatePropagation();
@@ -92,17 +107,29 @@
 				return;
 			}
 			if ( 'a' === key ) {
-				const active = document.activeElement;
-				const item = active && active.closest ? active.closest( '[data-aisa-todo-box] [data-key]' ) : null;
+				const active = doc.activeElement;
+				const item =
+					active && active.closest
+						? active.closest( '[data-aisa-todo-box] [data-key]' )
+						: null;
 				const inPanel = sel && panelOf( sel.anchorNode );
-				const target = item || ( inPanel && sel.anchorNode && ( 1 === sel.anchorNode.nodeType ? sel.anchorNode : sel.anchorNode.parentElement ).closest( '[data-key]' ) );
+				const target =
+					item ||
+					( inPanel &&
+						sel.anchorNode &&
+						( 1 === sel.anchorNode.nodeType
+							? sel.anchorNode
+							: sel.anchorNode.parentElement
+						).closest( '[data-key]' ) );
 				if ( ! target ) {
 					return;
 				}
 				event.stopImmediatePropagation();
 				event.preventDefault();
 				const range = document.createRange();
-				range.selectNodeContents( target.querySelector( '.aisa-todo__text' ) || target );
+				range.selectNodeContents(
+					target.querySelector( '.aisa-todo__text' ) || target
+				);
 				sel.removeAllRanges();
 				sel.addRange( range );
 			}
@@ -137,30 +164,45 @@
 		const item = button.closest( '[data-key]' );
 		button.disabled = true;
 		button.textContent = cfg.i18n.saving;
-		const body = new URLSearchParams( { action: 'aisa_todo_done', nonce: cfg.nonce, post: box.dataset.post, key: item.dataset.key } );
+		const body = new URLSearchParams( {
+			action: 'aisa_todo_done',
+			nonce: cfg.nonce,
+			post: box.dataset.post,
+			key: item.dataset.key,
+		} );
 		let res = null;
 		try {
-			res = await ( await fetch( cfg.ajax, { method: 'POST', credentials: 'same-origin', body } ) ).json();
-		} catch ( e ) {
+			res = await (
+				await fetch( cfg.ajax, {
+					method: 'POST',
+					credentials: 'same-origin',
+					body,
+				} )
+			).json();
+		} catch {
 			res = null;
 		}
 		if ( ! res || ! res.success ) {
 			button.disabled = false;
-			button.textContent = ( res && res.data && res.data.message ) || cfg.i18n.failed;
+			button.textContent =
+				( res && res.data && res.data.message ) || cfg.i18n.failed;
 			return;
 		}
 		// Collapse to the area, the to-do and "Done <date>".
 		item.classList.add( 'is-done' );
-		item.querySelectorAll( '.aisa-todo__detail, [data-aisa-todo-copy]' ).forEach( ( el ) => el.remove() );
+		item.querySelectorAll(
+			'.aisa-todo__detail, [data-aisa-todo-copy]'
+		).forEach( ( el ) => el.remove() );
 		const when = document.createElement( 'span' );
 		when.className = 'aisa-todo__when';
 		when.textContent = res.data.label;
 		button.replaceWith( when );
 		if ( res.data.line ) {
-			box.querySelector( '[data-aisa-todo-line]' ).textContent = res.data.line;
+			box.querySelector( '[data-aisa-todo-line]' ).textContent =
+				res.data.line;
 		}
 		if ( live ) {
 			live.textContent = res.data.label;
 		}
 	} );
-}() );
+} )();
