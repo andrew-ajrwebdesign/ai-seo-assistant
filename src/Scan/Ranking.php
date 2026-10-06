@@ -146,8 +146,8 @@ class Ranking {
 			$value  = Opportunity::value( $role['role'], $bumped );
 			$worth  = Opportunity::value_of( $split['weighted'], $value, $enq );
 			$worth3 = Opportunity::value_of( $split['weighted_prize'], $value, $enq );
-			$quick  = Opportunity::yearly( $split['missed'] );
-			$prize  = Opportunity::yearly( $split['prize'] );
+			$quick  = Opportunity::yearly( $split['winnable'] ); // Shown figures leave out what Google answers itself.
+			$prize  = Opportunity::yearly( $split['winnable_prize'] );
 
 			$rows[ $id ] = $row + [
 				'title'       => $titles[ $id ] ?? $row['path'],
@@ -163,6 +163,7 @@ class Ranking {
 				'quick_enq'   => Opportunity::enquiries( $quick, $enq, $visits, $site_enq, $site_visits ),
 				'prize_enq'   => Opportunity::enquiries( $prize, $enq, $visits, $site_enq, $site_visits ),
 				'mix'         => $split['mix'],
+				'zero_share'  => (float) $split['zero_share'],
 				'method'      => $split['method'],
 				'breakdown'   => $split['rows'],
 				'role'        => $role['role'],

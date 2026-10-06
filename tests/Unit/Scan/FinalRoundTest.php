@@ -339,6 +339,10 @@ class FinalRoundTest extends TestCase {
 		$this->assertSame( 0.1, $by['boise idaho weather']['weight'] );
 		$this->assertFalse( $by['moving to boise']['zero_click'] );
 		$this->assertLessThan( 0.25 * $b['missed'], $b['weighted'], 'the unwinnable weather clicks hardly count' );
+		// The figure SHOWN counts them at the same tenth, and the page is flagged when they are most of it.
+		$this->assertEqualsWithDelta( $by['boise idaho weather']['missed'] * 0.1 + $by['moving to boise']['missed'], $b['winnable'], 0.001 );
+		$this->assertEqualsWithDelta( $by['boise idaho weather']['missed'] * 0.1, $by['boise idaho weather']['winnable'], 0.001 );
+		$this->assertSame( 0.8, $b['zero_share'], '20,000 of 25,000 impressions' );
 	}
 
 	/**

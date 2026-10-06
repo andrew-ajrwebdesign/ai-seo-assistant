@@ -473,7 +473,7 @@ class Opportunity {
 	 * @param array<string,mixed>|null $gsc    Page Search Console block (Page_Data): impressions, clicks, ctr,
 	 *                                         position, queries[] { query, impressions, clicks, ctr, position }.
 	 * @param callable|null            $intent fn( string $query ): string, the search's intent (Intent::of).
-	 * @return array{missed:float,prize:float,weighted:float,weighted_prize:float,method:string,mix:array<string,float>,rows:array<int,array<string,mixed>>}
+	 * @return array{missed:float,prize:float,weighted:float,weighted_prize:float,method:string,mix:array<string,float>,rows:array<int,array<string,mixed>>,winnable:float,winnable_prize:float,zero_share:float}
 	 */
 	public static function breakdown( ?array $gsc, ?callable $intent = null ): array {
 		$out = [
@@ -484,6 +484,9 @@ class Opportunity {
 			'method'         => 'none',
 			'mix'            => [],
 			'rows'           => [],
+			'winnable'       => 0.0,
+			'winnable_prize' => 0.0,
+			'zero_share'     => 0.0,
 		];
 		if ( null === $gsc ) {
 			return $out;
@@ -532,16 +535,27 @@ class Opportunity {
 			}
 		}
 
-		$mix = [];
+		$mix        = [];
+		$zero_shown = 0;
+		$all_shown  = 0;
 		foreach ( $rows as $i => $row ) {
-			$rows[ $i ]            += [
+			$rows[ $i ] += [
 				'remain'     => false,
 				'zero_click' => false,
 			];
-			$out['missed']         += $row['missed'];
-			$out['prize']          += $row['prize'];
-			$out['weighted']       += $row['missed'] * $row['weight'];
-			$out['weighted_prize'] += $row['prize'] * $row['weight'];
+			// What can actually be won: a search Google answers itself counts at the zero-click weight, the
+			// same as in the ranking, so the figure shown never promises its unwinnable clicks.
+			$keep                         = empty( $row['zero_click'] ) ? 1.0 : self::zero_click_weight();
+			$rows[ $i ]['winnable']       = $row['missed'] * $keep;
+			$rows[ $i ]['winnable_prize'] = $row['prize'] * $keep;
+			$out['winnable']             += $row['missed'] * $keep;
+			$out['winnable_prize']       += $row['prize'] * $keep;
+			$all_shown                   += (int) $row['impressions'];
+			$zero_shown                  += empty( $row['zero_click'] ) ? 0 : (int) $row['impressions'];
+			$out['missed']               += $row['missed'];
+			$out['prize']                += $row['prize'];
+			$out['weighted']             += $row['missed'] * $row['weight'];
+			$out['weighted_prize']       += $row['prize'] * $row['weight'];
 			if ( empty( $row['remain'] ) ) {
 				$mix[ $row['intent'] ] = ( $mix[ $row['intent'] ] ?? 0 ) + $row['impressions']; // The mix of the searches Google names.
 			}
@@ -551,6 +565,7 @@ class Opportunity {
 			$out['mix'][ $k ] = $all > 0 ? round( $v / $all, 3 ) : 0.0;
 		}
 		arsort( $out['mix'] );
+		$out['zero_share'] = $all_shown > 0 ? round( $zero_shown / $all_shown, 3 ) : 0.0;
 		usort( $rows, static fn( $a, $b ) => [ $b['missed'] * $b['weight'], $b['prize'] ] <=> [ $a['missed'] * $a['weight'], $a['prize'] ] );
 		$out['rows'] = $rows;
 

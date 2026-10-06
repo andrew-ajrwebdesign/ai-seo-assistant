@@ -693,6 +693,9 @@ class Scan_Page {
 				$sub[] = sprintf( __( 'quick win %s', 'ai-seo-assistant' ), self::visits_year( (float) $r['quick_win'] ) );
 				/* translators: %s: "≈ 1,200 visits a year". */
 				$sub[] = sprintf( __( 'top-3 prize %s', 'ai-seo-assistant' ), self::visits_year( (float) $r['prize'] ) );
+				if ( (float) ( $r['zero_share'] ?? 0 ) > 0.5 ) {
+					$sub[] = __( 'most of its searches are answered by Google itself', 'ai-seo-assistant' );
+				}
 			}
 		}
 		$fixable = count( array_filter( (array) $row['issues'], static fn( $i ) => 'claude' === ( $i['who'] ?? '' ) ) );
@@ -772,7 +775,14 @@ class Scan_Page {
 		echo Ui::card_head( 'aisa-searches', 'search', __( 'What people search for', 'ai-seo-assistant' ), '' !== $meta['end'] ? self::searches_from( sprintf( __( 'Search Console · 90 days to %s', 'ai-seo-assistant' ), Ui::day( $meta['end'] ) ), $meta['country'] ) : '' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		$queries = (array) ( $page['gsc']['queries'] ?? [] );
 		if ( [] === $queries ) {
-			echo '<p class="aisa-pending">' . esc_html( null === $page ? __( 'No search data for this page yet. It arrives with the weekly push; until then Claude writes from the page content alone.', 'ai-seo-assistant' ) : __( 'Google showed this page for no searches in the last 90 days.', 'ai-seo-assistant' ) ) . '</p></section>';
+			if ( null === $page ) {
+				$why = __( 'No search data for this page yet. It arrives with the weekly push; until then Claude writes from the page content alone.', 'ai-seo-assistant' );
+			} elseif ( (int) ( $page['gsc']['impressions'] ?? 0 ) > 0 ) {
+				$why = __( 'Google didn’t name the searches for this page (it hides rare or private searches).', 'ai-seo-assistant' );
+			} else {
+				$why = __( 'Google showed this page for no searches in the last 90 days.', 'ai-seo-assistant' );
+			}
+			echo '<p class="aisa-pending">' . esc_html( $why ) . '</p></section>';
 			return;
 		}
 		$by   = [];
@@ -798,7 +808,7 @@ class Scan_Page {
 			$b = $by[ $q['query'] ] ?? null;
 			echo '<tr><th scope="row"' . ( $q['query'] === $main ? ' class="aisa-strong"' : '' ) . '>' . esc_html( $q['query'] ) . ( $extra ? ' ' . self::intent_tag( (string) ( $b['intent'] ?? 'unknown' ) ) : '' ) . ( ! empty( $b['zero_click'] ) ? '<br><span class="aisa-small">' . esc_html__( 'Google answers this search itself (few clicks possible)', 'ai-seo-assistant' ) . '</span>' : '' ) . '</th>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in intent_tag().
 				. '<td data-label="' . esc_attr__( 'Clicks', 'ai-seo-assistant' ) . '" class="aisa-num">' . esc_html( number_format_i18n( $q['clicks'] ) ) . '</td><td data-label="' . esc_attr__( 'Impressions', 'ai-seo-assistant' ) . '" class="aisa-num">' . esc_html( number_format_i18n( $q['impressions'] ) ) . '</td><td data-label="' . esc_attr__( 'Position', 'ai-seo-assistant' ) . '" class="aisa-num">' . esc_html( null === $q['position'] ? '–' : number_format_i18n( $q['position'], 1 ) ) . '</td><td data-label="' . esc_attr__( 'CTR', 'ai-seo-assistant' ) . '" class="aisa-num">' . esc_html( Ui::pct( $q['ctr'] ) ) . '</td>'
-				. ( $extra ? '<td data-label="' . esc_attr__( 'Quick win / yr', 'ai-seo-assistant' ) . '" class="aisa-num">' . esc_html( self::missed_cell( Opportunity::yearly( (float) ( $b['missed'] ?? 0 ) ) ) ) . '</td><td data-label="' . esc_attr__( 'Top 3 / yr', 'ai-seo-assistant' ) . '" class="aisa-num">' . esc_html( self::missed_cell( Opportunity::yearly( (float) ( $b['prize'] ?? 0 ) ) ) ) . '</td>' : '' )
+				. ( $extra ? '<td data-label="' . esc_attr__( 'Quick win / yr', 'ai-seo-assistant' ) . '" class="aisa-num">' . esc_html( self::missed_cell( Opportunity::yearly( (float) ( $b['winnable'] ?? $b['missed'] ?? 0 ) ) ) ) . '</td><td data-label="' . esc_attr__( 'Top 3 / yr', 'ai-seo-assistant' ) . '" class="aisa-num">' . esc_html( self::missed_cell( Opportunity::yearly( (float) ( $b['winnable_prize'] ?? $b['prize'] ?? 0 ) ) ) ) . '</td>' : '' )
 				. '</tr>';
 		}
 		if ( null !== $rest ) {
@@ -812,6 +822,10 @@ class Scan_Page {
 			echo '<p class="aisa-opp-sum"><strong>' . esc_html( sprintf( __( 'Quick win %1$s · Top-3 prize %2$s', 'ai-seo-assistant' ), self::visits_year( (float) $r['quick_win'] ), self::visits_year( (float) $r['prize'] ) ) ) . '</strong>'
 				/* translators: 1: enquiries from the quick win, 2: from the prize. */
 				. ( '' !== $enq ? '<br><span class="aisa-small">' . esc_html( sprintf( __( 'At this page’s enquiry rate: quick win %1$s, top-3 prize %2$s.', 'ai-seo-assistant' ), $enq, $prize ) ) . '</span>' : '' ) . '</p>';
+			if ( (float) ( $r['zero_share'] ?? 0 ) > 0.5 ) {
+				/* translators: %d: percentage of the page's impressions. */
+				echo '<p class="aisa-small aisa-tone--warn">' . esc_html( sprintf( __( 'Most of its searches are answered by Google itself: %d%% of its impressions are for searches Google answers on the results page (marked below), so few of those clicks can be won. The figures above count them at a tenth.', 'ai-seo-assistant' ), (int) round( 100 * (float) $r['zero_share'] ) ) ) . '</p>';
+			}
 			echo '<p class="aisa-small">' . esc_html__( 'Estimates, extra visits a year. Quick win = impressions × (expected CTR at today’s position − actual CTR): what a better title and description could bring; searches past position 20 add almost nothing. Top 3 = the same if each search reached position 3. Ranking also weighs each search by its intent (the tag under it).', 'ai-seo-assistant' ) . '</p>';
 		}
 		$total = (int) ( $page['gsc']['queries_total'] ?? 0 );
