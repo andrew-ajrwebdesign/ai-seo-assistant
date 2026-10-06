@@ -54,7 +54,15 @@ class EditorCheckTest extends TestCase {
 		$exact = [ 'check' => 'phrase', 'targets' => [ 'Treasure Valley cities' ], 'sources' => [] ];
 		$this->assertTrue( Editor_Check::in_place( $exact, [], self::TEXT ) );
 		$this->assertFalse( Editor_Check::in_place( [ 'targets' => [ 'treasure valley map' ] ] + $exact, [], self::TEXT ), 'exact: the words must be together' );
-		$this->assertTrue( Editor_Check::in_place( [ 'targets' => [ 'treasure valley map' ], 'words' => true ] + $exact, [], self::TEXT ), 'inferred: each word on the page' );
+		$this->assertTrue( Editor_Check::in_place( [ 'targets' => [ 'treasure valley cities' ] ] + $exact, [], 'shows the <strong>Treasure  Valley</strong> cities.' ), 'tags, spacing and case ignored' );
+
+		// Code-standards re-review: never word by word, never from shortcode attributes or markup.
+		$cost = Editor_Check::of( [ 'area' => 'content', 'advice' => 'Add a short section answering "cost of living in boise".' ] );
+		$this->assertSame( 'phrase', $cost['check'] );
+		$this->assertFalse( Editor_Check::in_place( $cost, [], 'Is Boise Idaho Affordable? Living here, the cost of it in short: in Boise it depends.' ), 'scattered words are not the phrase' );
+		$this->assertFalse( Editor_Check::in_place( $cost, [], '[et_pb_text title="cost of living in boise" admin_label="cost of living in boise"]Moving here soon?[/et_pb_text]' ), 'a shortcode attribute is not visible text' );
+		$this->assertFalse( Editor_Check::in_place( $cost, [], '<img alt="cost of living in boise" src="x.jpg"><p>Hello</p>' ), 'an HTML attribute is not visible text' );
+		$this->assertTrue( Editor_Check::in_place( $cost, [], '[et_pb_text admin_label="Intro"]<p>The <em>cost of living</em> in Boise, in short.</p>[/et_pb_text]' ), 'the phrase in visible text counts' );
 
 		$link = [ 'check' => 'link', 'targets' => [ 'Boise neighborhoods map' ], 'sources' => [ '/boise-neighborhoods/' ] ];
 		$this->assertTrue( Editor_Check::in_place( $link, [], '', [ [ '/boise-neighborhoods/', 'See our Boise Neighborhoods Map' ] ] ) );
@@ -118,8 +126,9 @@ class EditorCheckTest extends TestCase {
 	}
 
 	/**
-	 * The editor's to-do box on Andrew's page after his edit: the H1 and the line show done without a
-	 * click and are not counted; the link (not there yet) is still a to-do.
+	 * The editor's to-do box on Andrew's page after his edit: the H1 shows done without a click and is not
+	 * counted; the content line (its quoted searches are not on the page as phrases) and the link (not
+	 * there yet) are still to-dos.
 	 */
 	public function test_box_marks_what_is_there(): void {
 		$row     = [
@@ -135,7 +144,8 @@ class EditorCheckTest extends TestCase {
 		$items   = array_column( Editor_Box::items( $row, [], $context ), null, 'area' );
 		$this->assertTrue( $items['Headings']['found'] );
 		$this->assertSame( (int) strtotime( '2026-10-06 14:28:31 UTC' ), $items['Headings']['done'] );
-		$this->assertTrue( $items['Content']['found'] );
+		$this->assertFalse( $items['Content']['found'], '"treasure valley map" is not on the page as a phrase: the person ticks Done' );
+		$this->assertNull( $items['Content']['done'] );
 		$this->assertNull( $items['Links']['done'], 'not there yet: still to do' );
 	}
 }

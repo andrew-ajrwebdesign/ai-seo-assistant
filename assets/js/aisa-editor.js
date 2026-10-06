@@ -71,8 +71,14 @@
 			const sel = window.getSelection();
 			if ( 'c' === key ) {
 				const text = sel ? sel.toString() : '';
-				if ( '' === text || ! panelOf( sel.anchorNode ) || ! panelOf( sel.focusNode ) ) {
+				const panel = sel ? panelOf( sel.anchorNode ) : null;
+				if ( '' === text || ! panel || panel !== panelOf( sel.focusNode ) ) {
 					return; // Not ours: leave it to the page (Divi's own copy keeps working).
+				}
+				// A selection left in the panel while the person works on a Divi module is not a copy of
+				// ours: only when the pointer or the focus is in the panel too.
+				if ( ! panel.matches( ':hover' ) && ! panel.contains( document.activeElement ) ) {
+					return;
 				}
 				event.stopImmediatePropagation();
 				copyText( text );

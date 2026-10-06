@@ -8,8 +8,8 @@
  * latest scan of the rendered page:
  *   h1      the page's H1 equals the target (case and punctuation ignored);
  *   h2      one of its H2s equals the target;
- *   phrase  every target phrase is in the page's text (inferred from older advice, whose quotes are often
- *           the searches rather than the words to add: every WORD of each phrase is on the page);
+ *   phrase  every target phrase is in the page's VISIBLE text, as a whole phrase (case, spacing and
+ *           punctuation ignored; shortcodes, tags and their attributes are not text);
  *   link    another page links here with the target words in the link text (from the named pages, when
  *           the advice names them);
  *   none    nothing checkable: the person ticks Done.
@@ -42,7 +42,7 @@ class Editor_Check {
 	 * The check for one piece of advice: Claude's own when it gave one, else worked out from its words.
 	 *
 	 * @param array<string,mixed> $item { area, advice, check?, target?, source? }.
-	 * @return array{check:string,targets:array<int,string>,sources:array<int,string>,words?:bool}
+	 * @return array{check:string,targets:array<int,string>,sources:array<int,string>}
 	 */
 	public static function of( array $item ): array {
 		$check = (string) ( $item['check'] ?? '' );
@@ -99,11 +99,13 @@ class Editor_Check {
 			];
 		}
 		if ( 'content' === $area ) {
+			// The quotes are the phrases to add (often a search): done only when each is on the page as a
+			// whole phrase. Never word by word: "cost of living in boise" is not done by a page that says
+			// "living" in one place and "cost" in another.
 			return [
 				'check'   => 'phrase',
 				'targets' => $quotes,
 				'sources' => [],
-				'words'   => true, // Quoted searches, not the exact words to add: each word on the page.
 			];
 		}
 		if ( 'links' === $area ) {
@@ -142,10 +144,9 @@ class Editor_Check {
 				}
 				return in_array( $targets[0], $h2, true );
 			case 'phrase':
-				$body  = ' ' . self::norm( $text ) . ' ';
-				$words = array_flip( explode( ' ', trim( $body ) ) );
+				$body = ' ' . self::norm( self::visible_text( $text ) ) . ' ';
 				foreach ( $targets as $t ) {
-					if ( empty( $check['words'] ) ? false === strpos( $body, ' ' . $t . ' ' ) : [] !== array_diff( explode( ' ', $t ), array_keys( $words ) ) ) {
+					if ( false === strpos( $body, ' ' . $t . ' ' ) ) {
 						return false;
 					}
 				}
@@ -164,6 +165,20 @@ class Editor_Check {
 		}
 
 		return false;
+	}
+
+	/**
+	 * What a visitor reads: shortcodes (Divi's [et_pb_… attr="…"]), HTML tags and their attributes, and
+	 * script and style blocks removed. Only the words between them are left.
+	 *
+	 * @param string $text Post content or rendered HTML.
+	 */
+	public static function visible_text( string $text ): string {
+		$text = (string) preg_replace( '@<(script|style)[^>]*>.*?</\1>@si', ' ', $text );
+		$text = (string) preg_replace( '/\[\/?[a-zA-Z0-9_-]+(?:\s[^\]]*)?\]/', ' ', $text ); // Shortcode tags, attributes and all.
+		$text = (string) preg_replace( '/<[^>]*>/', ' ', $text ); // phpcs:ignore -- pure PHP (no WordPress); tags and attributes out.
+
+		return $text;
 	}
 
 	/**

@@ -364,7 +364,9 @@ class Scanner {
 		}
 
 		// Obvious page types are set now (or wait for the agency's next visit when this pass has no user).
-		Auto_Types::apply( $auto );
+		// A full run sets them all; an inline refresh (an editor or review load) at most a batch, like the
+		// scan screen's run_pending(): the rest wait.
+		$network ? Auto_Types::apply( $auto ) : Auto_Types::apply( $auto, null, Auto_Types::PENDING_BATCH, 5.0 );
 
 		// A finding on most pages belongs to the template (the author box, the theme's heading order): it is
 		// reported once for the site and taken off the pages.
@@ -435,9 +437,17 @@ class Scanner {
 		if ( null === $row || ! $post instanceof \WP_Post || $post->post_modified_gmt <= (string) $row['scanned_at'] ) {
 			return false;
 		}
-		$scanner = new self( $store );
-		$scanner->scan_page( $post_id );
-		$scanner->finalize( false );
+		if ( false !== get_transient( Scheduler::LOCK ) ) {
+			return false; // A scan step is running: it will get to the page; never two site-wide passes at once.
+		}
+		set_transient( Scheduler::LOCK, time(), 120 );
+		try {
+			$scanner = new self( $store );
+			$scanner->scan_page( $post_id );
+			$scanner->finalize( false );
+		} finally {
+			delete_transient( Scheduler::LOCK );
+		}
 
 		return true;
 	}

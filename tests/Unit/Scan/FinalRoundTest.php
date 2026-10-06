@@ -75,7 +75,7 @@ class FinalRoundTest extends TestCase {
 	 */
 	protected function post_class(): void {
 		if ( ! class_exists( '\WP_Post' ) ) {
-			eval( 'class WP_Post { public $ID = 0; public $post_type = "page"; public $post_status = "publish"; public $post_password = ""; }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a test stand-in for core's class.
+			eval( 'class WP_Post { public $ID = 0; public $post_type = "page"; public $post_status = "publish"; public $post_password = ""; public $post_modified_gmt = ""; public $post_content = ""; }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a test stand-in for core's class.
 		}
 	}
 
@@ -176,6 +176,45 @@ class FinalRoundTest extends TestCase {
 		$this->assertSame( '1 alt attribute written into the page: “A white kitchen”', \AJR\SEOAssistant\Admin\Changes_Page::content_row_summary( $log, 8 ) );
 		$this->assertSame( 1, $log->gets );
 		$this->assertSame( [ 8 => '1 alt attribute written into the page: “A white kitchen”' ], $log->notes, 'kept for next time' );
+	}
+
+	/**
+	 * Code-standards re-review: an editor or review load does not rescan while a scan step holds the
+	 * lock, takes the lock while it does, and sets waiting page types in a capped batch only.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_inline_refresh_respects_the_lock_and_the_cap(): void {
+		$this->post_class();
+		$this->transients[ Scheduler::LOCK ] = time();
+		$GLOBALS['wpdb'] = new class() { // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test double.
+			/** @var string */
+			public $prefix = 'wp_';
+			public function prepare( $q, ...$a ) {
+				return $q;
+			}
+			public function get_row( $q, $o ) {
+				return [ 'post_id' => 5, 'path' => '/x/', 'facts' => '{}', 'issues' => '[]', 'suggestions' => null, 'issue_count' => 0, 'scanned_at' => '2026-01-01 00:00:00' ];
+			}
+		};
+		$post                    = new \WP_Post();
+		$post->ID                = 5;
+		$post->post_modified_gmt = '2026-10-06 00:00:00'; // Edited after the scan of 1 Jan: stale.
+		\WP_Mock::userFunction( 'get_post' )->andReturn( $post );
+		$scanned = false;
+		\WP_Mock::userFunction( 'get_permalink' )->andReturnUsing(
+			function () use ( &$scanned ) {
+				$scanned = true; // scan_page() would start here.
+				return 'https://site.test/x/';
+			}
+		);
+		$this->assertFalse( Scanner::refresh_if_stale( 5 ), 'a scan step holds the lock: no second pass' );
+		$this->assertFalse( $scanned, 'and the page is not scanned' );
+
+		$src = (string) file_get_contents( dirname( __DIR__, 3 ) . '/src/Scan/Scanner.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading source.
+		$this->assertStringContainsString( 'Auto_Types::apply( $auto, null, Auto_Types::PENDING_BATCH, 5.0 )', $src, 'the inline pass sets a capped batch only' );
+		$this->assertMatchesRegularExpression( '/set_transient\( Scheduler::LOCK.*finally \{\s*\$scanner|finally \{\s*delete_transient\( Scheduler::LOCK \)/s', $src, 'and holds the lock while it runs' );
 	}
 
 	/**
