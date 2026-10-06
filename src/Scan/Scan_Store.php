@@ -68,7 +68,11 @@ class Scan_Store {
 		}
 		// How many of them the page review can fix (the rest are "do in the editor"), for the list's wording.
 		$kinds['_claude'] = count( array_filter( $issues, static fn( $i ) => 'claude' === ( $i['who'] ?? '' ) ) );
-		$csv              = implode( ',', array_map( static fn( $k, $n ) => $k . ':' . $n, array_keys( $kinds ), $kinds ) );
+		// Marks a "Page type not set" finding, so the list can drop it the moment a type is set elsewhere.
+		if ( in_array( 'page_type_unset', array_column( $issues, 'code' ), true ) ) {
+			$kinds['_ptype'] = 1;
+		}
+		$csv = implode( ',', array_map( static fn( $k, $n ) => $k . ':' . $n, array_keys( $kinds ), $kinds ) );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the plugin's own table.
 		$wpdb->update(
 			Schema::table( 'scan' ),
@@ -81,6 +85,23 @@ class Scan_Store {
 			[ '%s', '%d', '%s' ],
 			[ '%d' ]
 		);
+	}
+
+	/**
+	 * A page type was set or changed outside a scan (AJR Core's ajr_core_page_type_changed): drop the stored
+	 * "Page type not set" finding at once. A cleared type waits for the next scan to judge the page again.
+	 *
+	 * @param int    $post_id Post ID.
+	 * @param string $type    The new type ('' cleared).
+	 */
+	public function type_changed( int $post_id, string $type ): void {
+		if ( '' === $type ) {
+			return;
+		}
+		$row = $this->get( $post_id ); // get() already leaves the finding out once a type is set.
+		if ( null !== $row ) {
+			$this->save_issues( $post_id, (array) $row['issues'] );
+		}
 	}
 
 	/**
@@ -113,8 +134,17 @@ class Scan_Store {
 		$table = Schema::table( 'scan' );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own table.
 		$row = $wpdb->get_row( $wpdb->prepare( "SELECT * FROM `{$table}` WHERE post_id = %d", $post_id ), ARRAY_A );
+		if ( ! is_array( $row ) ) {
+			return null;
+		}
+		$row = self::decode( $row );
+		// The page type may have been set since the scan (AJR Core's box, another screen): the stored
+		// "not set" finding never contradicts the type the review shows.
+		if ( '' !== Page_Role::type_of( $post_id ) ) {
+			$row['issues'] = array_values( array_filter( (array) $row['issues'], static fn( $i ) => 'page_type_unset' !== ( $i['code'] ?? '' ) ) );
+		}
 
-		return is_array( $row ) ? self::decode( $row ) : null;
+		return $row;
 	}
 
 	/**
@@ -135,7 +165,16 @@ class Scan_Store {
 				$kinds[ $k ] = (int) $n;
 			}
 			$row['claude_fixable'] = (int) ( $kinds['_claude'] ?? $row['issue_count'] );
-			unset( $kinds['_claude'] );
+			$stale_type            = isset( $kinds['_ptype'] ) && '' !== Page_Role::type_of( (int) $row['post_id'] );
+			unset( $kinds['_claude'], $kinds['_ptype'] );
+			if ( $stale_type ) {
+				// "Page type not set", but a type was set since the scan: not counted.
+				$kinds['schema']    = max( 0, (int) ( $kinds['schema'] ?? 0 ) - 1 );
+				$row['issue_count'] = max( 0, (int) $row['issue_count'] - 1 );
+				if ( 0 === $kinds['schema'] ) {
+					unset( $kinds['schema'] );
+				}
+			}
 			$row['kinds']                 = $kinds;
 			$row['post_id']               = (int) $row['post_id'];
 			$row['issue_count']           = (int) $row['issue_count'];

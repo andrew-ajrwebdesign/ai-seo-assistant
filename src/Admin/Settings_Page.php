@@ -215,6 +215,10 @@ class Settings_Page {
 		$tone = '<textarea id="aisa-tone" name="tone" rows="3">' . esc_textarea( Business::tone() ) . '</textarea>'
 			. '<p><a href="' . esc_url( \AJR\SEOAssistant\Scan\Listing::core_url() ) . '">' . esc_html__( 'Fix in Business details', 'ai-seo-assistant' ) . ' ↗</a></p>';
 		echo $this->row( esc_html__( 'Tone and extra notes', 'ai-seo-assistant' ), __( 'Only this field is stored by the plugin.', 'ai-seo-assistant' ), $tone, 'aisa-tone' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped piecewise.
+		if ( \AJR\SEOAssistant\Scan\Page_Role::can_auto() ) {
+			$auto = '<label class="aisa-check"><input type="checkbox" id="aisa-auto-types" name="auto_types" value="1"' . checked( '0' !== (string) get_option( \AJR\SEOAssistant\Scan\Auto_Types::OPTION, '1' ), true, false ) . '> ' . esc_html__( 'Set obvious page types automatically', 'ai-seo-assistant' ) . '</label><input type="hidden" name="auto_types_shown" value="1">';
+			echo $this->row( esc_html__( 'Page types', 'ai-seo-assistant' ), __( 'Only when AJR Core is sure (the booking page, a blog post, a title that is one of your services…). Each is logged in Changes with Undo, and a page you set or undo by hand is never touched again.', 'ai-seo-assistant' ), $auto, 'aisa-auto-types' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped piecewise.
+		}
 		echo '</section>';
 	}
 
@@ -369,6 +373,9 @@ class Settings_Page {
 		}
 		if ( isset( $_POST['tone'] ) ) {
 			update_option( Business::TONE_OPTION, sanitize_textarea_field( wp_unslash( $_POST['tone'] ) ), false );
+		}
+		if ( isset( $_POST['auto_types_shown'] ) ) {
+			update_option( \AJR\SEOAssistant\Scan\Auto_Types::OPTION, empty( $_POST['auto_types'] ) ? '0' : '1', false );
 		}
 		if ( isset( $_POST['alert_email'] ) ) {
 			$email = sanitize_email( wp_unslash( $_POST['alert_email'] ) );

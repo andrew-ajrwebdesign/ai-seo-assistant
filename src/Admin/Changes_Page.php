@@ -236,7 +236,7 @@ class Changes_Page {
 				],
 				admin_url( 'admin.php' )
 			);
-			echo '<tr><td class="aisa-col-date"><strong>' . esc_html( wp_date( 'D j M', (int) strtotime( $row['applied_at'] . ' UTC' ) ) ) . '</strong><br><span class="aisa-small">' . esc_html( $user ? $user->display_name : '' ) . '</span></td>'
+			echo '<tr><td class="aisa-col-date"><strong>' . esc_html( wp_date( 'D j M', (int) strtotime( $row['applied_at'] . ' UTC' ) ) ) . '</strong><br><span class="aisa-small">' . esc_html( $user ? $user->display_name : ( 0 === (int) $row['user_id'] ? __( 'Automatic', 'ai-seo-assistant' ) : '' ) ) . '</span></td>'
 				. '<td class="aisa-col-page"><a href="' . esc_url( $edit ) . '"><strong>' . esc_html( '' !== $title ? $title : $row['path'] ) . '</strong></a><br><span class="aisa-path">' . esc_html( $row['path'] ) . '</span></td>'
 				. '<td data-label="' . esc_attr__( 'Field', 'ai-seo-assistant' ) . '">' . esc_html( $labels[ $row['field'] ] ?? $row['field'] ) . '</td>'
 				. '<td>' . ( 'content' === $row['field'] ? '<p class="aisa-small">' . esc_html( self::content_row_summary( $log, (int) $row['id'] ) ) . '</p>' : '<dl class="aisa-ba"><dt>' . esc_html__( 'Before', 'ai-seo-assistant' ) . '</dt><dd class="aisa-before">' . esc_html( '' !== $row['before_value'] ? (string) $row['before_value'] : __( '(empty)', 'ai-seo-assistant' ) ) . '</dd><dt>' . esc_html__( 'After', 'ai-seo-assistant' ) . '</dt><dd>' . esc_html( (string) $row['after_value'] ) . '</dd></dl>' ) . '</td>'
@@ -261,7 +261,7 @@ class Changes_Page {
 				/* translators: 1: date, 2: who. */
 				return [ sprintf( __( 'Undone %s', 'ai-seo-assistant' ), wp_date( 'j M', (int) strtotime( (string) $row['undone_at'] . ' UTC' ) ) ), 'muted', sprintf( __( 'Undone by %s. Not measured.', 'ai-seo-assistant' ), $who ? $who->display_name : '' ) ];
 			case 'not_measured':
-				return [ __( 'Not measured', 'ai-seo-assistant' ), 'muted', in_array( $row['field'], [ 'alt', 'content' ], true ) ? __( 'Alt text has no click-rate measure; logged for the record.', 'ai-seo-assistant' ) : __( 'A setting in the SEO plugin; it does not change what Google shows.', 'ai-seo-assistant' ) ];
+				return [ __( 'Not measured', 'ai-seo-assistant' ), 'muted', 'page_type' === $row['field'] ? __( 'A page type changes what Google reads, not the listing text; logged for the record.', 'ai-seo-assistant' ) : ( in_array( $row['field'], [ 'alt', 'content' ], true ) ? __( 'Alt text has no click-rate measure; logged for the record.', 'ai-seo-assistant' ) : __( 'A setting in the SEO plugin; it does not change what Google shows.', 'ai-seo-assistant' ) ) ];
 			case 'measured':
 				$d     = (float) ( $e['delta'] ?? 0 );
 				$pts   = number_format_i18n( abs( $d ), 1 );
@@ -320,6 +320,7 @@ class Changes_Page {
 			'keyphrase'   => __( 'Focus keyphrase', 'ai-seo-assistant' ),
 			'alt'         => __( 'Alt text', 'ai-seo-assistant' ),
 			'content'     => __( 'Alt text in the page', 'ai-seo-assistant' ),
+			'page_type'   => __( 'Page type', 'ai-seo-assistant' ),
 		];
 	}
 
@@ -350,7 +351,7 @@ class Changes_Page {
 				$out,
 				array_map(
 					[ self::class, 'cell' ],
-					[ $row['applied_at'], $user ? $user->display_name : '', wp_strip_all_tags( (string) get_the_title( $row['post_id'] ) ), $row['path'], $row['field'], 'content' === $row['field'] ? self::content_summary( (string) $row['before_value'], (string) $row['after_value'] ) : $row['before_value'], 'content' === $row['field'] ? '' : $row['after_value'], $effect['verdict'] ?? $effect['state'], $effect['ctr_before'] ?? '', $effect['ctr_after'] ?? '', (string) $row['undone_at'] ]
+					[ $row['applied_at'], $user ? $user->display_name : ( 0 === (int) $row['user_id'] ? 'Automatic' : '' ), wp_strip_all_tags( (string) get_the_title( $row['post_id'] ) ), $row['path'], $row['field'], 'content' === $row['field'] ? self::content_summary( (string) $row['before_value'], (string) $row['after_value'] ) : $row['before_value'], 'content' === $row['field'] ? '' : $row['after_value'], $effect['verdict'] ?? $effect['state'], $effect['ctr_before'] ?? '', $effect['ctr_after'] ?? '', (string) $row['undone_at'] ]
 				)
 			);
 		}

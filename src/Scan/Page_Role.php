@@ -200,6 +200,77 @@ class Page_Role {
 	}
 
 	/**
+	 * Whether AJR Core can judge and set page types automatically (0.22: suggest_with_confidence, set_auto).
+	 */
+	public static function can_auto(): bool {
+		return self::core() && method_exists( self::CORE, 'suggest_with_confidence' ) && method_exists( self::CORE, 'set_auto' );
+	}
+
+	/**
+	 * AJR Core's verdict on a page: the type, how sure (high | medium | none) and why. On an older AJR Core
+	 * every page is "medium" (its suggestion, or none): "not set" stays an issue, as before.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return array{type:string,confidence:string,reason:string}
+	 */
+	public static function verdict( int $post_id ): array {
+		if ( ! self::core() ) {
+			return [
+				'type'       => '',
+				'confidence' => 'none',
+				'reason'     => '',
+			];
+		}
+		if ( ! method_exists( self::CORE, 'suggest_with_confidence' ) ) {
+			return [
+				'type'       => self::suggest( $post_id ),
+				'confidence' => 'medium',
+				'reason'     => '',
+			];
+		}
+		$core = self::CORE;
+		$v    = (array) $core::suggest_with_confidence( $post_id );
+		$conf = in_array( $v['confidence'] ?? '', [ 'high', 'medium', 'none' ], true ) ? (string) $v['confidence'] : 'none';
+		$type = (string) ( $v['type'] ?? '' );
+		$type = isset( self::types()[ $type ] ) ? $type : ''; // A type this Core no longer has: no verdict.
+
+		return [
+			'type'       => $type,
+			'confidence' => '' === $type ? 'none' : $conf,
+			'reason'     => (string) ( $v['reason'] ?? '' ),
+		];
+	}
+
+	/**
+	 * Who set the page's type in AJR Core: 'auto', 'manual' or '' (unknown / older Core).
+	 *
+	 * @param int $post_id Post ID.
+	 */
+	public static function source( int $post_id ): string {
+		if ( ! self::core() || ! method_exists( self::CORE, 'source' ) ) {
+			return '';
+		}
+		$core = self::CORE;
+
+		return (string) $core::source( $post_id );
+	}
+
+	/**
+	 * Set a type automatically (AJR Core refuses a page a person has decided).
+	 *
+	 * @param int    $post_id Post ID.
+	 * @param string $type    Page type slug.
+	 */
+	public static function set_auto( int $post_id, string $type ): bool {
+		if ( ! self::can_auto() ) {
+			return false;
+		}
+		$core = self::CORE;
+
+		return (bool) $core::set_auto( $post_id, $type );
+	}
+
+	/**
 	 * Set a page type through AJR Core ('' clears it). Core checks edit_post and validates.
 	 *
 	 * @param int    $post_id Post ID.
@@ -232,7 +303,7 @@ class Page_Role {
 	 *
 	 * @param array<int,string> $types Post type by post ID.
 	 * @param array<int,string> $flags Flags stored at scan time (flags()), by post ID; pages without them are read.
-	 * @return array<int,array{role:string,set:bool,type:string}>
+	 * @return array<int,array{role:string,set:bool,type:string,source:string}>
 	 */
 	public static function for_posts( array $types, array $flags = [] ): array {
 		$ids = array_map( 'intval', array_keys( $types ) );
@@ -246,9 +317,10 @@ class Page_Role {
 			$page_type  = self::type_of( (int) $id );
 			$role       = self::role_of_type( $page_type );
 			$out[ $id ] = [
-				'role' => '' !== $role ? $role : self::default_role( (string) $type, isset( $money[ $id ] ), isset( $listing[ $id ] ) ),
-				'set'  => '' !== $page_type,
-				'type' => $page_type,
+				'role'   => '' !== $role ? $role : self::default_role( (string) $type, isset( $money[ $id ] ), isset( $listing[ $id ] ) ),
+				'set'    => '' !== $page_type,
+				'type'   => $page_type,
+				'source' => '' !== $page_type ? self::source( (int) $id ) : '',
 			];
 		}
 

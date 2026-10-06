@@ -205,6 +205,9 @@ class Scheduler {
 		if ( 'publish' !== $new_status && 'publish' !== $old_status ) {
 			return; // Drafts are not scanned.
 		}
+		if ( 'publish' === $new_status && 'publish' !== $old_status ) {
+			Auto_Types::on_publish( (int) $post->ID ); // A new page with an obvious type gets it now.
+		}
 		$queue = self::queue();
 		if ( null !== $queue ) {
 			if ( ! in_array( $post->ID, $queue['ids'], true ) ) {

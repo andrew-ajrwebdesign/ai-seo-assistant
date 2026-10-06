@@ -297,8 +297,22 @@ class Scanner {
 		$type_names = $has_types ? array_map( static fn( $t ) => $t['label'], Page_Role::types() ) : [];
 
 		$all      = [];
+		$auto     = [];
+		$review   = [];
 		$rendered = 0;
 		foreach ( $rows as $id => $row ) {
+			$now     = $has_types ? Page_Role::type_of( (int) $id ) : '';
+			$verdict = $has_types && '' === $now ? Page_Role::verdict( (int) $id ) : [
+				'type'       => '',
+				'confidence' => 'none',
+				'reason'     => '',
+			];
+			if ( 'high' === $verdict['confidence'] && Auto_Types::enabled() && 'manual' !== Page_Role::source( (int) $id ) ) {
+				$auto[ $id ] = $verdict['type'];
+			} elseif ( 'high' === $verdict['confidence'] || 'medium' === $verdict['confidence'] ) {
+				$review[ $id ]         = [ $verdict['type'], $verdict['reason'] ];
+				$verdict['confidence'] = 'medium'; // Auto-apply off or refused: the agency decides, so it is an issue.
+			}
 			$f    = $row['facts'];
 			$path = self::norm_path( $row['path'] );
 			$key  = strtolower( (string) $row['path'] ); // Pushed data is keyed lower-case (Page_Data::keyed()).
@@ -322,8 +336,9 @@ class Scanner {
 				'is_service'       => 'page' === $row['post_type'] && self::matches_service( $f, $path, $services ),
 				'custom_schema_on' => $schema_on,
 				'page_types'       => $has_types,
-				'page_type'        => $has_types ? Page_Role::type_of( (int) $id ) : '',
-				'suggested_type'   => $has_types ? Page_Role::suggest( (int) $id ) : '',
+				'page_type'        => '' !== $now ? $now : ( $auto[ $id ] ?? '' ),
+				'suggested_type'   => $verdict['type'],
+				'type_confidence'  => $verdict['confidence'],
 				'type_labels'      => $type_names,
 				'discouraged'      => $discourage,
 				'heavy'            => [],
@@ -345,6 +360,9 @@ class Scanner {
 			$rendered  += 'rendered' === $row['source'] ? 1 : 0;
 		}
 
+		// Obvious page types are set now (or wait for the agency's next visit when this pass has no user).
+		Auto_Types::apply( $auto );
+
 		// A finding on most pages belongs to the template (the author box, the theme's heading order): it is
 		// reported once for the site and taken off the pages.
 		$site  = Rules::site_wide( $all );
@@ -365,6 +383,13 @@ class Scanner {
 			'fallback'    => count( $rows ) - $rendered,
 			'sitemap'     => null !== $sitemap,
 			'discouraged' => $discourage,
+			'type_review' => array_map(
+				static fn( $r ) => [
+					'type'   => (string) $r[0],
+					'reason' => (string) $r[1],
+				],
+				array_filter( $review, static fn( $r ) => '' !== $r[0] )
+			),
 			'site_issues' => array_values(
 				array_map(
 					static fn( $s ) => [

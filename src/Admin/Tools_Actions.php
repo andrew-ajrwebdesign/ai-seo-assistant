@@ -49,6 +49,9 @@ class Tools_Actions {
 	/** Set a page's AJR Core page type (or clear it), which also sets its role in the opportunity score. */
 	public const ROLE = 'aisa_set_page_type';
 
+	/** The admin-post action: apply the suggested page types ticked in the scan's review list. */
+	public const TYPES = 'aisa_apply_types';
+
 	/**
 	 * Register hooks.
 	 */
@@ -61,6 +64,7 @@ class Tools_Actions {
 		add_action( 'admin_post_' . self::REDIRECTS, [ $this, 'redirects_moved' ] );
 		add_action( 'admin_post_' . self::ROLE, [ $this, 'set_role' ] );
 		add_action( 'wp_ajax_' . self::ROLE, [ $this, 'ajax_set_role' ] );
+		add_action( 'admin_post_' . self::TYPES, [ $this, 'apply_types' ] );
 		Changes_Page::register_export();
 		add_action( 'wp_ajax_aisa_scan_start', [ $this, 'ajax_scan_start' ] );
 		add_action( 'wp_ajax_aisa_scan_step', [ $this, 'ajax_scan_step' ] );
@@ -291,6 +295,31 @@ class Tools_Actions {
 		}
 
 		return $done;
+	}
+
+	/**
+	 * Apply the ticked suggested page types (the scan's "Review and apply all"), as one batch in Changes.
+	 * The types come from the stored suggestions, never from the form: only which pages is posted.
+	 */
+	public function apply_types(): void {
+		$this->guard( self::TYPES );
+		$ids     = isset( $_POST['ids'] ) ? array_filter( array_map( 'absint', (array) wp_unslash( $_POST['ids'] ) ) ) : [];
+		$suggest = (array) ( Scan_Store::meta()['type_review'] ?? [] );
+		$log     = new Change_Log();
+		$batch   = 'types-' . gmdate( 'YmdHis' ) . '-' . get_current_user_id();
+		$done    = 0;
+		foreach ( array_slice( $ids, 0, 500 ) as $id ) {
+			$type = (string) ( $suggest[ $id ]['type'] ?? '' );
+			if ( '' === $type || '' !== Page_Role::type_of( $id ) || 0 === self::apply_type( [ $id ], $type ) ) {
+				continue;
+			}
+			$log->log( $batch, $id, \AJR\SEOAssistant\Search\Page_Data::path_of( (string) get_permalink( $id ) ), \AJR\SEOAssistant\Scan\Auto_Types::FIELD, 0, '', $type, get_current_user_id() );
+			++$done;
+		}
+		if ( $done > 0 ) {
+			( new Scanner() )->finalize( false );
+		}
+		$this->back( [ 'aisa' => $done > 0 ? 'types' : 'type_failed' ] );
 	}
 
 	/**

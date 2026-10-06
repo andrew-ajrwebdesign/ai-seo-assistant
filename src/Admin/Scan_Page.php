@@ -60,6 +60,7 @@ class Scan_Page {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- read-only choice of page.
 		$post_id = isset( $_GET['post'] ) ? absint( $_GET['post'] ) : 0;
 		$this->save_mode();
+		\AJR\SEOAssistant\Scan\Auto_Types::run_pending(); // Obvious page types a cron pass could not set (no user then).
 		echo '<div class="wrap aisa-wrap"><hr class="wp-header-end"><div class="aisa-tool">';
 		if ( $post_id > 0 ) {
 			$this->review( $post_id );
@@ -330,6 +331,7 @@ class Scan_Page {
 			'capped'         => [ 'warning', __( 'The monthly AI cap is reached, so no new suggestions were written.', 'ai-seo-assistant' ) ],
 			'type'           => [ 'success', __( 'Page type saved in AJR Core. Google reads it from the next visit; the opportunity score counts it now.', 'ai-seo-assistant' ) ],
 			'type_failed'    => [ 'error', __( 'The page type was not changed.', 'ai-seo-assistant' ) ],
+			'types'          => [ 'success', __( 'Page types saved in AJR Core and logged in Changes (one Undo for the lot).', 'ai-seo-assistant' ) ],
 		];
 		if ( isset( $messages[ $code ] ) ) {
 			echo Ui::notice( $messages[ $code ][0], '<p>' . esc_html( $messages[ $code ][1] ) . '</p>' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped piecewise.
@@ -480,6 +482,7 @@ class Scan_Page {
 		echo Ui::card_head( 'aisa-ranked', 'list-view', __( 'Pages ranked by opportunity', 'ai-seo-assistant' ), sprintf( __( 'Search Console + Google Analytics · 90 days to %s', 'ai-seo-assistant' ), Ui::day( $meta['end'] ) ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		$mode = Ranking::mode();
 		echo '<div class="aisa-modes-row">' . $this->mode_toggle( $mode ) . '<p class="aisa-small">' . esc_html( 'prize' === $mode ? __( 'Ranked by the top-3 prize: pages worth content and link work.', 'ai-seo-assistant' ) : __( 'Ranked by the quick win: what a better title and description bring at today’s position.', 'ai-seo-assistant' ) ) . '</p></div>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in mode_toggle().
+		$this->type_review_bar();
 		$this->filters( $q, $issue, $type, $status, $hide );
 
 		// Bulk bar: the JS enables it; without JS each page's Review screen generates one at a time.
@@ -1271,8 +1274,11 @@ class Scan_Page {
 		echo Ui::card_head( 'aisa-greads-h', 'search', __( 'What Google reads on this page', 'ai-seo-assistant' ), $core ? __( 'Set in AJR Core · read by the scan', 'ai-seo-assistant' ) : __( 'Read by the scan', 'ai-seo-assistant' ) ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 
 		if ( $core ) {
-			echo '<div class="aisa-greads__type"><p class="aisa-greads__label"><strong>' . esc_html__( 'Page type', 'ai-seo-assistant' ) . '</strong> '
-				. ( '' !== $type ? Ui::pill( $types[ $type ]['label'] ?? $type, 'good' ) : Ui::pill( __( 'Not set', 'ai-seo-assistant' ), 'warn' ) ) . '</p>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+			$auto = '' !== $type && 'auto' === Page_Role::source( $post_id )
+				? ' ' . Ui::pill( __( 'Set automatically', 'ai-seo-assistant' ), 'info' ) . ' <a href="#aisa-page-type" class="aisa-linkbtn">' . esc_html__( 'Change', 'ai-seo-assistant' ) . '</a>'
+				: '';
+			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pills escaped in Ui; $auto built from escaped parts above.
+			echo '<div class="aisa-greads__type"><p class="aisa-greads__label"><strong>' . esc_html__( 'Page type', 'ai-seo-assistant' ) . '</strong> ' . ( '' !== $type ? Ui::pill( $types[ $type ]['label'] ?? $type, 'good' ) : Ui::pill( __( 'Not set', 'ai-seo-assistant' ), 'warn' ) ) . $auto . '</p>';
 			echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="aisa-greads__form">';
 			wp_nonce_field( Tools_Actions::ROLE );
 			echo '<input type="hidden" name="action" value="' . esc_attr( Tools_Actions::ROLE ) . '"><input type="hidden" name="post" value="' . esc_attr( (string) $post_id ) . '">'
@@ -1557,6 +1563,42 @@ class Scan_Page {
 	}
 
 	/**
+	 * "N pages have a suggested page type → Review and apply all": AJR Core's medium-confidence guesses for
+	 * pages with no type. Opened, it lists each page, the type and why, all ticked, applied in one request.
+	 */
+	protected function type_review_bar(): void {
+		if ( ! Page_Role::core() ) {
+			return;
+		}
+		$types   = Page_Role::types();
+		$waiting = array_filter(
+			(array) ( Scan_Store::meta()['type_review'] ?? [] ),
+			static fn( $s, $id ) => isset( $types[ $s['type'] ?? '' ] ) && '' === Page_Role::type_of( (int) $id ),
+			ARRAY_FILTER_USE_BOTH
+		);
+		if ( [] === $waiting ) {
+			return;
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- display only.
+		$open = isset( $_GET['types'] ) && 'review' === sanitize_key( wp_unslash( $_GET['types'] ) );
+		/* translators: %d: number of pages. */
+		$line = sprintf( _n( '%d page has a suggested page type', '%d pages have a suggested page type', count( $waiting ), 'ai-seo-assistant' ), count( $waiting ) );
+		if ( ! $open ) {
+			echo '<p class="aisa-typebar">' . Ui::icon( 'admin-customizer' ) . '<strong>' . esc_html( $line ) . '</strong> <a class="aisa-btn aisa-btn--small" href="' . esc_url( $this->url( [ 'types' => 'review' ] ) . '#aisa-typereview' ) . '">' . esc_html__( 'Review and apply all', 'ai-seo-assistant' ) . '</a></p>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+			return;
+		}
+		echo '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '" class="aisa-typereview" id="aisa-typereview">';
+		wp_nonce_field( Tools_Actions::TYPES );
+		echo '<input type="hidden" name="action" value="' . esc_attr( Tools_Actions::TYPES ) . '">';
+		echo '<fieldset><legend><strong>' . esc_html( $line ) . '</strong> <span class="aisa-small">' . esc_html__( 'Untick any you disagree with. Each one can be changed later, and the lot can be undone in Changes.', 'ai-seo-assistant' ) . '</span></legend><ul>';
+		foreach ( $waiting as $id => $s ) {
+			$field = 'aisa-type-' . (int) $id;
+			echo '<li><input type="checkbox" id="' . esc_attr( $field ) . '" name="ids[]" value="' . esc_attr( (string) $id ) . '" checked> <label for="' . esc_attr( $field ) . '"><strong>' . esc_html( wp_strip_all_tags( (string) get_the_title( (int) $id ) ) ) . '</strong> → ' . esc_html( (string) $types[ $s['type'] ]['label'] ) . ( '' !== (string) ( $s['reason'] ?? '' ) ? ' <span class="aisa-small">' . esc_html( (string) $s['reason'] ) . '</span>' : '' ) . '</label></li>';
+		}
+		echo '</ul></fieldset><p><button type="submit" class="aisa-btn aisa-btn--primary">' . esc_html__( 'Apply the ticked page types', 'ai-seo-assistant' ) . '</button> <a href="' . esc_url( $this->url( [] ) ) . '">' . esc_html__( 'Cancel', 'ai-seo-assistant' ) . '</a></p></form>';
+	}
+
+	/**
 	 * The page type tag on a list row: a small select writing to AJR Core (one click, via the script);
 	 * without AJR Core's page types, the derived role as a plain tag.
 	 *
@@ -1582,6 +1624,7 @@ class Scan_Page {
 
 		return '<select class="aisa-roletag aisa-roletag--' . esc_attr( (string) $r['role'] ) . ( $r['role_set'] ? ' is-set' : '' ) . '" data-aisa-role="' . esc_attr( (string) $id ) . '" aria-label="' . esc_attr( $aria ) . '" title="' . esc_attr( ( $r['role_set'] ? '' : __( 'Not set: ', 'ai-seo-assistant' ) ) . $title ) . '">'
 			. self::type_options( (string) $r['page_type'] ) . '</select>'
+			. ( 'auto' === ( $r['type_source'] ?? '' ) ? ' <span class="aisa-pill aisa-pill--info" title="' . esc_attr__( 'Set automatically: change it in the list, it then stays as you set it', 'ai-seo-assistant' ) . '">' . esc_html__( 'auto', 'ai-seo-assistant' ) . '</span>' : '' )
 			. ( $r['bumped'] ? '<span class="aisa-small aisa-tone--good" title="' . esc_attr( $title ) . '">↑</span>' : '' );
 	}
 

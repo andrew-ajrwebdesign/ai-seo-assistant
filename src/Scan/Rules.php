@@ -574,7 +574,9 @@ class Rules {
 		// business details. The one page-level finding is a missing page type, fixed in one click.
 		// Posts are left out: the SEO plugin already marks them up as articles, so 100 blog posts do not
 		// become 100 findings.
-		if ( ! empty( $ctx['page_types'] ) && '' === (string) ( $ctx['page_type'] ?? '' ) && 'post' !== ( $ctx['post_type'] ?? '' ) ) {
+		// Only a page AJR Core is unsure about: an obvious type is set automatically (Auto_Types), and a page
+		// nothing points anywhere is "other", which is not a problem.
+		if ( ! empty( $ctx['page_types'] ) && '' === (string) ( $ctx['page_type'] ?? '' ) && 'post' !== ( $ctx['post_type'] ?? '' ) && 'medium' === ( $ctx['type_confidence'] ?? 'medium' ) ) {
 			$labels  = (array) ( $ctx['type_labels'] ?? [] );
 			$suggest = (string) ( $ctx['suggested_type'] ?? '' );
 			$out[]   = self::issue(

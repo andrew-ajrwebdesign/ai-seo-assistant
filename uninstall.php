@@ -76,6 +76,8 @@ $ai_seo_assistant_options = [
 	'ai_seo_assistant_spend_lock', // AI/Spend::LOCK_OPTION (left only if a request died holding it).
 	'ai_seo_assistant_redirects_pending',
 	'ai_seo_assistant_google_revoke_failed', // Core/Upgrade::REVOKE_FAILED (a pending notice).
+	'ai_seo_assistant_auto_page_types', // Scan/Auto_Types::OPTION (the Settings toggle).
+	'ai_seo_assistant_auto_types_pending', // Scan/Auto_Types::PENDING (types waiting for a user).
 	// Writing preferences: 4.x settings screens saved them; 5.0 still reads them for Claude's prompts.
 	'ai_seo_assistant_brand_context',
 	'ai_seo_assistant_tone',

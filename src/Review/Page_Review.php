@@ -634,6 +634,18 @@ class Page_Review {
 				++$undone;
 				continue;
 			}
+			if ( \AJR\SEOAssistant\Scan\Auto_Types::FIELD === $row['field'] ) {
+				// Back to the type before (usually none). AJR Core's set() marks the page manual, so an automatic
+				// type that was undone is never set again.
+				if ( Page_Role::type_of( (int) $row['post_id'] ) !== (string) $row['after_value'] || ! Page_Role::set_type( (int) $row['post_id'], (string) $row['before_value'] ) ) {
+					$kept[] = $row['field'];
+					continue;
+				}
+				$this->log->mark_undone( $row['id'], $user_id );
+				$pages[ $row['post_id'] ] = true;
+				++$undone;
+				continue;
+			}
 			$now = 'alt' === $row['field'] ? (string) get_post_meta( $row['object_id'], '_wp_attachment_image_alt', true ) : $this->read( $row['field'], $row['post_id'] );
 			if ( $now !== $row['after_value'] ) {
 				$kept[] = $row['field'];

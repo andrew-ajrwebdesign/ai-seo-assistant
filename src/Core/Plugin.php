@@ -112,6 +112,16 @@ class Plugin {
 			10,
 			3
 		);
+		// AJR Core 0.22 announces every page type change (its own box, its bulk tools, set_auto): the scan's
+		// "Page type not set" finding goes at once. Harmless on an older Core (the action never fires).
+		add_action(
+			'ajr_core_page_type_changed',
+			static function ( $post_id, $old = '', $new = '' ): void { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundInExtendedClassAfterLastUsed,Generic.CodeAnalysis.UnusedFunctionParameter.FoundBeforeLastUsed -- the action's signature.
+				( new \AJR\SEOAssistant\Scan\Scan_Store() )->type_changed( (int) $post_id, (string) $new );
+			},
+			10,
+			3
+		);
 		add_action(
 			'aisa_scan_run',
 			static function (): void {

@@ -166,6 +166,7 @@ class Ranking {
 				'role'        => $role['role'],
 				'role_set'    => $role['set'],
 				'page_type'   => $role['type'],
+				'type_source' => (string) ( $role['source'] ?? '' ),
 				'bumped'      => $bumped,
 				'value'       => $value,
 				'worth_quick' => $worth,
