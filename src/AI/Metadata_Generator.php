@@ -27,13 +27,13 @@ class Metadata_Generator {
 	/**
 	 * Wires the generator to its collaborators.
 	 *
-	 * @param object                              $tsf_adapter       Active SEO plugin adapter (whichever the resolver picked).
+	 * @param object                                      $tsf_adapter       Active SEO plugin adapter (whichever the resolver picked).
 	 * @param \AJR\SEOAssistant\Content\Content_Extractor $content_extractor Page text extraction.
-	 * @param Prompt_Builder                      $prompt_builder    Prompts and their JSON schemas.
-	 * @param Claude_Client                       $ai_client         Claude API client.
-	 * @param \AJR\SEOAssistant\Core\Logger       $logger            Generation log store.
-	 * @param object                              $local_seo_context Site and page SEO focus.
-	 * @param object|null                         $gsc_client        Search Console data, when connected.
+	 * @param Prompt_Builder                              $prompt_builder    Prompts and their JSON schemas.
+	 * @param Claude_Client                               $ai_client         Claude API client.
+	 * @param \AJR\SEOAssistant\Core\Logger               $logger            Generation log store.
+	 * @param object                                      $local_seo_context Site and page SEO focus.
+	 * @param object|null                                 $gsc_client        Search Console data, when connected.
 	 */
 	public function __construct( $tsf_adapter, $content_extractor, $prompt_builder, Claude_Client $ai_client, $logger, $local_seo_context, $gsc_client = null ) {
 		$this->tsf_adapter       = $tsf_adapter;
@@ -481,34 +481,58 @@ class Metadata_Generator {
 
 	private function get_gsc_opportunity_label( $clicks, $impressions, $ctr, $position ) {
 		if ( $impressions <= 0 ) {
-			return [ 'label' => 'No data', 'tone' => 'neutral' ];
+			return [
+				'label' => 'No data',
+				'tone'  => 'neutral',
+			];
 		}
 
 		if ( $impressions < 5 || $position > 30 ) {
-			return [ 'label' => 'Low visibility', 'tone' => 'neutral' ];
+			return [
+				'label' => 'Low visibility',
+				'tone'  => 'neutral',
+			];
 		}
 
 		if ( $impressions >= 20 && $clicks <= 0 ) {
-			return [ 'label' => 'Target first', 'tone' => 'bad' ];
+			return [
+				'label' => 'Target first',
+				'tone'  => 'bad',
+			];
 		}
 
 		if ( $position >= 8 && $position <= 20 && $impressions >= 5 ) {
-			return [ 'label' => 'Page 2 opportunity', 'tone' => 'warning' ];
+			return [
+				'label' => 'Page 2 opportunity',
+				'tone'  => 'warning',
+			];
 		}
 
 		if ( $impressions >= 50 && $ctr < 0.02 ) {
-			return [ 'label' => 'Low CTR', 'tone' => 'warning' ];
+			return [
+				'label' => 'Low CTR',
+				'tone'  => 'warning',
+			];
 		}
 
 		if ( $clicks > 0 && $ctr >= 0.03 && $position > 0 && $position <= 10 ) {
-			return [ 'label' => 'Doing well', 'tone' => 'good' ];
+			return [
+				'label' => 'Doing well',
+				'tone'  => 'good',
+			];
 		}
 
 		if ( $clicks > 0 ) {
-			return [ 'label' => 'Monitor', 'tone' => 'neutral' ];
+			return [
+				'label' => 'Monitor',
+				'tone'  => 'neutral',
+			];
 		}
 
-		return [ 'label' => 'Needs review', 'tone' => 'warning' ];
+		return [
+			'label' => 'Needs review',
+			'tone'  => 'warning',
+		];
 	}
 
 	private function get_content_match_context( $post_id, $content, $page_local_context, $gsc_context ) {

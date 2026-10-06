@@ -231,15 +231,16 @@ class Page_Role {
 	 * Every listed page's role: from its page type, else the default.
 	 *
 	 * @param array<int,string> $types Post type by post ID.
+	 * @param array<int,string> $flags Flags stored at scan time (flags()), by post ID; pages without them are read.
 	 * @return array<int,array{role:string,set:bool,type:string}>
 	 */
-	public static function for_posts( array $types ): array {
+	public static function for_posts( array $types, array $flags = [] ): array {
 		$ids = array_map( 'intval', array_keys( $types ) );
 		if ( [] === $ids ) {
 			return [];
 		}
 		update_meta_cache( 'post', $ids );
-		[ $money, $listing ] = self::detect( $ids );
+		[ $money, $listing ] = self::detect( $ids, $flags );
 		$out                 = [];
 		foreach ( $types as $id => $type ) {
 			$page_type  = self::type_of( (int) $id );
@@ -326,10 +327,11 @@ class Page_Role {
 	/**
 	 * Of these posts, the ones named as money pages and the ones that are mainly a list of posts.
 	 *
-	 * @param array<int,int> $ids Post IDs.
+	 * @param array<int,int>    $ids   Post IDs.
+	 * @param array<int,string> $flags Flags stored at scan time, by post ID (those pages' content is not read).
 	 * @return array{0:array<int,true>,1:array<int,true>}
 	 */
-	protected static function detect( array $ids ): array {
+	protected static function detect( array $ids, array $flags = [] ): array {
 		global $wpdb;
 		$money   = [];
 		$listing = [];
@@ -342,8 +344,23 @@ class Page_Role {
 			}
 		}
 
+		$unread = [];
+		foreach ( $ids as $id ) {
+			if ( ! isset( $flags[ $id ] ) ) {
+				$unread[] = $id;
+				continue;
+			}
+			$set = explode( ',', (string) $flags[ $id ] );
+			if ( in_array( 'listing', $set, true ) ) {
+				$listing[ $id ] = true;
+			}
+			if ( in_array( 'form', $set, true ) ) {
+				$money[ $id ] = true;
+			}
+		}
+
 		$hosts = array_merge( self::SERVICE_HOSTS, self::booking_domains() );
-		foreach ( array_chunk( $ids, 200 ) as $chunk ) {
+		foreach ( array_chunk( $unread, 200 ) as $chunk ) {
 			$in = implode( ',', array_map( 'intval', $chunk ) );
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- integers only; agency screen, once per request.
 			foreach ( (array) $wpdb->get_results( "SELECT ID, post_content FROM {$wpdb->posts} WHERE ID IN ({$in})", ARRAY_A ) as $row ) {
@@ -365,6 +382,26 @@ class Page_Role {
 		}
 
 		return [ $money, $listing ];
+	}
+
+	/**
+	 * The role flags of a page's content, stored at scan time: 'listing' and/or 'form', comma-separated
+	 * ('none' when neither, so a stored answer is told apart from a page scanned before 5.0's schema 3).
+	 *
+	 * @param string $content Post content.
+	 */
+	public static function flags( string $content ): string {
+		static $hosts = null;
+		$hosts        = $hosts ?? array_merge( self::SERVICE_HOSTS, self::booking_domains() );
+		$set          = [];
+		if ( self::is_listing( $content ) ) {
+			$set[] = 'listing';
+		}
+		if ( self::holds_form( $content, $hosts ) ) {
+			$set[] = 'form';
+		}
+
+		return [] === $set ? 'none' : implode( ',', $set );
 	}
 
 	/**

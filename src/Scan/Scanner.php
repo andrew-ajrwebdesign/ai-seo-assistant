@@ -54,6 +54,13 @@ class Scanner {
 	protected Scan_Store $store;
 
 	/**
+	 * Attachment IDs found for image URLs in this scan.
+	 *
+	 * @var array<string,int>
+	 */
+	protected array $attachment_ids = [];
+
+	/**
 	 * Constructor.
 	 *
 	 * @param Scan_Store|null $store Storage.
@@ -148,7 +155,9 @@ class Scanner {
 		$facts['images']   = $this->resolve_images( (array) $facts['images'] );
 		$facts['modified'] = (string) $post->post_modified_gmt;
 
-		$this->store->save_facts( $post_id, Page_Data::path_of( $url ), $post->post_type, $source, $facts );
+		// What the page role needs from the content (a list of posts, a form), worked out once here rather
+		// than on every load of the list.
+		$this->store->save_facts( $post_id, Page_Data::path_of( $url ), $post->post_type, $source, $facts, Page_Role::flags( (string) $post->post_content ) );
 
 		return $source;
 	}
@@ -181,6 +190,20 @@ class Scanner {
 	}
 
 	/**
+	 * The attachment ID for an image URL (attachment_url_to_postid()), remembered for this scan (a header logo or a shared photo is on every
+	 * page: one query each, not one per page).
+	 *
+	 * @param string $url Image URL.
+	 */
+	protected function attachment_id( string $url ): int {
+		if ( ! array_key_exists( $url, $this->attachment_ids ) ) {
+			$this->attachment_ids[ $url ] = (int) attachment_url_to_postid( $url );
+		}
+
+		return $this->attachment_ids[ $url ];
+	}
+
+	/**
 	 * Attachment IDs and file weight for each content image.
 	 *
 	 * @param array<int,array<string,mixed>> $images Images from the parser.
@@ -196,8 +219,8 @@ class Scanner {
 			}
 			if ( empty( $img['id'] ) && false !== strpos( $src, '/uploads/' ) ) {
 				$full               = (string) preg_replace( '/-\d+x\d+(?=\.[a-z0-9]+$)/i', '', strtok( $src, '?' ) );
-				$id                 = attachment_url_to_postid( $full );
-				$images[ $i ]['id'] = $id ? $id : (int) attachment_url_to_postid( strtok( $src, '?' ) );
+				$id                 = $this->attachment_id( $full );
+				$images[ $i ]['id'] = $id ? $id : $this->attachment_id( (string) strtok( $src, '?' ) );
 			}
 			// The served file's weight: the uploads URL maps onto the uploads folder.
 			$kb  = 0;
@@ -273,7 +296,8 @@ class Scanner {
 		foreach ( $rows as $id => $row ) {
 			$f    = $row['facts'];
 			$path = self::norm_path( $row['path'] );
-			$page = $data[ $row['path'] ] ?? $data[ trailingslashit( $row['path'] ) ] ?? $data[ untrailingslashit( $row['path'] ) ] ?? null;
+			$key  = strtolower( (string) $row['path'] ); // Pushed data is keyed lower-case (Page_Data::keyed()).
+			$page = $data[ $key ] ?? $data[ trailingslashit( $key ) ] ?? $data[ untrailingslashit( $key ) ] ?? null;
 			$ctx  = [
 				'post_type'        => $row['post_type'],
 				'title_dupes'      => count( $titles[ mb_strtolower( (string) ( $f['title'] ?? '' ) ) ] ?? [] ) - 1,

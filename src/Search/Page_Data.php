@@ -43,17 +43,23 @@ class Page_Data {
 	 * @param array<string,string>              $range        { start, end } of the window.
 	 * @param int                               $generated_at When retainer-scan built it.
 	 */
-	public function replace_all( array $pages, array $range, int $generated_at ): void {
+	public function replace_all( array $pages, array $range, int $generated_at ): bool {
 		global $wpdb;
 		if ( ! Schema::is_current() ) {
 			Schema::install();
 		}
 		$table = Schema::table( 'pages' );
+		$pages = self::keyed( $pages );
+
+		// All or nothing: a failed insert (a lost connection, a full disk) rolls back to the last push's
+		// rows instead of leaving the site with part of a push.
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- a transaction on the plugin's own table.
+		$wpdb->query( 'START TRANSACTION' );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own table; replaced whole on each push.
-		$wpdb->query( "DELETE FROM `{$table}`" );
+		$ok = false !== $wpdb->query( "DELETE FROM `{$table}`" );
 
 		$now = gmdate( 'Y-m-d H:i:s' );
-		foreach ( array_chunk( $pages, 100, true ) as $chunk ) {
+		foreach ( $ok ? array_chunk( $pages, 100, true ) : [] as $chunk ) {
 			$values = [];
 			$args   = [];
 			foreach ( $chunk as $path => $page ) {
@@ -63,7 +69,21 @@ class Page_Data {
 				$args[]   = $now;
 			}
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,WordPress.DB.PreparedSQLPlaceholders.UnfinishedPrepare,WordPress.DB.PreparedSQL.NotPrepared -- placeholders built above, one triple per row.
-			$wpdb->query( $wpdb->prepare( "INSERT INTO `{$table}` (path, data, updated_at) VALUES " . implode( ',', $values ), $args ) );
+			if ( false === $wpdb->query( $wpdb->prepare( "INSERT INTO `{$table}` (path, data, updated_at) VALUES " . implode( ',', $values ), $args ) ) ) {
+				$ok = false;
+				break;
+			}
+		}
+		if ( $ok ) {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- see above.
+			$wpdb->query( 'COMMIT' );
+		} else {
+			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- see above.
+			$wpdb->query( 'ROLLBACK' );
+		}
+		if ( ! $ok ) {
+			self::$all = null;
+			return false; // The meta still describes the rows kept.
 		}
 
 		update_option(
@@ -78,6 +98,32 @@ class Page_Data {
 			false
 		);
 		self::$all = null;
+
+		return true;
+	}
+
+	/**
+	 * Pages keyed as stored: the path lower-cased (the column's collation ignores case, so "/About/" and
+	 * "/about/" are one key: the one with more impressions wins), and no path over the column's 191
+	 * characters (it could not be stored whole, and a cut one could match another page).
+	 *
+	 * @param array<string,array<string,mixed>> $pages Pages keyed by path.
+	 * @return array<string,array<string,mixed>>
+	 */
+	public static function keyed( array $pages ): array {
+		$out = [];
+		foreach ( $pages as $path => $page ) {
+			$key = strtolower( (string) $path );
+			if ( '' === $key || strlen( $key ) > 191 ) {
+				continue;
+			}
+			$weight = static fn( $p ) => (int) ( $p['gsc']['impressions'] ?? 0 );
+			if ( ! isset( $out[ $key ] ) || $weight( $page ) > $weight( $out[ $key ] ) ) {
+				$out[ $key ] = $page;
+			}
+		}
+
+		return $out;
 	}
 
 	/**
@@ -142,7 +188,7 @@ class Page_Data {
 	 * @return array<string,mixed>|null
 	 */
 	public function get( string $url_or_path ): ?array {
-		$path = self::path_of( $url_or_path );
+		$path = strtolower( self::path_of( $url_or_path ) ); // Stored lower-case: see keyed().
 		$all  = $this->all();
 		foreach ( array_unique( [ $path, trailingslashit( $path ), untrailingslashit( $path ) ] ) as $candidate ) {
 			if ( '' !== $candidate && isset( $all[ $candidate ] ) ) {

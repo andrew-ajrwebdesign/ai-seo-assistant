@@ -124,6 +124,9 @@ class Search_Console_Page {
 		foreach ( ( new Scan_Store() )->summaries() as $id => $row ) {
 			$posts[ Scanner::norm_path( (string) $row['path'] ) ] = $id;
 		}
+		if ( function_exists( '_prime_post_caches' ) ) {
+			_prime_post_caches( array_values( $posts ), false, false ); // Every title in one query.
+		}
 		$rows = [];
 		foreach ( $data as $path => $page ) {
 			$g = $page['gsc'];

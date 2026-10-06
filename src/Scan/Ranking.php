@@ -115,7 +115,7 @@ class Ranking {
 		$data   = ( new Page_Data() )->all();
 		$titles = self::titles( array_keys( $scan ) );
 		$latest = self::latest_applies();
-		$roles  = Page_Role::for_posts( array_map( static fn( $r ) => (string) $r['post_type'], $scan ) );
+		$roles  = Page_Role::for_posts( array_map( static fn( $r ) => (string) $r['post_type'], $scan ), array_filter( array_map( static fn( $r ) => (string) ( $r['flags'] ?? '' ), $scan ) ) );
 		$intent = static fn( string $q ): string => Intent::of( $q );
 
 		$site_enq    = 0;
@@ -209,6 +209,8 @@ class Ranking {
 	 * @return array<string,mixed>|null
 	 */
 	protected static function page( array $data, string $path ): ?array {
+		$path = strtolower( $path ); // Pushed data is keyed lower-case (Page_Data::keyed()).
+
 		return $data[ $path ] ?? $data[ trailingslashit( $path ) ] ?? $data[ untrailingslashit( $path ) ] ?? null;
 	}
 

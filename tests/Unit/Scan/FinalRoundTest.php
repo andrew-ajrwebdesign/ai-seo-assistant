@@ -11,6 +11,8 @@ declare( strict_types=1 );
 namespace AJR\SEOAssistant\Tests\Unit\Scan;
 
 use AJR\SEOAssistant\Scan\Page_Fetcher;
+use AJR\SEOAssistant\Scan\Page_Role;
+use AJR\SEOAssistant\Search\Page_Data;
 use AJR\SEOAssistant\Scan\Scan_Store;
 use AJR\SEOAssistant\Scan\Scanner;
 use AJR\SEOAssistant\Scan\Scheduler;
@@ -213,6 +215,97 @@ class FinalRoundTest extends TestCase {
 			$scanner->read_sitemap()
 		);
 		$this->assertArrayHasKey( Scanner::SITEMAP_CACHE, $this->transients );
+	}
+
+	/**
+	 * Item 22: every option the plugin reads or writes is removed on uninstall, except the 4.x redirects
+	 * options, which go with their table (kept while it holds someone's live redirects).
+	 */
+	public function test_uninstall_removes_every_option(): void {
+		$root      = dirname( __DIR__, 3 );
+		$uninstall = (string) file_get_contents( $root . '/uninstall.php' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading source.
+		$found     = [];
+		$files     = new \RecursiveIteratorIterator( new \RecursiveDirectoryIterator( $root . '/src' ) );
+		foreach ( $files as $file ) {
+			if ( '.php' !== substr( (string) $file, -4 ) ) {
+				continue;
+			}
+			$src = (string) file_get_contents( (string) $file ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- reading source.
+			preg_match_all( "/(?:_option\\(\\s*|OPTION\\w*\\s*=\\s*|PENDING\\s*=\\s*|FAILED\\s*=\\s*)'(ai_seo_assistant_[a-z_]+)'/", $src, $m );
+			$found = array_merge( $found, $m[1] );
+		}
+		$kept = [ 'ai_seo_assistant_redirects_db_version', 'ai_seo_assistant_redirect_map', 'ai_seo_assistant_redirects_case_insensitive' ];
+		$this->assertGreaterThan( 30, count( array_unique( $found ) ) );
+		foreach ( array_diff( array_unique( $found ), $kept ) as $option ) {
+			$this->assertStringContainsString( "'" . $option . "'", $uninstall, $option . ' is deleted on uninstall' );
+		}
+	}
+
+	/**
+	 * Item 16: paths keyed lower-case (one wins per case-folded path), none over 191 characters; a failed
+	 * insert rolls the whole push back and reports it, leaving the meta untouched.
+	 */
+	public function test_page_data_keys_and_rollback(): void {
+		$keyed = Page_Data::keyed(
+			[
+				'/About/'                       => [ 'gsc' => [ 'impressions' => 5 ] ],
+				'/about/'                       => [ 'gsc' => [ 'impressions' => 50 ] ],
+				'/' . str_repeat( 'x', 200 ) => [ 'gsc' => [ 'impressions' => 9 ] ],
+			]
+		);
+		$this->assertSame( [ '/about/' ], array_keys( $keyed ) );
+		$this->assertSame( 50, $keyed['/about/']['gsc']['impressions'] );
+
+		$GLOBALS['wpdb'] = new class() { // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test double.
+			/** @var string */
+			public $prefix = 'wp_';
+			/** @var array<int,string> */
+			public $queries = [];
+			public function prepare( $q, ...$a ) {
+				return $q;
+			}
+			public function query( $q ) {
+				$this->queries[] = $q;
+				return 0 === strpos( $q, 'INSERT' ) ? false : 1; // The insert fails.
+			}
+		};
+		$this->options[ \AJR\SEOAssistant\Core\Schema::VERSION_OPTION ] = \AJR\SEOAssistant\Core\Schema::VERSION;
+		\WP_Mock::userFunction( 'wp_json_encode' )->andReturnUsing( fn( $v ) => json_encode( $v ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- test double.
+		$this->assertFalse( ( new Page_Data() )->replace_all( [ '/a/' => [ 'gsc' => null ] ], [ 'end' => '2026-10-04' ], 1 ) );
+		$this->assertSame( 'ROLLBACK', end( $GLOBALS['wpdb']->queries ) );
+		$this->assertSame( 'START TRANSACTION', $GLOBALS['wpdb']->queries[0] );
+		$this->assertArrayNotHasKey( Page_Data::META_OPTION, $this->options, 'the meta still describes the rows kept' );
+	}
+
+	/**
+	 * Item 23: admin-ajax builds the admin stack only for this plugin's own actions.
+	 */
+	public function test_admin_stack_only_for_own_ajax(): void {
+		$ajax = true;
+		\WP_Mock::userFunction( 'wp_doing_ajax' )->andReturnUsing( function () use ( &$ajax ) {
+			return $ajax;
+		} );
+		\WP_Mock::userFunction( 'wp_unslash' )->andReturnArg( 0 );
+		$_REQUEST['action'] = 'heartbeat';
+		$this->assertFalse( \AJR\SEOAssistant\Core\Plugin::admin_stack_needed() );
+		$_REQUEST['action'] = 'aisa_scan_step';
+		$this->assertTrue( \AJR\SEOAssistant\Core\Plugin::admin_stack_needed() );
+		$_REQUEST['action'] = 'ai_seo_assistant_generate';
+		$this->assertTrue( \AJR\SEOAssistant\Core\Plugin::admin_stack_needed() );
+		$ajax = false;
+		$_REQUEST['action'] = 'heartbeat';
+		$this->assertTrue( \AJR\SEOAssistant\Core\Plugin::admin_stack_needed(), 'screens and admin-post always' );
+		unset( $_REQUEST['action'] );
+	}
+
+	/**
+	 * Item 23: role flags are worked out from the content at scan time.
+	 */
+	public function test_role_flags(): void {
+		\WP_Mock::userFunction( 'apply_filters' )->andReturnUsing( fn( $h, $v ) => $v );
+		$this->assertSame( 'none', Page_Role::flags( '<p>Hello</p>' ) );
+		$this->assertSame( 'form', Page_Role::flags( '[contact-form-7 id="1"]' ) );
+		$this->assertSame( 'listing', Page_Role::flags( '<!-- wp:query {"queryId":1} -->' ) );
 	}
 
 	/**

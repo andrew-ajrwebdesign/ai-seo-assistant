@@ -32,14 +32,14 @@ defined( 'ABSPATH' ) || exit;
  */
 class Claude_Client {
 
-	const API_URL          = 'https://api.anthropic.com/v1/messages';
-	const API_VERSION      = '2023-06-01';
-	const CONFIG_CONSTANT  = 'AI_SEO_ASSISTANT_ANTHROPIC_API_KEY';
-	const OPTION_API_KEY   = 'ai_seo_assistant_anthropic_api_key';
-	const OPTION_MODEL     = 'ai_seo_assistant_model';
-	const DEFAULT_MODEL    = 'claude-opus-5';
-	const KEY_PREFIX       = 'sk-ant-';
-	const FALLBACK_BETA    = 'server-side-fallback-2026-07-01';
+	const API_URL         = 'https://api.anthropic.com/v1/messages';
+	const API_VERSION     = '2023-06-01';
+	const CONFIG_CONSTANT = 'AI_SEO_ASSISTANT_ANTHROPIC_API_KEY';
+	const OPTION_API_KEY  = 'ai_seo_assistant_anthropic_api_key';
+	const OPTION_MODEL    = 'ai_seo_assistant_model';
+	const DEFAULT_MODEL   = 'claude-opus-5';
+	const KEY_PREFIX      = 'sk-ant-';
+	const FALLBACK_BETA   = 'server-side-fallback-2026-07-01';
 
 	/**
 	 * Default cap on Claude requests per user per hour (see check_rate_limit()).
@@ -448,8 +448,8 @@ class Claude_Client {
 	 * The user message's content: the prompt alone, or (5.0 page review) each image introduced by its ID
 	 * and attached as a base64 image block, then the prompt, so Claude describes the photo it can see.
 	 *
-	 * @param string                           $prompt Prompt.
-	 * @param array<int,array<string,mixed>>   $images [ id, media_type, data (base64) ].
+	 * @param string                         $prompt Prompt.
+	 * @param array<int,array<string,mixed>> $images [ id, media_type, data (base64) ].
 	 * @return string|array<int,array<string,mixed>>
 	 */
 	public static function content_blocks( $prompt, array $images ) {

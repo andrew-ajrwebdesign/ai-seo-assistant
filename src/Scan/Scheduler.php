@@ -109,10 +109,21 @@ class Scheduler {
 		}
 		set_transient( self::LOCK, time(), 2 * $budget + 30 );
 
+		if ( isset( $queue['current'] ) ) {
+			// The last step died inside this page (a fatal, a timeout): it is not tried again in this run,
+			// so one broken page cannot stop the scan for ever.
+			$queue['skipped'] = array_merge( (array) ( $queue['skipped'] ?? [] ), [ (int) $queue['current'] ] );
+			$queue['done']    = (int) $queue['done'] + 1;
+			unset( $queue['current'] );
+		}
+
 		$scanner = new Scanner();
 		$until   = microtime( true ) + $budget;
 		while ( [] !== $queue['ids'] && microtime( true ) < $until ) {
-			$scanner->scan_page( (int) array_shift( $queue['ids'] ) );
+			$queue['current'] = (int) array_shift( $queue['ids'] );
+			update_option( self::QUEUE, $queue, false ); // In flight: see above.
+			$scanner->scan_page( $queue['current'] );
+			unset( $queue['current'] );
 			++$queue['done'];
 			update_option( self::QUEUE, $queue, false ); // Progress survives a fatal or a timeout.
 		}
@@ -229,9 +240,13 @@ class Scheduler {
 		if ( null !== self::queue() ) {
 			return;
 		}
-		$times = ( new Scan_Store() )->scanned_times();
-		$ids   = [];
-		foreach ( Scanner::published_ids() as $id ) {
+		$times     = ( new Scan_Store() )->scanned_times();
+		$ids       = [];
+		$published = Scanner::published_ids();
+		if ( function_exists( '_prime_post_caches' ) ) {
+			_prime_post_caches( $published, false, false ); // One query for every page, not one each.
+		}
+		foreach ( $published as $id ) {
 			$post = get_post( $id );
 			if ( ! isset( $times[ $id ] ) || ( $post instanceof \WP_Post && $post->post_modified_gmt > $times[ $id ] ) ) {
 				$ids[] = $id;

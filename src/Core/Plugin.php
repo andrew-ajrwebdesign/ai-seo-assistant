@@ -79,9 +79,24 @@ class Plugin {
 
 		$this->register_scan_hooks();
 
-		if ( is_admin() ) {
+		if ( is_admin() && self::admin_stack_needed() ) {
 			$this->init_admin( $report_store );
 		}
+	}
+
+	/**
+	 * Whether this admin request needs the screens, editor box and handlers: every wp-admin screen and
+	 * admin-post.php, but on admin-ajax.php only this plugin's own actions (not the Heartbeat every
+	 * open editor sends each minute, nor another plugin's calls).
+	 */
+	public static function admin_stack_needed(): bool {
+		if ( ! wp_doing_ajax() ) {
+			return true;
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- routing only; each handler checks its own nonce.
+		$action = isset( $_REQUEST['action'] ) ? sanitize_key( wp_unslash( $_REQUEST['action'] ) ) : '';
+
+		return 0 === strpos( $action, 'aisa_' ) || 0 === strpos( $action, 'ai_seo_assistant_' );
 	}
 
 	/**

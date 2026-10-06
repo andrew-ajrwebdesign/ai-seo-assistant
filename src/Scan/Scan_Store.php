@@ -32,21 +32,23 @@ class Scan_Store {
 	 * @param string              $post_type Post type.
 	 * @param string              $source    'rendered' | 'content'.
 	 * @param array<string,mixed> $facts     Facts.
+	 * @param string              $flags     Page_Role::flags() of the content.
 	 */
-	public function save_facts( int $post_id, string $path, string $post_type, string $source, array $facts ): void {
+	public function save_facts( int $post_id, string $path, string $post_type, string $source, array $facts, string $flags = '' ): void {
 		global $wpdb;
 		$table = Schema::table( 'scan' );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own table.
 		$wpdb->query(
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own table name (Schema::table()).
-				"INSERT INTO `{$table}` (post_id, path, post_type, scanned_at, source, facts, issues) VALUES (%d, %s, %s, %s, %s, %s, '[]')
-				ON DUPLICATE KEY UPDATE path = VALUES(path), post_type = VALUES(post_type), scanned_at = VALUES(scanned_at), source = VALUES(source), facts = VALUES(facts)", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"INSERT INTO `{$table}` (post_id, path, post_type, scanned_at, source, flags, facts, issues) VALUES (%d, %s, %s, %s, %s, %s, %s, '[]')
+				ON DUPLICATE KEY UPDATE path = VALUES(path), post_type = VALUES(post_type), scanned_at = VALUES(scanned_at), source = VALUES(source), flags = VALUES(flags), facts = VALUES(facts)", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$post_id,
 				mb_substr( $path, 0, 190 ),
 				$post_type,
 				gmdate( 'Y-m-d H:i:s' ),
 				$source,
+				substr( $flags, 0, 32 ),
 				(string) wp_json_encode( $facts )
 			)
 		);
@@ -124,7 +126,7 @@ class Scan_Store {
 		global $wpdb;
 		$table = Schema::table( 'scan' );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own table; an agency screen.
-		$rows = (array) $wpdb->get_results( "SELECT post_id, path, post_type, scanned_at, source, issue_count, issue_kinds, suggested_at, (suggestions IS NOT NULL) AS has_suggestions FROM `{$table}`", ARRAY_A );
+		$rows = (array) $wpdb->get_results( "SELECT post_id, path, post_type, scanned_at, source, flags, issue_count, issue_kinds, suggested_at, (suggestions IS NOT NULL) AS has_suggestions FROM `{$table}`", ARRAY_A );
 		$out  = [];
 		foreach ( $rows as $row ) {
 			$kinds = [];
