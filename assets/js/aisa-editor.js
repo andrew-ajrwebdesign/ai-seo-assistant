@@ -75,9 +75,15 @@
 				if ( '' === text || ! panel || panel !== panelOf( sel.focusNode ) ) {
 					return; // Not ours: leave it to the page (Divi's own copy keeps working).
 				}
+				// Typing somewhere else (a field, a textarea, a module's editable text) keeps its own Ctrl+C,
+				// even with the pointer resting over the panel.
+				const active = document.activeElement;
+				if ( active && ! panel.contains( active ) && ( active.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test( active.tagName ) ) ) {
+					return;
+				}
 				// A selection left in the panel while the person works on a Divi module is not a copy of
 				// ours: only when the pointer or the focus is in the panel too.
-				if ( ! panel.matches( ':hover' ) && ! panel.contains( document.activeElement ) ) {
+				if ( ! panel.matches( ':hover' ) && ! panel.contains( active ) ) {
 					return;
 				}
 				event.stopImmediatePropagation();
