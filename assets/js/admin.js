@@ -466,6 +466,7 @@ jQuery(function ($) {
 	// SEO plugin sidebars so their snippet previews update without a hard refresh.
 	if (window.wp && wp.data && typeof wp.data.subscribe === 'function') {
 		var wasSavingPost = false;
+		var wasSavingMeta = false;
 		wp.data.subscribe(function () {
 			try {
 				var select = wp.data.select('core/editor');
@@ -473,8 +474,27 @@ jQuery(function ($) {
 				var isSavingPost = select.isSavingPost();
 				if (wasSavingPost && !isSavingPost && lastGeneratedTitle) {
 					updateSeoPluginPreviews(lastGeneratedTitle, lastGeneratedDesc);
+					// Once only: a later save must not push this stale value over an edit made in the
+					// SEO plugin's own sidebar since (4.4.0).
+					lastGeneratedTitle = '';
+					lastGeneratedDesc = '';
 				}
 				wasSavingPost = isSavingPost;
+
+				// The block editor does not reload after a save, so once the metabox request has gone,
+				// what the box holds IS what was saved: make it the new "original". Otherwise the next
+				// save would see the box differ from the page-load value and write it again over a
+				// sidebar edit (4.4.0). Waits for isSavingMetaBoxes, never the post save: the metabox
+				// form is serialised after the post save ends.
+				var editPost = wp.data.select('core/edit-post');
+				if (editPost && typeof editPost.isSavingMetaBoxes === 'function') {
+					var isSavingMeta = editPost.isSavingMetaBoxes();
+					if (wasSavingMeta && !isSavingMeta) {
+						$('input[name="ai_seo_title_original"]').val(titleField.val());
+						$('input[name="ai_seo_description_original"]').val(descriptionField.val());
+					}
+					wasSavingMeta = isSavingMeta;
+				}
 			} catch (e) {}
 		});
 	}
