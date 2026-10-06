@@ -109,7 +109,7 @@ class Access {
 		}
 
 		if ( ( new \ReflectionMethod( $class, 'is_agency_user' ) )->getNumberOfParameters() > 0 ) {
-			$found = false;
+			$found  = false;
 			$admins = get_users(
 				[
 					'role'   => 'administrator',
