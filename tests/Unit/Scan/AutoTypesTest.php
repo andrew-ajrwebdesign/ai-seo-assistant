@@ -242,6 +242,24 @@ class AutoTypesTest extends TestCase {
 	}
 
 	/**
+	 * Last round A9: the scan's "N suggested edits" is AJR Core's open count when Core has one (done and
+	 * dismissed ones gone), else every suggestion pushed.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_suggested_edits_count_from_core(): void {
+		$listing = [ 'suggestions' => [ [ 'id' => 'a' ], [ 'id' => 'b' ], [ 'id' => 'c' ] ] ];
+		$this->assertSame( 3, \AJR\SEOAssistant\Admin\Scan_Page::open_suggestions( $listing ) );
+		// phpcs:ignore Squiz.PHP.Eval.Discouraged -- a stand-in for AJR Core's class (contract by name).
+		eval( 'namespace AJR\Core\Business; class Listing_Suggestions { public static $seen; public static function open_count( $check ) { self::$seen = $check; return 1; } }' );
+		$this->options[ \AJR\SEOAssistant\Report\Snapshot_Store::LISTING ] = [ 'checked' => true, 'checked_at' => 0, 'fields' => [], 'suggestions' => $listing['suggestions'] ];
+		\WP_Mock::userFunction( 'wp_json_encode' )->andReturnUsing( 'json_encode' );
+		$this->assertSame( 1, \AJR\SEOAssistant\Admin\Scan_Page::open_suggestions( $listing ) );
+		$this->assertCount( 3, \AJR\Core\Business\Listing_Suggestions::$seen['suggestions'], 'Core gets the stored check' );
+	}
+
+	/**
 	 * Page types are not applied work: the log can leave them out, a batch is one Changes row with one Undo
 	 * for the lot, and the client report has its own sentence for them.
 	 *

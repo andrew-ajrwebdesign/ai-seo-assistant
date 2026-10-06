@@ -211,7 +211,7 @@ class Scan_Page {
 				. ( '' !== (string) ( $listing['reason'] ?? '' ) ? ' ' . esc_html( (string) $listing['reason'] ) : '' ) . '</p></section>';
 			return;
 		}
-		$suggested = count( (array) ( $listing['suggestions'] ?? [] ) );
+		$suggested = self::open_suggestions( $listing );
 		if ( $suggested > 0 ) {
 			// One line only: AJR Core lists them, on Business details.
 			/* translators: %d: number of suggested edits. */
@@ -250,6 +250,21 @@ class Scan_Page {
 			echo '<p class="aisa-small"><a href="' . esc_url( (string) $listing['maps_url'] ) . '" rel="noopener noreferrer" target="_blank">' . esc_html__( 'See the listing on Google Maps', 'ai-seo-assistant' ) . '<span class="screen-reader-text"> ' . esc_html__( '(opens in a new tab)', 'ai-seo-assistant' ) . '</span></a></p>';
 		}
 		echo '</section>';
+	}
+
+	/**
+	 * Suggested edits still to do: AJR Core's own count (it knows which ones were done or dismissed) when it
+	 * has one, else every suggestion the push carried.
+	 *
+	 * @param array<string,mixed> $listing The stored check.
+	 */
+	public static function open_suggestions( array $listing ): int {
+		$core = 'AJR\Core\Business\Listing_Suggestions';
+		if ( class_exists( $core ) && method_exists( $core, 'open_count' ) ) {
+			return (int) $core::open_count( \AJR\SEOAssistant\Report\Snapshot_Store::listing_block() );
+		}
+
+		return count( (array) ( $listing['suggestions'] ?? [] ) );
 	}
 
 	/**
