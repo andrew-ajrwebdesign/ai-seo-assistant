@@ -169,9 +169,11 @@ class Report_Page {
 		$log   = new Change_Log();
 		$rows  = $log->find(
 			[
-				'since' => $snap['month']['start'] . ' 00:00:00',
-				'until' => gmdate( 'Y-m-d', (int) strtotime( $snap['month']['end'] . ' +1 day UTC' ) ) . ' 00:00:00',
-				'limit' => 500,
+				'since'          => $snap['month']['start'] . ' 00:00:00',
+				'until'          => gmdate( 'Y-m-d', (int) strtotime( $snap['month']['end'] . ' +1 day UTC' ) ) . ' 00:00:00',
+				'limit'          => 500,
+				// Page types (most set automatically) are housekeeping, not what the client paid for.
+				'exclude_fields' => [ \AJR\SEOAssistant\Scan\Auto_Types::FIELD ],
 			]
 		);
 		$data  = new Page_Data();
@@ -215,7 +217,7 @@ class Report_Page {
 	 */
 	protected static function what( string $title, array $fields ): string {
 		$listing = array_intersect( $fields, [ 'title', 'description' ] );
-		$alt     = in_array( 'alt', $fields, true );
+		$alt     = [] !== array_intersect( [ 'alt', 'content' ], $fields ); // "content" is alt text written into the page.
 		if ( [] !== $listing && $alt ) {
 			/* translators: %s: page title. */
 			return sprintf( __( 'Updated your %s page’s Google listing and photo descriptions.', 'ai-seo-assistant' ), $title );
@@ -235,6 +237,14 @@ class Report_Page {
 		if ( $alt ) {
 			/* translators: %s: page title. */
 			return sprintf( __( 'Described the photos on your %s page for Google and for people using screen readers.', 'ai-seo-assistant' ), $title );
+		}
+		if ( in_array( \AJR\SEOAssistant\Scan\Auto_Types::FIELD, $fields, true ) ) {
+			/* translators: %s: page title. */
+			return sprintf( __( 'Told Google what kind of page your %s page is.', 'ai-seo-assistant' ), $title );
+		}
+		if ( ! in_array( 'keyphrase', $fields, true ) ) {
+			/* translators: %s: page title. */
+			return sprintf( __( 'Improved your %s page for Google.', 'ai-seo-assistant' ), $title );
 		}
 
 		/* translators: %s: page title. */

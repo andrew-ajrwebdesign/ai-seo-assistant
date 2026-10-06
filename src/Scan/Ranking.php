@@ -245,7 +245,13 @@ class Ranking {
 	 */
 	protected static function latest_applies(): array {
 		$out = [];
-		foreach ( ( new Change_Log() )->find( [ 'limit' => 1000 ] ) as $change ) {
+		// A page type is not listing work: it never shows as "Applied".
+		foreach ( ( new Change_Log() )->find(
+			[
+				'limit'          => 1000,
+				'exclude_fields' => [ \AJR\SEOAssistant\Scan\Auto_Types::FIELD ],
+			]
+		) as $change ) {
 			if ( null === $change['undone_at'] && ! isset( $out[ $change['post_id'] ] ) ) {
 				$out[ $change['post_id'] ] = (string) $change['applied_at'];
 			}

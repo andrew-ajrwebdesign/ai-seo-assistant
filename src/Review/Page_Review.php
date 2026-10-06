@@ -642,8 +642,7 @@ class Page_Review {
 					continue;
 				}
 				$this->log->mark_undone( $row['id'], $user_id );
-				$pages[ $row['post_id'] ] = true;
-				++$undone;
+				++$undone; // No rescan here: a batch of 126 would mean 126 page fetches in one request.
 				continue;
 			}
 			$now = 'alt' === $row['field'] ? (string) get_post_meta( $row['object_id'], '_wp_attachment_image_alt', true ) : $this->read( $row['field'], $row['post_id'] );

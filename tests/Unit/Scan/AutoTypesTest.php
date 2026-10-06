@@ -240,4 +240,53 @@ class AutoTypesTest extends TestCase {
 		$this->assertArrayNotHasKey( 'schema', $row['kinds'] );
 		$this->assertArrayNotHasKey( '_ptype', $row['kinds'] );
 	}
+
+	/**
+	 * Page types are not applied work: the log can leave them out, a batch is one Changes row with one Undo
+	 * for the lot, and the client report has its own sentence for them.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_page_types_are_not_applied_work(): void {
+		$GLOBALS['wpdb'] = new class() { // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test double.
+			/** @var string */
+			public $prefix = 'wp_';
+			/** @var string */
+			public $last = '';
+			/** @var array<int,mixed> */
+			public $args = [];
+			public function prepare( $q, $args ) {
+				$this->args = $args;
+				return $q;
+			}
+			public function get_results( $q, $o ) {
+				$this->last = $q;
+				return [];
+			}
+		};
+		( new Change_Log() )->find( [ 'exclude_fields' => [ Auto_Types::FIELD ] ] );
+		$this->assertStringContainsString( 'AND field NOT IN (%s)', $GLOBALS['wpdb']->last );
+		$this->assertContains( 'page_type', $GLOBALS['wpdb']->args );
+
+		$row  = static fn( $id, $batch, $field, $type, $undone = null ) => [ 'id' => $id, 'batch' => $batch, 'field' => $field, 'after_value' => $type, 'undone_at' => $undone, 'user_id' => 0 ];
+		$rows = [
+			1 => $row( 1, 'auto-1', 'page_type', 'article' ),
+			2 => $row( 2, 'b-2', 'title', 'New title' ),
+			3 => $row( 3, 'auto-1', 'page_type', 'article', 'x' ),
+			4 => $row( 4, 'auto-1', 'page_type', 'faq' ),
+			5 => $row( 5, 'one', 'page_type', 'area' ),
+		];
+		$out  = \AJR\SEOAssistant\Admin\Changes_Page::collapse_batches( $rows );
+		$this->assertSame( [ 1, 2, 5 ], array_keys( $out ), 'the batch is one row; a lone page type stays a row' );
+		$this->assertSame( [ 1, 3, 4 ], $out[1]['batch_ids'] );
+		$this->assertSame( [ 1, 4 ], $out[1]['batch_open'], 'Undo all takes only what is not undone yet' );
+		$this->assertSame( [ 'article' => 2, 'faq' => 1 ], $out[1]['batch_types'] );
+
+		$what = new \ReflectionMethod( \AJR\SEOAssistant\Report\Report_Page::class, 'what' );
+		$what->setAccessible( true );
+		$this->assertSame( 'Told Google what kind of page your Home page is.', $what->invoke( null, 'Home', [ 'page_type' ] ) );
+		$this->assertStringNotContainsString( 'main search', $what->invoke( null, 'Home', [ 'content' ] ), 'alt in the page is about photos' );
+		$this->assertStringContainsString( 'main search', $what->invoke( null, 'Home', [ 'keyphrase' ] ) );
+	}
 }

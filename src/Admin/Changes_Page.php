@@ -16,6 +16,7 @@ namespace AJR\SEOAssistant\Admin;
 use AJR\SEOAssistant\AI\Spend;
 use AJR\SEOAssistant\Changes\Change_Log;
 use AJR\SEOAssistant\Report\Access;
+use AJR\SEOAssistant\Scan\Page_Role;
 use AJR\SEOAssistant\Search\Page_Data;
 
 defined( 'ABSPATH' ) || exit;
@@ -47,7 +48,7 @@ class Changes_Page {
 		}
 		$log     = new Change_Log();
 		$data    = new Page_Data();
-		$rows    = $log->find( [ 'limit' => 500 ] );
+		$rows    = $log->find( [ 'limit' => 1000 ] );
 		$effects = [];
 		foreach ( $rows as $row ) {
 			$effects[ $row['id'] ] = $log->effect( $row, $data->get( (string) $row['path'] ), true );
@@ -98,8 +99,8 @@ class Changes_Page {
 		$undone   = 0;
 		$by       = [];
 		foreach ( $rows as $row ) {
-			if ( $row['applied_at'] < $start ) {
-				continue;
+			if ( $row['applied_at'] < $start || \AJR\SEOAssistant\Scan\Auto_Types::FIELD === $row['field'] ) {
+				continue; // Page types are not applied work (most are set automatically).
 			}
 			++$applied;
 			$pages[ $row['post_id'] ] = true;
@@ -222,8 +223,13 @@ class Changes_Page {
 			echo '<p class="aisa-pending">' . esc_html__( 'Nothing has been applied yet. Changes appear here when you apply suggestions in a page review.', 'ai-seo-assistant' ) . '</p></section>';
 			return;
 		}
+		$shown = self::collapse_batches( $shown );
 		echo '<div class="aisa-tablewrap"><table class="aisa-table aisa-table--log"><thead><tr><th scope="col">' . esc_html__( 'Date', 'ai-seo-assistant' ) . '</th><th scope="col">' . esc_html__( 'Page', 'ai-seo-assistant' ) . '</th><th scope="col">' . esc_html__( 'Field', 'ai-seo-assistant' ) . '</th><th scope="col">' . esc_html__( 'Before → after', 'ai-seo-assistant' ) . '</th><th scope="col">' . esc_html__( 'Effect', 'ai-seo-assistant' ) . '</th><td></td></tr></thead><tbody>';
 		foreach ( $shown as $row ) {
+			if ( isset( $row['batch_ids'] ) ) {
+				$this->batch_row( $row, $effects );
+				continue;
+			}
 			$user                   = get_userdata( $row['user_id'] );
 			[ $pill, $tone, $text ] = $this->effect_words( $row, $effects[ $row['id'] ] );
 			$undo                   = null === $row['undone_at']
@@ -246,6 +252,80 @@ class Changes_Page {
 		}
 		echo '</tbody></table></div>';
 		echo '<p class="aisa-small">' . esc_html__( 'Effect = click-through rate in the 4 weeks after a change against the 4 weeks before, from the weekly push. Position is shown beside it so a ranking move is not mistaken for a better listing. “Better” or “worse” is always written, not only coloured.', 'ai-seo-assistant' ) . '</p></section>';
+	}
+
+	/**
+	 * Page type rows of one batch (126 set automatically after a scan, or a "Review and apply all") become
+	 * one row: the count, the types, and one Undo for the lot.
+	 *
+	 * @param array<int|string,array<string,mixed>> $rows Rows, newest first.
+	 * @return array<int|string,array<string,mixed>>
+	 */
+	public static function collapse_batches( array $rows ): array {
+		$sizes = [];
+		foreach ( $rows as $row ) {
+			if ( \AJR\SEOAssistant\Scan\Auto_Types::FIELD === $row['field'] ) {
+				$sizes[ $row['batch'] ] = ( $sizes[ $row['batch'] ] ?? 0 ) + 1;
+			}
+		}
+		$out  = [];
+		$head = [];
+		foreach ( $rows as $key => $row ) {
+			$batch = (string) $row['batch'];
+			if ( \AJR\SEOAssistant\Scan\Auto_Types::FIELD !== $row['field'] || ( $sizes[ $batch ] ?? 0 ) < 2 ) {
+				$out[ $key ] = $row;
+				continue;
+			}
+			if ( ! isset( $head[ $batch ] ) ) {
+				$head[ $batch ] = $key;
+				$out[ $key ]    = $row + [
+					'batch_ids'   => [],
+					'batch_open'  => [],
+					'batch_types' => [],
+				];
+			}
+			$h                        = $head[ $batch ];
+			$out[ $h ]['batch_ids'][] = (int) $row['id'];
+			$out[ $h ]['batch_types'][ $row['after_value'] ] = ( $out[ $h ]['batch_types'][ $row['after_value'] ] ?? 0 ) + 1;
+			if ( null === $row['undone_at'] ) {
+				$out[ $h ]['batch_open'][] = (int) $row['id'];
+			}
+		}
+
+		return $out;
+	}
+
+	/**
+	 * One collapsed page type batch.
+	 *
+	 * @param array<string,mixed>            $row     The batch's first row plus batch_ids, batch_open, batch_types.
+	 * @param array<int,array<string,mixed>> $effects Effects by row ID (unused: page types are not measured).
+	 */
+	protected function batch_row( array $row, array $effects ): void { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundAfterLastUsed -- same shape as the other rows.
+		$auto  = 0 === (int) $row['user_id'];
+		$user  = $auto ? null : get_userdata( (int) $row['user_id'] );
+		$n     = count( $row['batch_ids'] );
+		$types = Page_Role::types();
+		$parts = [];
+		arsort( $row['batch_types'] );
+		foreach ( $row['batch_types'] as $slug => $count ) {
+			$parts[] = ( $types[ $slug ]['label'] ?? $slug ) . ' ' . number_format_i18n( $count );
+		}
+		$head = $auto
+			/* translators: %d: number of pages. */
+			? sprintf( _n( '%d page type set automatically', '%d page types set automatically', $n, 'ai-seo-assistant' ), $n )
+			/* translators: %d: number of pages. */
+			: sprintf( _n( '%d page type set', '%d page types set', $n, 'ai-seo-assistant' ), $n );
+		$open = $row['batch_open'];
+		$undo = [] !== $open
+			? '<form method="post" action="' . esc_url( admin_url( 'admin-post.php' ) ) . '">' . wp_nonce_field( Tools_Actions::UNDO, '_wpnonce', true, false ) . '<input type="hidden" name="action" value="' . esc_attr( Tools_Actions::UNDO ) . '"><input type="hidden" name="ids" value="' . esc_attr( implode( ',', $open ) ) . '"><button type="submit" class="aisa-linkbtn">' . esc_html( count( $open ) === $n ? __( 'Undo all', 'ai-seo-assistant' ) : __( 'Undo the rest', 'ai-seo-assistant' ) ) . '</button></form>'
+			: '';
+		echo '<tr><td class="aisa-col-date"><strong>' . esc_html( wp_date( 'D j M', (int) strtotime( $row['applied_at'] . ' UTC' ) ) ) . '</strong><br><span class="aisa-small">' . esc_html( $user ? $user->display_name : ( $auto ? __( 'Automatic', 'ai-seo-assistant' ) : '' ) ) . '</span></td>'
+			. '<td class="aisa-col-page"><strong>' . esc_html( $head ) . '</strong>' . ( $auto ? '<br><span class="aisa-small">' . esc_html__( 'AJR Core was sure of each one. A page changed or undone by hand is never set automatically again.', 'ai-seo-assistant' ) . '</span>' : '' ) . '</td>'
+			. '<td data-label="' . esc_attr__( 'Field', 'ai-seo-assistant' ) . '">' . esc_html__( 'Page type', 'ai-seo-assistant' ) . '</td>'
+			. '<td><p class="aisa-small">' . esc_html( implode( ' · ', $parts ) ) . '</p></td>'
+			. '<td data-label="' . esc_attr__( 'Effect', 'ai-seo-assistant' ) . '">' . Ui::pill( [] === $open ? __( 'Undone', 'ai-seo-assistant' ) : __( 'Not measured', 'ai-seo-assistant' ), 'muted' ) . '</td>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
+			. '<td class="aisa-col-action">' . $undo . '</td></tr>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above.
 	}
 
 	/**

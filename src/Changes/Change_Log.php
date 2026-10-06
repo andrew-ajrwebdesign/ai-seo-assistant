@@ -133,6 +133,11 @@ class Change_Log {
 			$sql   .= ' AND applied_at < %s';
 			$args[] = (string) $where['until'];
 		}
+		$skip = array_values( array_filter( array_map( 'strval', (array) ( $where['exclude_fields'] ?? [] ) ) ) );
+		if ( [] !== $skip ) {
+			$sql .= ' AND field NOT IN (' . implode( ',', array_fill( 0, count( $skip ), '%s' ) ) . ')';
+			$args = array_merge( $args, $skip );
+		}
 		$sql   .= ' ORDER BY applied_at DESC, id DESC LIMIT %d';
 		$args[] = max( 1, min( 1000, (int) ( $where['limit'] ?? 500 ) ) );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared -- built from fixed fragments with placeholders.
