@@ -128,7 +128,9 @@ class GSC_Client {
 		$response = wp_remote_post(
 			'https://oauth2.googleapis.com/revoke',
 			[
-				'timeout' => 10,
+				// Best effort, and it runs inside the Disconnect click and the uninstall request: a slow Google
+				// must not hold either for long; a revoke that times out changes nothing locally.
+				'timeout' => 3,
 				'body'    => [ 'token' => $token ],
 			]
 		);

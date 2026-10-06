@@ -235,7 +235,33 @@ class GSC_Page {
 	}
 
 	/**
-	 * One write-only credential row: "Saved · ends …XXXX", a Replace field and a Clear box.
+	 * The "which value is saved" line for a credential row.
+	 *
+	 * The secret shows its last four characters. The client ID shows its START instead: every Google
+	 * client ID ends ".apps.googleusercontent.com", so "ends …com" told nobody which ID was saved, and the
+	 * ID is not a secret (Google puts it in every sign-in URL), so its project-number prefix is safe to show.
+	 *
+	 * @param string $option Option name.
+	 * @param string $type   'text' for the client ID, 'password' for a secret.
+	 * @return string Plain text (the caller escapes it).
+	 */
+	public static function saved_hint( string $option, string $type ): string {
+		$plain = Secret_Store::get( $option );
+
+		if ( 'text' === $type && strlen( $plain ) >= 8 ) {
+			/* translators: %s: the first characters of the saved Google client ID. */
+			return sprintf( __( 'Saved · starts %s…', 'ai-seo-assistant' ), substr( $plain, 0, 12 ) );
+		}
+		if ( 'text' !== $type && strlen( $plain ) >= 8 ) {
+			/* translators: %s: last four characters of the saved value. */
+			return sprintf( __( 'Saved · ends …%s', 'ai-seo-assistant' ), substr( $plain, -4 ) );
+		}
+
+		return __( 'Saved, but it can no longer be read: re-enter it.', 'ai-seo-assistant' );
+	}
+
+	/**
+	 * One write-only credential row: which value is saved (saved_hint()), a Replace field and a Clear box.
 	 *
 	 * The stored value never reaches the page, not even in value="". When wp-config.php defines it, the
 	 * row says so and offers no field.
@@ -247,7 +273,6 @@ class GSC_Page {
 	 */
 	protected function render_secret_row( $option, $label, $from_config, $type ) {
 		$saved = Secret_Store::has( $option );
-		$ends  = $saved ? Secret_Store::last4( $option ) : '';
 		?>
 		<tr>
 			<th scope="row">
@@ -259,16 +284,7 @@ class GSC_Page {
 				<?php else : ?>
 					<?php if ( $saved ) : ?>
 						<p>
-							<strong>
-								<?php
-								echo esc_html(
-									'' !== $ends
-										/* translators: %s: last four characters of the saved value. */
-										? sprintf( __( 'Saved · ends …%s', 'ai-seo-assistant' ), $ends )
-										: __( 'Saved, but it can no longer be read: re-enter it.', 'ai-seo-assistant' )
-								);
-								?>
-							</strong>
+							<strong><?php echo esc_html( self::saved_hint( $option, $type ) ); ?></strong>
 						</p>
 					<?php endif; ?>
 					<input
