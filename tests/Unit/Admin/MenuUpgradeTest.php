@@ -213,6 +213,100 @@ class MenuUpgradeTest extends TestCase {
 	}
 
 	/**
+	 * Code-standards B1: after an update that never ran install() (a zip uploaded over the plugin, SFTP), the
+	 * first write to a custom table brings the tables up to date first, so the new column is there. A failing
+	 * ALTER is tried once per request, not on every write, and the write still lands without the new column.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_writers_ensure_the_tables_first(): void {
+		$this->options[ \AJR\SEOAssistant\Core\Schema::VERSION_OPTION ] = '4';
+		$GLOBALS['aisa_dbdelta']                                        = [];
+		$db = $this->fake_db( null, 0 );
+		\WP_Mock::userFunction( 'wp_json_encode' )->andReturnUsing( 'json_encode' );
+		ini_set( 'error_log', '/dev/null' ); // phpcs:ignore WordPress.PHP.IniSet.Risky -- a separate process: the expected log lines would read as output.
+		$db->columns = [ 'post_id', 'facts', 'note' ]; // The ALTER fails: body_text and inbound never appear.
+		$store       = new \AJR\SEOAssistant\Scan\Scan_Store();
+		$store->save_facts( 3, '/a/', 'page', 'rendered', [ 'body_text' => 'Words' ] );
+		$store->save_facts( 4, '/b/', 'page', 'rendered', [ 'body_text' => 'Words' ] );
+		$this->assertCount( 3, $GLOBALS['aisa_dbdelta'], 'install() tried once (three tables) for two writes' );
+		$this->assertSame( '4', $this->options[ \AJR\SEOAssistant\Core\Schema::VERSION_OPTION ] );
+	}
+
+	/**
+	 * Code-standards B1: the same, with a working ALTER: installed before the write, then marked current.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_writer_installs_before_writing(): void {
+		$this->options[ \AJR\SEOAssistant\Core\Schema::VERSION_OPTION ] = '4';
+		$GLOBALS['aisa_dbdelta']                                        = [];
+		$db = $this->fake_db( null, 0 );
+		\WP_Mock::userFunction( 'wp_json_encode' )->andReturnUsing( 'json_encode' );
+		( new \AJR\SEOAssistant\Changes\Change_Log() )->save_note( 9, 'x' );
+		$this->assertStringContainsString( 'body_text mediumtext', implode( "\n", $GLOBALS['aisa_dbdelta'] ) );
+		$this->assertSame( \AJR\SEOAssistant\Core\Schema::VERSION, $this->options[ \AJR\SEOAssistant\Core\Schema::VERSION_OPTION ] );
+		$this->assertNotEmpty( $db->updates, 'then written' );
+	}
+
+	/**
+	 * Code-standards B1: a zip uploaded over the installed copy is an "install" with no plugin list; the
+	 * upgrader names the plugin, and the tables and upgrade steps run. Another plugin's zip does nothing.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_zip_overwrite_runs_the_upgrade(): void {
+		if ( ! defined( 'AI_SEO_ASSISTANT_BASENAME' ) ) {
+			define( 'AI_SEO_ASSISTANT_BASENAME', 'ai-seo-assistant/ai-seo-assistant.php' );
+		}
+		$this->options[ Upgrade::OPTION ]                               = Upgrade::LEVEL;
+		$this->options[ \AJR\SEOAssistant\Core\Schema::VERSION_OPTION ] = '4';
+		$this->fake_db( null, 0 );
+		$options = [
+			'action'    => 'install',
+			'type'      => 'plugin',
+			'overwrite' => 'update-plugin',
+		];
+
+		$GLOBALS['aisa_dbdelta'] = [];
+		( new Upgrade() )->after_update( new class() {
+			/** @var array<string,string> */
+			public $result = [ 'destination_name' => 'some-other-plugin' ];
+
+			/**
+			 * Another plugin.
+			 */
+			public function plugin_info() {
+				return 'some-other-plugin/some-other-plugin.php';
+			}
+		}, $options );
+		$this->assertSame( [], $GLOBALS['aisa_dbdelta'], 'another plugin\'s zip: nothing' );
+
+		( new Upgrade() )->after_update( new class() {
+			/** @var array<string,string> */
+			public $result = [ 'destination_name' => 'ai-seo-assistant' ];
+
+			/**
+			 * This plugin.
+			 */
+			public function plugin_info() {
+				return AI_SEO_ASSISTANT_BASENAME;
+			}
+		}, $options );
+		$this->assertNotEmpty( $GLOBALS['aisa_dbdelta'], 'this plugin\'s zip: the tables are updated' );
+		$this->assertSame( \AJR\SEOAssistant\Core\Schema::VERSION, $this->options[ \AJR\SEOAssistant\Core\Schema::VERSION_OPTION ] );
+
+		// Without plugin_info() (an older upgrader), the folder it wrote is enough.
+		$this->options[ \AJR\SEOAssistant\Core\Schema::VERSION_OPTION ] = '4';
+		$GLOBALS['aisa_dbdelta']                                        = [];
+		( new Upgrade() )->after_update( (object) [ 'result' => [ 'destination_name' => 'ai-seo-assistant' ] ], $options );
+		$this->assertNotEmpty( $GLOBALS['aisa_dbdelta'] );
+	}
+
+	/**
 	 * A fake $wpdb: SHOW TABLES answers $table; $enabled enabled rules, all with source /old/.
 	 *
 	 * @param string|null $table   Table.
@@ -252,8 +346,14 @@ class MenuUpgradeTest extends TestCase {
 				}
 				return array_fill( 0, $this->enabled, '/old/' );
 			}
+			/** @var array<int,array<string,mixed>> */
+			public $updates = [];
+			public function update( $table, $data ) {
+				$this->updates[] = $data;
+				return 1;
+			}
 			public function query( $q ) {
-				$this->queries[] = $q;
+				$this->queries[] = is_array( $q ) ? (string) $q[0] : (string) $q;
 				if ( false !== strpos( $q, 'DROP TABLE' ) ) {
 					$this->table = null;
 				}

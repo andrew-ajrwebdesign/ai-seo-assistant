@@ -65,6 +65,28 @@ class Schema {
 		return self::VERSION === (string) get_option( self::VERSION_OPTION, '' );
 	}
 
+	/** Whether ensure() already tried install() in this request (a failing ALTER is not retried per write). */
+	protected static bool $tried = false;
+
+	/**
+	 * Bring the tables up to date before writing to them: every custom-table writer calls this first. An
+	 * update that never ran install() (a zip uploaded over the plugin, SFTP, a request with no admin_init)
+	 * would otherwise write a column that is not there yet and fail silently. Tried once per request.
+	 *
+	 * @return bool Whether the tables are current.
+	 */
+	public static function ensure(): bool {
+		if ( self::is_current() ) {
+			return true;
+		}
+		if ( ! self::$tried ) {
+			self::$tried = true;
+			self::install();
+		}
+
+		return self::is_current();
+	}
+
 	/**
 	 * Create or update the tables (dbDelta is idempotent).
 	 */

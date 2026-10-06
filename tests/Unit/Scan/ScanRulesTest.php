@@ -294,6 +294,7 @@ class ScanRulesTest extends TestCase {
 			}
 		};
 		\WP_Mock::userFunction( 'wp_json_encode' )->andReturnUsing( fn( $v ) => json_encode( $v ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- the stand-in for core's.
+		\WP_Mock::userFunction( 'get_option' )->andReturn( \AJR\SEOAssistant\Core\Schema::VERSION ); // Tables current.
 		( new \AJR\SEOAssistant\Scan\Scan_Store() )->save_facts(
 			3,
 			'/a/',

@@ -36,6 +36,7 @@ class Scan_Store {
 	 */
 	public function save_facts( int $post_id, string $path, string $post_type, string $source, array $facts, string $flags = '' ): void {
 		global $wpdb;
+		Schema::ensure(); // The tables are current before any write (an update that skipped install()).
 		$table = Schema::table( 'scan' );
 		// The page's visible text has its own column: the site-wide pass loads every row's facts, never this.
 		$text = mb_substr( (string) ( $facts[ Html_Parser::TEXT ] ?? '' ), 0, Html_Parser::MAX_TEXT );
@@ -77,6 +78,7 @@ class Scan_Store {
 	 */
 	public function save_inbound( int $post_id, array $inbound ): void {
 		global $wpdb;
+		Schema::ensure(); // The tables are current before any write (an update that skipped install()).
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the plugin's own table.
 		$wpdb->update( Schema::table( 'scan' ), [ 'inbound' => (string) wp_json_encode( $inbound ) ], [ 'post_id' => $post_id ], [ '%s' ], [ '%d' ] );
 	}
@@ -103,6 +105,7 @@ class Scan_Store {
 	 */
 	public function save_issues( int $post_id, array $issues ): void {
 		global $wpdb;
+		Schema::ensure(); // The tables are current before any write (an update that skipped install()).
 		$kinds = [];
 		foreach ( $issues as $issue ) {
 			$kinds[ $issue['kind'] ] = ( $kinds[ $issue['kind'] ] ?? 0 ) + 1;
@@ -153,6 +156,7 @@ class Scan_Store {
 	 */
 	public function save_suggestions( int $post_id, ?array $suggestions ): void {
 		global $wpdb;
+		Schema::ensure(); // The tables are current before any write (an update that skipped install()).
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the plugin's own table.
 		$wpdb->update(
 			Schema::table( 'scan' ),
@@ -280,6 +284,7 @@ class Scan_Store {
 	 */
 	public function prune( array $keep ): void {
 		global $wpdb;
+		Schema::ensure(); // The tables are current before any write (an update that skipped install()).
 		$table = Schema::table( 'scan' );
 		$have  = array_keys( $this->scanned_times() );
 		$gone  = array_diff( $have, $keep );
@@ -297,6 +302,7 @@ class Scan_Store {
 	 */
 	public function delete( int $post_id ): void {
 		global $wpdb;
+		Schema::ensure(); // The tables are current before any write (an update that skipped install()).
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the plugin's own table.
 		$wpdb->delete( Schema::table( 'scan' ), [ 'post_id' => $post_id ], [ '%d' ] );
 	}

@@ -132,15 +132,26 @@ class Upgrade {
 	/**
 	 * Run the steps after WordPress updates this plugin through the upgrader.
 	 *
-	 * @param mixed               $upgrader Upgrader instance (unused).
+	 * @param mixed               $upgrader Upgrader instance (names the plugin for a zip uploaded over the installed copy).
 	 * @param array<string,mixed> $options  Update details.
 	 */
-	public function after_update( $upgrader, $options ): void { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundBeforeLastUsed -- the action's signature.
+	public function after_update( $upgrader, $options ): void {
 		$options = (array) $options;
 		if ( 'plugin' !== ( $options['type'] ?? '' ) ) {
 			return;
 		}
 		$plugins = (array) ( $options['plugins'] ?? [ $options['plugin'] ?? '' ] );
+		// A zip uploaded over the installed copy ("Replace current with uploaded") is an install, not an
+		// update: no plugin list, so the upgrader says which plugin it wrote.
+		if ( 'install' === ( $options['action'] ?? '' ) && is_object( $upgrader ) ) {
+			if ( method_exists( $upgrader, 'plugin_info' ) ) {
+				$plugins[] = (string) $upgrader->plugin_info();
+			}
+			$result = property_exists( $upgrader, 'result' ) ? $upgrader->result : null;
+			if ( is_array( $result ) && '' !== (string) ( $result['destination_name'] ?? '' ) ) {
+				$plugins[] = (string) $result['destination_name'] . '/' . basename( AI_SEO_ASSISTANT_BASENAME );
+			}
+		}
 		if ( ! in_array( AI_SEO_ASSISTANT_BASENAME, $plugins, true ) ) {
 			return;
 		}

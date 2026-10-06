@@ -220,6 +220,7 @@ class PerfReviewTest extends TestCase {
 				return 1;
 			}
 		};
+		\WP_Mock::userFunction( 'get_option' )->andReturn( \AJR\SEOAssistant\Core\Schema::VERSION ); // Marked current, the column still missing.
 		( new Scan_Store() )->save_facts( 3, '/a/', 'page', 'rendered', [ Html_Parser::TEXT => 'Words', 'words' => 1 ] );
 		$q = $GLOBALS['wpdb']->queries;
 		$this->assertCount( 2, $q, 'tried with the text, then without' );

@@ -54,6 +54,7 @@ class Change_Log {
 	 */
 	public function log( string $batch, int $post_id, string $path, string $field, int $object_id, string $before, string $after, int $user_id, string $note = '' ): int {
 		global $wpdb;
+		Schema::ensure(); // The tables are current before any write (an update that skipped install()).
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- the plugin's own table.
 		$ok = $wpdb->insert(
 			Schema::table( 'changes' ),
@@ -84,6 +85,7 @@ class Change_Log {
 	 */
 	public function discard( int $id ): bool {
 		global $wpdb;
+		Schema::ensure(); // The tables are current before any write (an update that skipped install()).
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the plugin's own table.
 		return false !== $wpdb->delete( Schema::table( 'changes' ), [ 'id' => $id ], [ '%d' ] );
 	}
@@ -156,6 +158,7 @@ class Change_Log {
 	 */
 	public function save_note( int $id, string $note ): bool {
 		global $wpdb;
+		Schema::ensure(); // The tables are current before any write (an update that skipped install()).
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the plugin's own table.
 		return false !== $wpdb->update( Schema::table( 'changes' ), [ 'note' => mb_substr( $note, 0, 255 ) ], [ 'id' => $id ], [ '%s' ], [ '%d' ] );
 	}
@@ -183,6 +186,7 @@ class Change_Log {
 	 */
 	public function mark_undone( int $id, int $user_id ): bool {
 		global $wpdb;
+		Schema::ensure(); // The tables are current before any write (an update that skipped install()).
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the plugin's own table.
 		$ok = $wpdb->update(
 			Schema::table( 'changes' ),
@@ -206,6 +210,7 @@ class Change_Log {
 	 */
 	public function save_effect( int $id, array $effect ): bool {
 		global $wpdb;
+		Schema::ensure(); // The tables are current before any write (an update that skipped install()).
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the plugin's own table.
 		return false !== $wpdb->update( Schema::table( 'changes' ), [ 'effect' => (string) wp_json_encode( $effect ) ], [ 'id' => $id ], [ '%s' ], [ '%d' ] );
 	}

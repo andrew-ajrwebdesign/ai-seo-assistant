@@ -45,9 +45,7 @@ class Page_Data {
 	 */
 	public function replace_all( array $pages, array $range, int $generated_at ): bool {
 		global $wpdb;
-		if ( ! Schema::is_current() ) {
-			Schema::install();
-		}
+		Schema::ensure(); // The tables are current before any write (an update that skipped install()).
 		$table = Schema::table( 'pages' );
 		$pages = self::keyed( $pages );
 
