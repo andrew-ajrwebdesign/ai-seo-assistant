@@ -79,6 +79,19 @@ class Plugin {
 
 		$this->register_scan_hooks();
 
+		// An update of this plugin can come through the Plugins screen, its one-click AJAX update
+		// (update-plugin, where the admin stack is not built) or WP-CLI: the upgrade steps run on all three.
+		if ( is_admin() || ( defined( 'WP_CLI' ) && WP_CLI ) ) {
+			add_action(
+				'upgrader_process_complete',
+				static function ( $upgrader, $options ): void {
+					( new Upgrade() )->after_update( $upgrader, $options );
+				},
+				10,
+				2
+			);
+		}
+
 		if ( is_admin() && self::admin_stack_needed() ) {
 			$this->init_admin( $report_store );
 		}

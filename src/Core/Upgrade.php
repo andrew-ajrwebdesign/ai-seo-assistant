@@ -84,7 +84,8 @@ class Upgrade {
 	 */
 	public function register(): void {
 		add_action( 'admin_init', [ $this, 'maybe_run' ] );
-		add_action( 'upgrader_process_complete', [ $this, 'after_update' ], 10, 2 );
+		// upgrader_process_complete is hooked by Plugin::init() on every update path (screens, admin-ajax's
+		// one-click update, WP-CLI), not only where the admin screens are built.
 	}
 
 	/**

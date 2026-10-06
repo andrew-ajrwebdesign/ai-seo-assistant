@@ -71,4 +71,25 @@ class FrontEndWeightTest extends TestCase {
 			$this->assertDoesNotMatchRegularExpression( '/\\\\(Scan|Review|Search|Changes|Admin|AI)\\\\/', $class, 'a tool class on a visitor request' );
 		}
 	}
+
+	/**
+	 * Last round A16: the one-click AJAX plugin update (update-plugin, where the admin screens are not
+	 * built) still runs the upgrade steps after it.
+	 *
+	 * @runInSeparateProcess
+	 * @preserveGlobalState disabled
+	 */
+	public function test_ajax_plugin_update_runs_the_upgrade(): void {
+		\WP_Mock::userFunction( 'is_admin' )->andReturn( true );
+		\WP_Mock::userFunction( 'wp_doing_ajax' )->andReturn( true );
+		\WP_Mock::userFunction( 'wp_unslash' )->andReturnArg( 0 );
+		\WP_Mock::userFunction( 'sanitize_key' )->andReturnUsing( fn( $k ) => strtolower( (string) $k ) );
+		\WP_Mock::userFunction( 'get_option' )->andReturnUsing( fn( $n, $d = false ) => $d );
+		$_REQUEST['action'] = 'update-plugin';
+		\WP_Mock::expectActionAdded( 'upgrader_process_complete', \WP_Mock\Functions::type( 'callable' ), 10, 2 );
+		Plugin::instance()->init();
+		$this->assertFalse( Plugin::admin_stack_needed(), 'the admin screens are not built on this request' );
+		$this->assertFalse( class_exists( 'AJR\SEOAssistant\Core\Upgrade', false ), 'and the upgrade code loads only if the update fires' );
+		unset( $_REQUEST['action'] );
+	}
 }
