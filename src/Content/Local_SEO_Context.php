@@ -136,7 +136,7 @@ class Local_SEO_Context {
 	 * @return string
 	 */
 	protected static function core_value( $key ) {
-		$config = '\AJR\Core\Framework\Config';
+		$config = 'AJR\Core\Framework\Config';
 		if ( ! class_exists( $config ) || ! method_exists( $config, 'get' ) ) {
 			return '';
 		}
@@ -156,7 +156,7 @@ class Local_SEO_Context {
 	 */
 	protected static function core_is_local_business() {
 		$type    = self::core_value( 'schema.type' );
-		$profile = '\AJR\Core\Schema\Business_Profile';
+		$profile = 'AJR\Core\Schema\Business_Profile';
 		if ( '' === $type || ! class_exists( $profile ) || ! method_exists( $profile, 'is_local_type' ) ) {
 			return false;
 		}

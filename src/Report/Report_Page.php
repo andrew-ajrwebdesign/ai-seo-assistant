@@ -251,7 +251,7 @@ class Report_Page {
 			echo '<label><input type="checkbox" name="agency_users[]" value="' . esc_attr( (string) $id ) . '"' . checked( in_array( $id, $named, true ), true, false ) . '> ' . esc_html( $admin->display_name . ' (' . $admin->user_email . ')' ) . '</label><br>';
 		}
 		echo '<p class="description">' . esc_html(
-			class_exists( '\AJR\Core\Admin\Support' )
+			class_exists( 'AJR\Core\Admin\Support' )
 				? __( 'Ticked Administrators keep the plugin’s tool screens; every other Administrator sees the Weekly report only. While nobody is ticked, AJR Core decides: Administrators on the agency’s email domain keep the tools.', 'ai-seo-assistant' )
 				: __( 'Ticked Administrators keep the plugin’s tool screens; every other Administrator sees the Weekly report only. While nobody is ticked, every Administrator keeps the tools.', 'ai-seo-assistant' )
 		) . '</p></fieldset></td></tr>';

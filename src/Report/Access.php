@@ -93,7 +93,7 @@ class Access {
 	 * @param int $user_id User ID.
 	 */
 	protected static function core_says_agency( int $user_id ): ?bool {
-		$class = '\AJR\Core\Admin\Support';
+		$class = 'AJR\Core\Admin\Support';
 		if ( ! class_exists( $class ) || ! method_exists( $class, 'is_agency_user' ) ) {
 			return null;
 		}
