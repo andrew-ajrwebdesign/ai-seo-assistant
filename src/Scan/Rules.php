@@ -516,7 +516,9 @@ class Rules {
 		$out = [];
 		// Schema is never an editor job (decision 2026-10-06): AJR Core prints it from the page type and the
 		// business details. The one page-level finding is a missing page type, fixed in one click.
-		if ( ! empty( $ctx['page_types'] ) && '' === (string) ( $ctx['page_type'] ?? '' ) ) {
+		// Posts are left out: the SEO plugin already marks them up as articles, so 100 blog posts do not
+		// become 100 findings.
+		if ( ! empty( $ctx['page_types'] ) && '' === (string) ( $ctx['page_type'] ?? '' ) && 'post' !== ( $ctx['post_type'] ?? '' ) ) {
 			$labels  = (array) ( $ctx['type_labels'] ?? [] );
 			$suggest = (string) ( $ctx['suggested_type'] ?? '' );
 			$out[]   = self::issue(

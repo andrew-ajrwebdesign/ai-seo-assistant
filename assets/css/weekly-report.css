@@ -727,6 +727,15 @@
 	}
 }
 
+/* AJR Core's card keeps wp-admin's own type size inside the plugin's 14px screens. */
+.aisa-layout__side {
+	font-size: 13px;
+}
+
+.aisa-layout__side .ajr-support .button {
+	line-height: 1.3;
+}
+
 /* ---- Agency-only delivery panel (standard admin styling, kept below the report) ----------------- */
 
 .aisa-delivery {

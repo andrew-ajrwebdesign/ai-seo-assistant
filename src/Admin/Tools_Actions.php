@@ -18,6 +18,7 @@ use AJR\SEOAssistant\Report\Access;
 use AJR\SEOAssistant\Review\Page_Review;
 use AJR\SEOAssistant\Scan\Page_Role;
 use AJR\SEOAssistant\Scan\Scan_Store;
+use AJR\SEOAssistant\Scan\Scanner;
 use AJR\SEOAssistant\Scan\Scheduler;
 
 defined( 'ABSPATH' ) || exit;
@@ -231,6 +232,13 @@ class Tools_Actions {
 		$post_id = isset( $_POST['post'] ) ? absint( $_POST['post'] ) : 0;
 		$type    = isset( $_POST['type'] ) ? sanitize_key( wp_unslash( $_POST['type'] ) ) : '';
 		$done    = self::apply_type( [ $post_id ], $type );
+		if ( $done > 0 ) {
+			// Read the page again now (a loopback fetch, so AJR Core's new schema is in it): the review then
+			// shows what Google reads with the new page type, not the old scan.
+			$scanner = new Scanner();
+			$scanner->scan_page( $post_id );
+			$scanner->finalize();
+		}
 		$this->back(
 			[
 				'post' => $post_id,

@@ -450,10 +450,8 @@ class Scan_Page {
 		echo '<div class="aisa-tablewrap"><table class="aisa-table aisa-table--pages"><caption class="screen-reader-text">' . esc_html__( 'Pages ranked by opportunity', 'ai-seo-assistant' ) . '</caption><thead><tr>'
 			. '<td class="aisa-col-check"></td><th scope="col">' . esc_html__( 'Page', 'ai-seo-assistant' ) . '</th>'
 			. '<th scope="col">' . esc_html__( 'Opportunity', 'ai-seo-assistant' ) . '</th>'
-			. '<th scope="col" class="aisa-num">' . esc_html__( 'Impressions', 'ai-seo-assistant' ) . '</th>'
-			. '<th scope="col" class="aisa-num">' . esc_html__( 'Position', 'ai-seo-assistant' ) . '</th>'
+			. '<th scope="col" class="aisa-num">' . esc_html__( 'Shown · position', 'ai-seo-assistant' ) . '</th>'
 			. '<th scope="col" class="aisa-num">' . esc_html__( 'CTR vs expected', 'ai-seo-assistant' ) . '</th>'
-			. '<th scope="col" class="aisa-num">' . esc_html__( 'Enquiries', 'ai-seo-assistant' ) . '</th>'
 			. '<th scope="col" class="aisa-num">' . esc_html__( 'Issues', 'ai-seo-assistant' ) . '</th>'
 			. '<td></td></tr></thead><tbody>';
 		foreach ( $shown as $id => $r ) {
@@ -473,16 +471,16 @@ class Scan_Page {
 				. '<td class="aisa-col-check"><input type="checkbox" value="' . esc_attr( (string) $id ) . '" data-aisa-select aria-label="' . esc_attr( $label ) . '"></td>'
 				. '<th scope="row" class="aisa-pagecell"><a class="aisa-pagecell__title" href="' . esc_url( $this->url( [ 'post' => $id ] ) ) . '">' . esc_html( $r['title'] ) . '</a><span class="aisa-pagecell__meta"><span class="aisa-path">' . esc_html( $r['path'] ) . '</span> ' . $this->role_tag( (int) $id, $r ) . ' ' . $badge . '<span class="aisa-row-status" data-aisa-row-status></span></span></th>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- pills escaped in Ui; role_tag escapes.
 				. '<td>' . $this->opportunity_cell( $r ) . '</td>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in opportunity_cell().
-				. '<td class="aisa-num">' . esc_html( number_format_i18n( $r['impressions'] ) ) . '</td>'
-				. '<td class="aisa-num">' . esc_html( $r['position'] > 0 ? number_format_i18n( $r['position'], 1 ) : '–' ) . '</td>'
+				. '<td class="aisa-num">' . esc_html( number_format_i18n( $r['impressions'] ) ) . '<br><span class="aisa-small aisa-tone--flat">' . esc_html( $r['position'] > 0 ? sprintf( /* translators: %s: average position. */ __( 'position %s', 'ai-seo-assistant' ), number_format_i18n( $r['position'], 1 ) ) : '–' ) . '</span>'
+				/* translators: %s: enquiries. */
+				. ( $r['enquiries'] > 0 ? '<br><span class="aisa-small">' . esc_html( sprintf( _n( '%s enquiry', '%s enquiries', $r['enquiries'], 'ai-seo-assistant' ), number_format_i18n( $r['enquiries'] ) ) ) . '</span>' : '' ) . '</td>'
 				. '<td class="aisa-num">' . esc_html( Ui::pct( $r['ctr'] ) . ' / ' . Ui::pct( $r['expected'] ) ) . ( null !== $below ? '<br><span class="aisa-small ' . ( $below >= 1 ? 'aisa-tone--bad' : 'aisa-tone--flat' ) . '">' . esc_html( $below > 0 ? sprintf( /* translators: %s: percentage points. */ __( '%s below', 'ai-seo-assistant' ), number_format_i18n( $below, 1 ) ) : __( 'at or above', 'ai-seo-assistant' ) ) . '</span>' : '' ) . '</td>'
-				. '<td class="aisa-num">' . esc_html( number_format_i18n( $r['enquiries'] ) ) . '</td>'
 				. '<td class="aisa-num"><strong>' . esc_html( (string) $r['issue_count'] ) . '</strong>' . ( $r['issue_count'] > 0 && 0 === $r['claude_fixable'] ? '<br><span class="aisa-small aisa-tone--flat">' . esc_html__( 'do in the editor', 'ai-seo-assistant' ) . '</span>' : '' ) . '</td>'
 				. '<td class="aisa-col-action"><a class="aisa-btn aisa-btn--small" href="' . esc_url( $this->url( [ 'post' => $id ] ) ) . '">' . esc_html__( 'Review', 'ai-seo-assistant' ) . '<span class="screen-reader-text"> ' . esc_html( $r['title'] ) . '</span></a></td>'
 				. '</tr>';
 		}
 		if ( [] === $shown ) {
-			echo '<tr><td colspan="9" class="aisa-empty">' . esc_html__( 'No pages match these filters.', 'ai-seo-assistant' ) . '</td></tr>';
+			echo '<tr><td colspan="7" class="aisa-empty">' . esc_html__( 'No pages match these filters.', 'ai-seo-assistant' ) . '</td></tr>';
 		}
 		echo '</tbody></table></div>';
 		$this->pagination( count( $filtered ), $paged );
@@ -661,6 +659,7 @@ class Scan_Page {
 				'back_url'   => $this->url( [] ),
 				'back_label' => __( 'Back to SEO scan', 'ai-seo-assistant' ),
 				'actions'    => $actions,
+				'own_column' => true,
 			]
 		);
 		echo $hero; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
@@ -687,6 +686,7 @@ class Scan_Page {
 			$this->suggestions_panel( $post_id, $row );
 		}
 		$this->google_reads( $post_id, $row, $post );
+		echo Ui::support_card(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- AJR Core's own markup, escaped there.
 		echo '</div></div>';
 		echo Ui::footer(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 	}

@@ -118,11 +118,15 @@ class Ui {
 
 	/**
 	 * Open the full-width layout under the header: content, with the support card in a right-hand column
-	 * (below the content on narrow screens), the same place as AJR Core's own screens.
+	 * (below the content on narrow screens), the same place as AJR Core's own screens. A screen that already
+	 * has its own right-hand column (the page review) passes false and prints the card at the foot of that
+	 * column instead (support_card()), so the content keeps room for its two columns.
+	 *
+	 * @param bool $column True: the card gets the layout's right-hand column.
 	 */
-	public static function layout_open(): string {
+	public static function layout_open( bool $column = true ): string {
 		self::$open = true;
-		$card       = self::support_card();
+		$card       = $column ? self::support_card() : '';
 		self::$card = $card;
 
 		return '<div class="aisa-layout' . ( '' !== $card ? ' aisa-layout--card' : '' ) . '"><div class="aisa-layout__main">';
@@ -144,7 +148,8 @@ class Ui {
 	 * The dark header.
 	 *
 	 * @param array<string,mixed> $a label (e.g. "SEO scan by AJR Web Design"), title, sub, back_url, back_label,
-	 *                               actions (HTML, already escaped), fresh (bool: show the data pill).
+	 *                               actions (HTML, already escaped), fresh (bool: show the data pill),
+	 *                               own_column (bool: the screen has its own right-hand column; see layout_open()).
 	 */
 	public static function hero( array $a ): string {
 		$back = '';
@@ -159,7 +164,7 @@ class Ui {
 			. ( ! empty( $a['sub'] ) ? '<p class="aisa-hero__sub">' . esc_html( (string) $a['sub'] ) . '</p>' : '' )
 			. ( ! empty( $a['actions'] ) ? '<div class="aisa-hero__actions">' . $a['actions'] . '</div>' : '' ) // Escaped by the caller.
 			. '</header>'
-			. self::layout_open(); // Closed by layout_close() at the end of the screen.
+			. self::layout_open( empty( $a['own_column'] ) ); // Closed by layout_close() at the end of the screen.
 	}
 
 	/**

@@ -227,6 +227,7 @@ class ScanRulesTest extends TestCase {
 		$this->assertSame( 'click', $issues[0]['who'] );
 		$this->assertStringContainsString( 'Service page', $issues[0]['fix'] );
 		$this->assertSame( [], Rules::evaluate( self::clean_page(), [ 'page_type' => 'service' ] + $ctx ), 'set: nothing' );
+		$this->assertSame( [], Rules::evaluate( self::clean_page(), [ 'post_type' => 'post' ] + $ctx ), 'posts: the SEO plugin marks them up as articles' );
 		$this->assertSame( [], Rules::evaluate( self::clean_page(), [ 'inbound' => 3, 'is_service' => true ] ), 'no AJR Core page types: no schema advice at all' );
 	}
 

@@ -83,7 +83,17 @@ class Google_Reads {
 			case 'ImageObject':
 			case 'SearchAction':
 			case 'ReadAction':
-				return '';
+			case 'ListItem':
+			case 'EntryPoint':
+			case 'PropertyValueSpecification':
+			case 'PostalAddress':
+			case 'GeoCoordinates':
+			case 'OpeningHoursSpecification':
+			case 'ContactPoint':
+			case 'Offer':
+			case 'Rating':
+			case 'Language':
+				return ''; // Parts of another node, not something Google shows for the page.
 		}
 
 		return trim( (string) preg_replace( '/(?<!^)([A-Z])/', ' $1', $type ) );

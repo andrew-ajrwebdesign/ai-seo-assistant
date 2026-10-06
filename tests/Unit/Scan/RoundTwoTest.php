@@ -311,6 +311,8 @@ class RoundTwoTest extends TestCase {
 			[ 'type' => 'BreadcrumbList', 'name' => '', 'id' => '' ],
 			[ 'type' => 'WebPage', 'name' => 'Real Estate', 'id' => '' ],
 			[ 'type' => 'ImageObject', 'name' => '', 'id' => '' ],
+			[ 'type' => 'ListItem', 'name' => 'Home', 'id' => '' ],
+			[ 'type' => 'PostalAddress', 'name' => '', 'id' => '' ],
 			[ 'type' => 'Service', 'name' => 'Relocation', 'id' => '' ],
 		];
 		$this->assertSame( [ 'Business', 'Breadcrumb', 'Web page', 'Service: Relocation' ], Google_Reads::chips( $nodes ) );
