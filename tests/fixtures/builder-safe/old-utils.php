@@ -1,0 +1,215 @@
+<?php
+/**
+ * Shared utility helpers.
+ */
+
+namespace AJR\SEOAssistant\Core;
+
+defined( 'ABSPATH' ) || exit;
+
+class Utils {
+
+	/**
+	 * Most posts an admin list screen (audit, metadata report, indexing tools) loads at once.
+	 *
+	 * Until 4.4.0 those screens asked for every post (posts_per_page -1); on a large site that is
+	 * thousands of full post rows in memory to fill a page of 20. The screens filter by SEO meta in PHP,
+	 * so they cannot paginate in SQL; they load the first LIST_CAP and say so when there are more.
+	 */
+	const LIST_CAP = 500;
+
+	/**
+	 * WP_Query arguments for a capped admin list: one more than LIST_CAP (to tell when it was cut), no
+	 * SQL_CALC_FOUND_ROWS, no term cache (no list screen reads terms).
+	 *
+	 * Full post objects are still loaded where a screen prints titles and links: asking for IDs only
+	 * would turn the one query into one get_post() query per row.
+	 *
+	 * @param array $args Screen-specific arguments.
+	 * @return array
+	 */
+	public static function capped_list_args( array $args ) {
+		return array_merge(
+			$args,
+			[
+				'posts_per_page'         => self::LIST_CAP + 1,
+				'no_found_rows'          => true,
+				'update_post_term_cache' => false,
+				'ignore_sticky_posts'    => true,
+			]
+		);
+	}
+
+	/**
+	 * The notice a capped list prints when there were more posts than it loaded.
+	 *
+	 * @return void
+	 */
+	public static function render_list_cap_notice() {
+		printf(
+			'<div class="notice notice-warning inline"><p>%s</p></div>',
+			esc_html(
+				sprintf(
+					/* translators: %d: number of posts loaded. */
+					__( 'This site has more than %1$d posts of these types: only the first %1$d are listed. Filter by post type to narrow the list.', 'ai-seo-assistant' ),
+					self::LIST_CAP
+				)
+			)
+		);
+	}
+
+	public static function trim_to_length( $text, $max_length ) {
+		$text = trim( wp_strip_all_tags( (string) $text ) );
+
+		if ( mb_strlen( $text ) <= $max_length ) {
+			return $text;
+		}
+
+		$trimmed = mb_substr( $text, 0, $max_length );
+		$trimmed = preg_replace( '/\s+\S*$/u', '', $trimmed );
+
+		return rtrim( $trimmed, " \t\n\r\0\x0B.,;:-" );
+	}
+
+	/**
+	 * Shortens text to $max_length, preferring the end of a sentence.
+	 *
+	 * A meta description cut at a word boundary can still stop mid-phrase
+	 * ("Flat fee, month to"), which reads as broken in search results. When a
+	 * full sentence ends within the limit and keeps at least 60% of it, the
+	 * text is cut there instead; otherwise this falls back to the word cut.
+	 *
+	 * @param string $text       Text to shorten.
+	 * @param int    $max_length Maximum length in characters.
+	 * @return string
+	 */
+	public static function trim_to_sentence( $text, $max_length ) {
+		$text = trim( wp_strip_all_tags( (string) $text ) );
+
+		if ( mb_strlen( $text ) <= $max_length ) {
+			return $text;
+		}
+
+		$floor = (int) floor( $max_length * 0.6 );
+
+		// A sentence end is . ! or ? followed by whitespace and an uppercase
+		// letter (or the end of the text), and not a common abbreviation, so
+		// "Dr. Sarah" and "St. Louis" and "4.99" are never treated as one.
+		// Matched against the full text so the character after the stop is
+		// always visible, then walked from the latest candidate backwards.
+		// Each abbreviation is its own top-level lookbehind branch: PCRE2
+		// before 10.43 (bundled with PHP 8.0-8.3) rejects different-length
+		// alternatives nested inside a group, and the plugin supports 8.0.
+		$pattern = '/(?<!\bDr|\bMr|\bMrs|\bMs|\bSt|\bNr|\bInc|\bLtd|\bCo|\bvs|\bbzw|\bca|\binkl|\bz\.B)[.!?](?=\s+[\p{Lu}\p{N}"\'“„(]|\s*$)/u';
+
+		if ( preg_match_all( $pattern, $text, $matches, PREG_OFFSET_CAPTURE ) ) {
+			foreach ( array_reverse( $matches[0] ) as $match ) {
+				$cut = mb_strlen( substr( $text, 0, $match[1] + strlen( $match[0] ) ) );
+
+				if ( $cut < $floor ) {
+					break;
+				}
+
+				if ( $cut <= $max_length ) {
+					return mb_substr( $text, 0, $cut );
+				}
+			}
+		}
+
+		return self::trim_to_length( $text, $max_length );
+	}
+
+	public static function get_title_status( $title ) {
+		$length = mb_strlen( trim( (string) $title ) );
+
+		if ( 0 === $length ) {
+			return 'Missing';
+		}
+
+		if ( $length < 30 ) {
+			return 'Possibly too short';
+		}
+
+		if ( $length > 60 ) {
+			return 'Possibly too long';
+		}
+
+		return 'Looks good';
+	}
+
+	public static function get_description_status( $description ) {
+		$length = mb_strlen( trim( (string) $description ) );
+
+		if ( 0 === $length ) {
+			return 'Missing';
+		}
+
+		if ( $length < 110 ) {
+			return 'Possibly too short';
+		}
+
+		if ( $length > 160 ) {
+			return 'Possibly too long';
+		}
+
+		return 'Looks good';
+	}
+
+	public static function clean_plain_text( $content ) {
+		$content = strip_shortcodes( (string) $content );
+		$content = wp_strip_all_tags( $content );
+		$content = html_entity_decode( $content, ENT_QUOTES, get_bloginfo( 'charset' ) );
+		$content = preg_replace( '/\s+/', ' ', $content );
+
+		return trim( $content );
+	}
+
+	public static function mask_sensitive_text( $text ) {
+		$text = (string) $text;
+
+		if ( false !== stripos( $text, 'Incorrect API key provided' ) ) {
+			return 'Incorrect API key provided.';
+		}
+
+		// Anthropic keys (sk-ant-api03-…) first: the OpenAI pattern below
+		// cannot match them, so they would otherwise reach logs unmasked.
+		$text = preg_replace(
+			'/sk-ant-[A-Za-z0-9_\-]{8,}/',
+			'sk-ant-***masked***',
+			$text
+		);
+
+		$text = preg_replace(
+			'/sk-(proj|live|test)?-[A-Za-z0-9_\-]{8,}/',
+			'sk-***masked***',
+			$text
+		);
+
+		$text = preg_replace(
+			'/GOCSPX-[A-Za-z0-9_\-]+/',
+			'GOCSPX-***masked***',
+			$text
+		);
+
+		// Google OAuth access tokens (ya29.…) and refresh tokens (1//…), should an error body echo one.
+		$text = preg_replace(
+			'/\bya29\.[A-Za-z0-9_\-.]+/',
+			'ya29.***masked***',
+			$text
+		);
+
+		$text = preg_replace(
+			'#\b1//[A-Za-z0-9_\-]{8,}#',
+			'1//***masked***',
+			$text
+		);
+
+		$text = preg_replace(
+			'/API key provided:\s*[^.\s]+/i',
+			'API key provided: ***masked***',
+			$text
+		);
+
+		return $text;
+	}
+}

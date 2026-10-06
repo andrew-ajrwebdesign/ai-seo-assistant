@@ -28,6 +28,11 @@ jobs:
       - name: Run PHPCS
         run: ./vendor/bin/phpcs
 
+      # strip_shortcodes() deletes a builder module's whole text (Divi pages read as empty): only with
+      # "// builder-safe: <reason>" on its line.
+      - name: Builder-safe text check
+        run: php bin/check-builder-safe.php
+
   phpunit:
     name: Unit Tests
     runs-on: ubuntu-latest

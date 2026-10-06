@@ -93,6 +93,7 @@ The product cut (decision 2026-10-06, `work/coding-projects/ai-seo-assistant/dec
   - The scan now stores each page's rendered visible text (schema 5, `scan.body_text`). That includes builder modules and attribute-only copy such as a blurb's title.
   - Rows scanned before this fall back to the title and content with shortcode tags removed but their text kept.
   - Tags are stripped before entities are decoded, so copy reading `&lt;title&gt;` stays words.
+  - A CI check (`bin/check-builder-safe.php`) fails on any `strip_shortcodes()` call in `src/` unless its line says `// builder-safe: <reason>`.
 
 ### Removed
 - Markdown for AI, Redirects, the `core_owns_*` hand-over filters, the Metadata report, Indexing Tools, the Google Search Console OAuth screen and client, and the runtime Composer dependency (no `vendor/` in the zip).
