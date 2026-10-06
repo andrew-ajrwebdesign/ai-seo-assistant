@@ -12,6 +12,7 @@ declare( strict_types=1 );
 namespace AJR\SEOAssistant\Tests\Unit\Review;
 
 use AJR\SEOAssistant\Admin\Editor_Box;
+use AJR\SEOAssistant\Core\Utils;
 use AJR\SEOAssistant\Review\Editor_Check;
 use AJR\SEOAssistant\Tests\Unit\Wp_Basics;
 use WP_Mock\Tools\TestCase;
@@ -54,15 +55,15 @@ class EditorCheckTest extends TestCase {
 		$exact = [ 'check' => 'phrase', 'targets' => [ 'Treasure Valley cities' ], 'sources' => [] ];
 		$this->assertTrue( Editor_Check::in_place( $exact, [], self::TEXT ) );
 		$this->assertFalse( Editor_Check::in_place( [ 'targets' => [ 'treasure valley map' ] ] + $exact, [], self::TEXT ), 'exact: the words must be together' );
-		$this->assertTrue( Editor_Check::in_place( [ 'targets' => [ 'treasure valley cities' ] ] + $exact, [], 'shows the <strong>Treasure  Valley</strong> cities.' ), 'tags, spacing and case ignored' );
+		$this->assertTrue( Editor_Check::in_place( [ 'targets' => [ 'treasure valley cities' ] ] + $exact, [], Utils::visible_text( 'shows the <strong>Treasure  Valley</strong> cities.' ) ), 'tags, spacing and case ignored' );
 
 		// Code-standards re-review: never word by word, never from shortcode attributes or markup.
 		$cost = Editor_Check::of( [ 'area' => 'content', 'advice' => 'Add a short section answering "cost of living in boise".' ] );
 		$this->assertSame( 'phrase', $cost['check'] );
 		$this->assertFalse( Editor_Check::in_place( $cost, [], 'Is Boise Idaho Affordable? Living here, the cost of it in short: in Boise it depends.' ), 'scattered words are not the phrase' );
-		$this->assertFalse( Editor_Check::in_place( $cost, [], '[et_pb_text title="cost of living in boise" admin_label="cost of living in boise"]Moving here soon?[/et_pb_text]' ), 'a shortcode attribute is not visible text' );
-		$this->assertFalse( Editor_Check::in_place( $cost, [], '<img alt="cost of living in boise" src="x.jpg"><p>Hello</p>' ), 'an HTML attribute is not visible text' );
-		$this->assertTrue( Editor_Check::in_place( $cost, [], '[et_pb_text admin_label="Intro"]<p>The <em>cost of living</em> in Boise, in short.</p>[/et_pb_text]' ), 'the phrase in visible text counts' );
+		$this->assertFalse( Editor_Check::in_place( $cost, [], Utils::visible_text( '[et_pb_text title="cost of living in boise" admin_label="cost of living in boise"]Moving here soon?[/et_pb_text]' ) ), 'a shortcode attribute is not visible text' );
+		$this->assertFalse( Editor_Check::in_place( $cost, [], Utils::visible_text( '<img alt="cost of living in boise" src="x.jpg"><p>Hello</p>' ) ), 'an HTML attribute is not visible text' );
+		$this->assertTrue( Editor_Check::in_place( $cost, [], Utils::visible_text( '[et_pb_text admin_label="Intro"]<p>The <em>cost of living</em> in Boise, in short.</p>[/et_pb_text]' ) ), 'the phrase in visible text counts' );
 
 		$link = [ 'check' => 'link', 'targets' => [ 'Boise neighborhoods map' ], 'sources' => [ '/boise-neighborhoods/' ] ];
 		$this->assertTrue( Editor_Check::in_place( $link, [], '', [ [ '/boise-neighborhoods/', 'See our Boise Neighborhoods Map' ] ] ) );
@@ -147,5 +148,81 @@ class EditorCheckTest extends TestCase {
 		$this->assertFalse( $items['Content']['found'], '"treasure valley map" is not on the page as a phrase: the person ticks Done' );
 		$this->assertNull( $items['Content']['done'] );
 		$this->assertNull( $items['Links']['done'], 'not there yet: still to do' );
+	}
+
+	/**
+	 * Code-standards re-review (1): on a Divi page the phrase check read nothing, because the old text came
+	 * through strip_shortcodes(), which deletes the enclosed body of every registered shortcode. Checked
+	 * through Page_Review::editor_context() with et_pb_text registered and strip_shortcodes() behaving as
+	 * core's: a row scanned before 5.0 kept no rendered text, so the content is the fallback.
+	 */
+	public function test_editor_context_reads_divi_text(): void {
+		$this->wp_basics();
+		$GLOBALS['wpdb'] = new class() {
+			/** @var string */
+			public $prefix = 'wp_';
+
+			/**
+			 * No other scanned pages.
+			 *
+			 * @return array<int,mixed>
+			 */
+			public function get_results(): array {
+				return [];
+			}
+		};
+		$registered = [];
+		\WP_Mock::userFunction( 'add_shortcode' )->andReturnUsing(
+			function ( $tag ) use ( &$registered ) {
+				$registered[] = $tag;
+			}
+		);
+		// Core's strip_shortcodes(): a registered shortcode goes, the text it encloses with it.
+		\WP_Mock::userFunction( 'strip_shortcodes' )->andReturnUsing(
+			function ( $content ) use ( &$registered ) {
+				foreach ( $registered as $tag ) {
+					$content = (string) preg_replace( '/\[' . $tag . '\b[^\]]*\].*?\[\/' . $tag . '\]/s', '', (string) $content );
+				}
+				return $content;
+			}
+		);
+		\WP_Mock::userFunction( 'wp_strip_all_tags' )->andReturnUsing( fn( $s ) => trim( strip_tags( (string) $s ) ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.strip_tags_strip_tags -- the stand-in for core's.
+		\WP_Mock::userFunction( 'get_bloginfo' )->andReturn( 'UTF-8' );
+		\WP_Mock::userFunction( 'has_blocks' )->andReturn( false );
+		\WP_Mock::userFunction( 'get_the_title' )->andReturn( 'Living here' );
+		add_shortcode( 'et_pb_section', '__return_empty_string' );
+		add_shortcode( 'et_pb_text', '__return_empty_string' );
+		$this->assertSame( '', strip_shortcodes( '[et_pb_text]Words[/et_pb_text]' ), 'the stand-in deletes the body, as core does' );
+
+		$content = '[et_pb_section][et_pb_text admin_label="Intro"]<p>The cost of living in Boise, in short. Fix the &lt;title&gt; tag first.</p>[/et_pb_text][/et_pb_section]';
+		if ( ! class_exists( '\WP_Post' ) ) {
+			eval( 'class WP_Post { public $ID = 0; public $post_type = "page"; public $post_status = "publish"; public $post_password = ""; public $post_modified_gmt = ""; public $post_content = ""; public $post_excerpt = ""; }' ); // phpcs:ignore Squiz.PHP.Eval.Discouraged -- a test stand-in for core's class.
+		}
+		$post               = new \WP_Post();
+		$post->ID           = 7;
+		$post->post_content = $content;
+		\WP_Mock::userFunction( 'get_post' )->andReturn( $post );
+
+		$cost  = Editor_Check::of( [ 'area' => 'content', 'advice' => 'Add a short section answering "cost of living in boise".' ] );
+		$title = [ 'check' => 'phrase', 'targets' => [ 'title tag' ], 'sources' => [] ];
+
+		$context = \AJR\SEOAssistant\Review\Page_Review::editor_context( 7, [ 'path' => '/living/' ] );
+		$this->assertStringContainsString( 'The cost of living in Boise, in short.', $context['text'], 'the text module\'s body is read' );
+		$this->assertTrue( Editor_Check::in_place( $cost, [], $context['text'] ), 'the to-do ticks itself on a Divi page' );
+		$this->assertStringContainsString( 'Fix the <title> tag first.', $context['text'], 'tags out first, then entities decoded' );
+		$this->assertTrue( Editor_Check::in_place( $title, [], $context['text'] ), 'copy written as &lt;title&gt; is words, not a tag' );
+		$this->assertSame( $context['text'], \AJR\SEOAssistant\Review\Page_Review::prompt_content( 7, [ 'path' => '/living/' ] ), 'Claude reads the same words: the Divi text, and "<title>" not stripped as a tag' );
+
+		// The scan's rendered text wins: a blurb's title= is visible on the page, never in the content's words.
+		$context = \AJR\SEOAssistant\Review\Page_Review::editor_context(
+			7,
+			[
+				'path'      => '/living/',
+				'body_text' => 'Boise Neighborhoods Map The cost of living in Boise Moving here soon?',
+			]
+		);
+		$this->assertSame( 'Boise Neighborhoods Map The cost of living in Boise Moving here soon?', $context['text'] );
+		$this->assertTrue( Editor_Check::in_place( [ 'check' => 'phrase', 'targets' => [ 'boise neighborhoods map' ], 'sources' => [] ], [], $context['text'] ) );
+		unset( $GLOBALS['wpdb'] );
 	}
 }

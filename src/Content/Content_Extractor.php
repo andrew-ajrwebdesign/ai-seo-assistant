@@ -46,7 +46,8 @@ class Content_Extractor {
 			$parts[] = $this->get_elementor_content( $post_id );
 		}
 
-		return Utils::clean_plain_text(
+		// Visible text, never strip_shortcodes(): that deletes a builder module's whole body (Utils::visible_text()).
+		return Utils::visible_text(
 			implode( "\n\n", array_filter( $parts ) )
 		);
 	}

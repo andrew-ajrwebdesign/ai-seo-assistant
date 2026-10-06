@@ -59,8 +59,18 @@ class Utils {
 	}
 
 	public static function trim_to_length( $text, $max_length ) {
-		$text = trim( wp_strip_all_tags( (string) $text ) );
+		return self::cut_words( trim( wp_strip_all_tags( (string) $text ) ), (int) $max_length );
+	}
 
+	/**
+	 * Plain text cut to $max_length at a word boundary. Never strips tags: plain text that reads "<title>"
+	 * (decoded from "&lt;title&gt;") is words, not a tag (Utils::visible_text()).
+	 *
+	 * @param string $text       Plain text.
+	 * @param int    $max_length Maximum length in characters.
+	 */
+	public static function cut_words( string $text, int $max_length ): string {
+		$text = trim( $text );
 		if ( mb_strlen( $text ) <= $max_length ) {
 			return $text;
 		}
@@ -155,13 +165,22 @@ class Utils {
 		return 'Looks good';
 	}
 
-	public static function clean_plain_text( $content ) {
-		$content = strip_shortcodes( (string) $content );
-		$content = wp_strip_all_tags( $content );
-		$content = html_entity_decode( $content, ENT_QUOTES, get_bloginfo( 'charset' ) );
-		$content = preg_replace( '/\s+/', ' ', $content );
+	/**
+	 * The words a visitor reads in post content or HTML, as plain text: script and style blocks out,
+	 * shortcode TAGS out (their attributes with them) but never the text they enclose, HTML tags out, and
+	 * only then entities decoded, so copy written as "&lt;title&gt;" stays words instead of becoming a tag
+	 * that is then stripped. Never strip_shortcodes(): it deletes the enclosed body of every registered
+	 * shortcode, which on a Divi page is all of its text. Pure PHP (no WordPress).
+	 *
+	 * @param string $text Post content or HTML.
+	 */
+	public static function visible_text( string $text ): string {
+		$text = (string) preg_replace( '@<(script|style)[^>]*>.*?</\1>@si', ' ', $text );
+		$text = (string) preg_replace( '/\[\/?[a-zA-Z0-9_-]+(?:\s[^\]]*)?\]/', ' ', $text ); // Shortcode tags, attributes and all; the text between stays.
+		$text = (string) preg_replace( '/<[^>]*>/', ' ', $text ); // phpcs:ignore -- pure PHP (no WordPress); tags and attributes out.
+		$text = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' ); // After the tags are out, never before.
 
-		return trim( $content );
+		return trim( (string) preg_replace( '/\s+/u', ' ', $text ) );
 	}
 
 	public static function mask_sensitive_text( $text ) {

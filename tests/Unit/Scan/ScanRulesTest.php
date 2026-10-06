@@ -254,6 +254,60 @@ class ScanRulesTest extends TestCase {
 		$this->assertCount( 2, $facts['images'], 'tracking pixel dropped, lazy image kept' );
 		$this->assertSame( 42, $facts['images'][0]['id'] );
 		$this->assertNull( $facts['images'][1]['alt'], 'a missing alt attribute is null, not ""' );
+		$this->assertSame( 'Boiler repair Why Words one two three contact us x call', $facts[ Html_Parser::TEXT ], 'the rendered visible text, menu and footer left out' );
+
+		// Rendered copy reading "<title>" (written &lt;title&gt;) stays words: the DOM decodes once, nothing strips it.
+		$facts = Html_Parser::parse( '<html><body><main><p>Fix the &lt;title&gt; tag &amp; more.</p></main></body></html>', 'https://x.test/' );
+		$this->assertSame( 'Fix the <title> tag & more.', $facts[ Html_Parser::TEXT ] );
+		$this->assertSame( 6, $facts['words'] );
+		$facts = Html_Parser::parse( '<html><body><main><p>Write &amp;lt; for it.</p></main></body></html>', 'https://x.test/' );
+		$this->assertSame( 'Write &lt; for it.', $facts[ Html_Parser::TEXT ], 'decoded once (by the DOM), never twice' );
+	}
+
+	/**
+	 * The visible text is stored in its own column, never inside facts (the site-wide pass loads every
+	 * row's facts).
+	 */
+	public function test_store_keeps_text_out_of_facts(): void {
+		$GLOBALS['wpdb'] = new class() {
+			/** @var string */
+			public $prefix = 'wp_';
+			/** @var array<int,mixed> */
+			public $args = [];
+
+			/**
+			 * Capture the values.
+			 *
+			 * @param string $sql  SQL.
+			 * @param mixed  ...$a Values.
+			 */
+			public function prepare( $sql, ...$a ): string {
+				$this->args = $a;
+				return (string) $sql;
+			}
+
+			/**
+			 * Run nothing.
+			 */
+			public function query(): int {
+				return 1;
+			}
+		};
+		\WP_Mock::userFunction( 'wp_json_encode' )->andReturnUsing( fn( $v ) => json_encode( $v ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.json_encode_json_encode -- the stand-in for core's.
+		( new \AJR\SEOAssistant\Scan\Scan_Store() )->save_facts(
+			3,
+			'/a/',
+			'page',
+			'rendered',
+			[
+				'words'           => 2,
+				Html_Parser::TEXT => 'Two words',
+			]
+		);
+		$args = $GLOBALS['wpdb']->args;
+		$this->assertSame( '{"words":2}', $args[6], 'facts without the text' );
+		$this->assertSame( 'Two words', $args[7], 'the text in its column' );
+		unset( $GLOBALS['wpdb'] );
 	}
 
 	/**

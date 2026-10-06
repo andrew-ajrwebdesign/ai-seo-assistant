@@ -38,6 +38,12 @@ class Html_Parser {
 	public const MAX_IMAGES   = 60;
 	public const MAX_LINKS    = 300;
 
+	/** Most characters of the page's visible text kept (Scan_Store's own column, never in facts). */
+	public const MAX_TEXT = 30000;
+
+	/** The facts key carrying the visible text from parse() to Scan_Store::save_facts(), which moves it to its column. */
+	public const TEXT = 'body_text';
+
 	/** Class or id fragments of site chrome that is not the page's own content. */
 	protected const CHROME = '/(^|[\s_-])(main-header|main-footer|site-header|site-footer|et-l--header|et-l--footer|elementor-location-header|elementor-location-footer|wp-block-template-part|menu|navbar|cookie|skip-link|sidebar|widget-area|author-box|author-bio|about-author|related-posts|comments-area|comment-respond|post-navigation|sharedaddy|breadcrumbs?)([\s_-]|$)/i';
 
@@ -109,8 +115,12 @@ class Html_Parser {
 
 		$facts['images']                        = self::images( $xp, $content );
 		[ $facts['links'], $facts['external'] ] = self::links( $xp, $content, $home );
-		$text                                   = self::clean( self::visible_text( $content ) );
-		$facts['words']                         = '' === $text ? 0 : count( preg_split( '/\s+/u', $text ) );
+		// The DOM has already decoded entities once: whitespace only, so copy reading "&lt;title&gt;" stays words.
+		$text           = trim( (string) preg_replace( '/\s+/u', ' ', self::visible_text( $content ) ) );
+		$facts['words'] = '' === $text ? 0 : count( preg_split( '/\s+/u', $text ) );
+		// The rendered words, builder modules' text and attribute-only copy (a Divi blurb's title) included:
+		// what the editor advice's phrase check and the page review read.
+		$facts[ self::TEXT ] = mb_substr( $text, 0, self::MAX_TEXT );
 
 		return $facts;
 	}

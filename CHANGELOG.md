@@ -89,6 +89,10 @@ The product cut (decision 2026-10-06, `work/coding-projects/ai-seo-assistant/dec
   - The progress bar pauses in a hidden tab.
 - **The post editor's box is now "SEO to-do for this page"** (Andrew: "all we really need to see is the do this in editor"). It shows the tier, the to-do count, the last scan date and a link to the full review, then the headings, links and content to-dos, each with a **Done** tick that queues a rescan. The 4.x box is gone: its title and description fields (Yoast's own box has them), the "Local SEO Focus" form with another client's example placeholders, the generate buttons, the live preview into Yoast, and the save handler. The plugin now writes nothing when a post is saved. Notes already typed there are still read by the review until cleared.
 - **Fix:** the bulk bar's "Generate for selected (3)" label is no longer written into the button's icon span.
+- **Fix: page builders' text is read.** The editor advice's phrase check and the review's page text both came through `strip_shortcodes()`. With Divi's modules registered, that deletes every module's enclosed text, so a Divi page read as empty and content to-dos never ticked themselves.
+  - The scan now stores each page's rendered visible text (schema 5, `scan.body_text`). That includes builder modules and attribute-only copy such as a blurb's title.
+  - Rows scanned before this fall back to the title and content with shortcode tags removed but their text kept.
+  - Tags are stripped before entities are decoded, so copy reading `&lt;title&gt;` stays words.
 
 ### Removed
 - Markdown for AI, Redirects, the `core_owns_*` hand-over filters, the Metadata report, Indexing Tools, the Google Search Console OAuth screen and client, and the runtime Composer dependency (no `vendor/` in the zip).

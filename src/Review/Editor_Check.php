@@ -124,7 +124,7 @@ class Editor_Check {
 	 *
 	 * @param array<string,mixed>                 $check   of().
 	 * @param array<string,mixed>                 $facts   The page's latest facts (Html_Parser).
-	 * @param string                              $text    The page's text.
+	 * @param string                              $text    The page's visible text, plain (Page_Review::page_text()).
 	 * @param array<int,array{0:string,1:string}> $inbound Links to the page: [ from path, link text ].
 	 */
 	public static function in_place( array $check, array $facts, string $text = '', array $inbound = [] ): bool {
@@ -144,7 +144,7 @@ class Editor_Check {
 				}
 				return in_array( $targets[0], $h2, true );
 			case 'phrase':
-				$body = ' ' . self::norm( self::visible_text( $text ) ) . ' ';
+				$body = ' ' . self::norm( $text ) . ' ';
 				foreach ( $targets as $t ) {
 					if ( false === strpos( $body, ' ' . $t . ' ' ) ) {
 						return false;
@@ -168,27 +168,12 @@ class Editor_Check {
 	}
 
 	/**
-	 * What a visitor reads: shortcodes (Divi's [et_pb_… attr="…"]), HTML tags and their attributes, and
-	 * script and style blocks removed. Only the words between them are left.
-	 *
-	 * @param string $text Post content or rendered HTML.
-	 */
-	public static function visible_text( string $text ): string {
-		$text = (string) preg_replace( '@<(script|style)[^>]*>.*?</\1>@si', ' ', $text );
-		$text = (string) preg_replace( '/\[\/?[a-zA-Z0-9_-]+(?:\s[^\]]*)?\]/', ' ', $text ); // Shortcode tags, attributes and all.
-		$text = (string) preg_replace( '/<[^>]*>/', ' ', $text ); // phpcs:ignore -- pure PHP (no WordPress); tags and attributes out.
-
-		return $text;
-	}
-
-	/**
-	 * Text for comparison: lower case, letters and digits only, single spaces.
+	 * Text for comparison: lower case, letters and digits only, single spaces. Its input is already plain
+	 * text (decoded once, by Utils::visible_text() or the HTML parser): never decoded again here.
 	 *
 	 * @param string $text Text.
 	 */
 	public static function norm( string $text ): string {
-		$text = html_entity_decode( $text, ENT_QUOTES | ENT_HTML5, 'UTF-8' );
-
 		return trim( (string) preg_replace( '/[^\p{L}\p{N}]+/u', ' ', mb_strtolower( $text ) ) );
 	}
 }

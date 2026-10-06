@@ -202,7 +202,7 @@ class Page_Review {
 		$blocks  = self::image_blocks( self::images_needing_alt( $facts ) );
 		$ids     = array_column( $blocks, 'id' );
 		$images  = array_values( array_filter( self::images_needing_alt( $facts ), static fn( $i ) => in_array( $i['id'], $ids, true ) ) );
-		$content = Utils::trim_to_length( (string) ( new Content_Extractor() )->get_content( $post_id ), 8000 );
+		$content = self::prompt_content( $post_id, $row );
 		$current = [
 			'title'       => (string) ( $facts['title'] ?? '' ),
 			'description' => (string) ( $facts['description'] ?? '' ),
@@ -794,9 +794,34 @@ class Page_Review {
 
 		return [
 			'facts'   => (array) ( $row['facts'] ?? [] ),
-			'text'    => (string) ( new Content_Extractor() )->get_content( $post_id ),
+			'text'    => self::page_text( $post_id, $row ),
 			'inbound' => $inbound,
 		];
+	}
+
+	/**
+	 * The page's words as sent to Claude for the review: page_text(), cut to 8,000 characters.
+	 *
+	 * @param int                 $post_id Post ID.
+	 * @param array<string,mixed> $row     Its scan row.
+	 */
+	public static function prompt_content( int $post_id, array $row ): string {
+		return Utils::cut_words( self::page_text( $post_id, $row ), 8000 ); // Plain already: never through wp_strip_all_tags() again.
+	}
+
+	/**
+	 * The page's visible words, plain: the scan's rendered text (a page builder's modules ran, so a Divi
+	 * text module's body and a blurb's title= are there), or, for a row scanned before 5.0 stored it, the
+	 * title and content through Utils::visible_text(). Never strip_shortcodes(): with Divi's modules
+	 * registered it deletes every module's text and the page reads as empty.
+	 *
+	 * @param int                 $post_id Post ID.
+	 * @param array<string,mixed> $row     Its scan row.
+	 */
+	public static function page_text( int $post_id, array $row ): string {
+		$text = (string) ( $row['body_text'] ?? '' );
+
+		return '' !== trim( $text ) ? $text : (string) ( new Content_Extractor() )->get_content( $post_id );
 	}
 
 	/**

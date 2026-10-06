@@ -37,19 +37,23 @@ class Scan_Store {
 	public function save_facts( int $post_id, string $path, string $post_type, string $source, array $facts, string $flags = '' ): void {
 		global $wpdb;
 		$table = Schema::table( 'scan' );
+		// The page's visible text has its own column: the site-wide pass loads every row's facts, never this.
+		$text = mb_substr( (string) ( $facts[ Html_Parser::TEXT ] ?? '' ), 0, Html_Parser::MAX_TEXT );
+		unset( $facts[ Html_Parser::TEXT ] );
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own table.
 		$wpdb->query(
 			$wpdb->prepare(
 				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own table name (Schema::table()).
-				"INSERT INTO `{$table}` (post_id, path, post_type, scanned_at, source, flags, facts, issues) VALUES (%d, %s, %s, %s, %s, %s, %s, '[]')
-				ON DUPLICATE KEY UPDATE path = VALUES(path), post_type = VALUES(post_type), scanned_at = VALUES(scanned_at), source = VALUES(source), flags = VALUES(flags), facts = VALUES(facts)", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+				"INSERT INTO `{$table}` (post_id, path, post_type, scanned_at, source, flags, facts, body_text, issues) VALUES (%d, %s, %s, %s, %s, %s, %s, %s, '[]')
+				ON DUPLICATE KEY UPDATE path = VALUES(path), post_type = VALUES(post_type), scanned_at = VALUES(scanned_at), source = VALUES(source), flags = VALUES(flags), facts = VALUES(facts), body_text = VALUES(body_text)", // phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 				$post_id,
 				mb_substr( $path, 0, 190 ),
 				$post_type,
 				gmdate( 'Y-m-d H:i:s' ),
 				$source,
 				substr( $flags, 0, 32 ),
-				(string) wp_json_encode( $facts )
+				(string) wp_json_encode( $facts ),
+				$text
 			)
 		);
 	}
@@ -267,6 +271,7 @@ class Scan_Store {
 		}
 		$row['post_id']     = (int) $row['post_id'];
 		$row['issue_count'] = (int) $row['issue_count'];
+		$row['body_text']   = (string) ( $row['body_text'] ?? '' );
 
 		return $row;
 	}
