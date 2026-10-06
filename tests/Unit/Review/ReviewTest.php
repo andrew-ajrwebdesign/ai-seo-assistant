@@ -71,8 +71,15 @@ class Fake_Store extends Scan_Store {
 class Fake_Log extends Change_Log {
 	/** @var array<int,array<string,mixed>> */
 	public $rows = [];
+	/** @var array<int,string> Fields whose row the "database" refuses (insert fails). */
+	public $refuse = [];
+	/** @var int */
+	public $next = 0;
 	public function log( string $batch, int $post_id, string $path, string $field, int $object_id, string $before, string $after, int $user_id ): int {
-		$id                = count( $this->rows ) + 1;
+		if ( in_array( $field, $this->refuse, true ) ) {
+			return 0;
+		}
+		$id                = ++$this->next;
 		$this->rows[ $id ] = compact( 'id', 'batch', 'post_id', 'path', 'field', 'object_id', 'user_id' ) + [
 			'before_value' => $before,
 			'after_value'  => $after,
@@ -86,8 +93,13 @@ class Fake_Log extends Change_Log {
 	public function get( int $id ): ?array {
 		return $this->rows[ $id ] ?? null;
 	}
-	public function mark_undone( int $id, int $user_id ): void {
+	public function mark_undone( int $id, int $user_id ): bool {
 		$this->rows[ $id ]['undone_at'] = '2026-10-06 11:00:00';
+		return true;
+	}
+	public function discard( int $id ): bool {
+		unset( $this->rows[ $id ] );
+		return true;
 	}
 }
 
@@ -281,6 +293,109 @@ class ReviewTest extends TestCase {
 		$this->assertSame( '', $this->alts[491], 'alt back to before' );
 		$this->assertNull( $log->rows[1]['undone_at'] );
 		$this->assertNotNull( $log->rows[2]['undone_at'] );
+	}
+
+	/**
+	 * A 200 KB builder page: the content row is logged before the page is written, and Undo puts it back
+	 * byte for byte. The change log's columns are longtext (a text column stops at 64 KB).
+	 */
+	public function test_large_page_apply_and_undo_byte_identical(): void {
+		$adapter       = new Fake_Adapter();
+		$this->alts    = [ 491 => '' ];
+		$filler        = str_repeat( '[et_pb_text]Boise has four real seasons, and every one of them is worth a visit. [/et_pb_text]', 2400 );
+		$this->content = $filler . '[et_pb_image src="https://x.test/wp-content/uploads/boise_spring_sized.jpg" alt="old" image_id="491"][/et_pb_image]' . $filler;
+		$this->assertGreaterThan( 200 * 1024, strlen( $this->content ) );
+		$original = $this->content;
+		$store    = new Fake_Store();
+		$store->row = [
+			'path'        => '/boise-area-weather/',
+			'suggestions' => [
+				'alts'   => [
+					[
+						'id'    => 491,
+						'value' => 'Boise Depot clock tower behind spring flowers',
+						'src'   => 'https://x.test/wp-content/uploads/boise_spring_sized.jpg',
+					],
+				],
+				'editor' => [],
+			],
+		];
+		\WP_Mock::userFunction( 'get_post_field' )->andReturnUsing( fn() => $this->content );
+		\WP_Mock::userFunction( 'current_user_can' )->andReturn( true );
+		\WP_Mock::userFunction( 'wp_update_post' )->andReturnUsing(
+			function ( $post ) {
+				$this->content = $post['post_content'];
+				return 1;
+			}
+		);
+		$log    = new Fake_Log();
+		$review = new Testable_Review( new \AJR\SEOAssistant\AI\Claude_Client(), $store, $log, $adapter );
+		$review->apply( 384, [ 'alts' => [ 491 => [ 'apply' => true ] ] ], 3 );
+		$content_row = array_values( array_filter( $log->rows, static fn( $r ) => 'content' === $r['field'] ) )[0];
+		$this->assertSame( $original, $content_row['before_value'], 'the whole 200 KB page is in the log' );
+		$this->assertNotSame( $original, $this->content );
+
+		$undo = $review->undo( array_keys( $log->rows ), 3 );
+		$this->assertSame( [], $undo['kept'] );
+		$this->assertSame( md5( $original ), md5( $this->content ), 'byte-identical after Undo' );
+
+		// The schema the log lives in holds it: longtext, not text (64 KB).
+		$GLOBALS['aisa_dbdelta'] = [];
+		global $wpdb;
+		$wpdb = new class() { // phpcs:ignore WordPress.WP.GlobalVariablesOverride.Prohibited -- test double.
+			/**
+			 * Table prefix.
+			 *
+			 * @var string
+			 */
+			public $prefix = 'wp_';
+
+			/**
+			 * Charset.
+			 */
+			public function get_charset_collate() {
+				return '';
+			}
+		};
+		\WP_Mock::userFunction( 'update_option' )->andReturn( true );
+		\AJR\SEOAssistant\Core\Schema::install();
+		$changes = implode( "\n", (array) $GLOBALS['aisa_dbdelta'] );
+		$this->assertStringContainsString( 'before_value longtext NOT NULL', $changes );
+		$this->assertStringContainsString( 'after_value longtext NOT NULL', $changes );
+	}
+
+	/**
+	 * A content change the log refuses is never made (it could not be undone).
+	 */
+	public function test_content_not_written_when_log_fails(): void {
+		$adapter       = new Fake_Adapter();
+		$this->alts    = [ 491 => '' ];
+		$this->content = '[et_pb_image src="https://x.test/wp-content/uploads/boise_spring_sized.jpg" alt="old"][/et_pb_image]';
+		$original      = $this->content;
+		$store         = new Fake_Store();
+		$store->row    = [
+			'path'        => '/x/',
+			'suggestions' => [
+				'alts'   => [
+					[
+						'id'    => 491,
+						'value' => 'Boise Depot',
+						'src'   => 'https://x.test/wp-content/uploads/boise_spring_sized.jpg',
+					],
+				],
+				'editor' => [],
+			],
+		];
+		\WP_Mock::userFunction( 'get_post_field' )->andReturnUsing( fn() => $this->content );
+		\WP_Mock::userFunction( 'current_user_can' )->andReturn( true );
+		\WP_Mock::userFunction( 'wp_update_post' )->never();
+		$log         = new Fake_Log();
+		$log->refuse = [ 'content' ];
+		$review      = new Testable_Review( new \AJR\SEOAssistant\AI\Claude_Client(), $store, $log, $adapter );
+		$review->apply( 384, [ 'alts' => [ 491 => [ 'apply' => true ] ] ], 3 );
+		$this->assertSame( $original, $this->content, 'page untouched' );
+		$this->assertFalse( $store->row['suggestions']['applied']['alts'][491]['visible'] );
+		$this->assertStringContainsString( 'change log', $store->row['suggestions']['applied']['alts'][491]['reason'] );
 	}
 
 	/**

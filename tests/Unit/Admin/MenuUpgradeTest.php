@@ -182,6 +182,26 @@ class MenuUpgradeTest extends TestCase {
 	}
 
 	/**
+	 * A site already at plugin level 5.0.0 whose tables are older (5.0.0's text columns) gets them altered
+	 * on the next admin load: the tables follow their own version, not the plugin level.
+	 */
+	public function test_schema_mismatch_reinstalls_tables(): void {
+		$this->options[ Upgrade::OPTION ]                                     = Upgrade::LEVEL;
+		$this->options[ \AJR\SEOAssistant\Core\Schema::VERSION_OPTION ]       = '5.0.0';
+		$GLOBALS['aisa_dbdelta']                                              = [];
+		$this->fake_db( null, 0 );
+		\WP_Mock::userFunction( 'current_user_can' )->andReturn( true );
+		( new Upgrade() )->maybe_run();
+		$this->assertStringContainsString( 'before_value longtext', implode( "\n", $GLOBALS['aisa_dbdelta'] ) );
+		$this->assertSame( \AJR\SEOAssistant\Core\Schema::VERSION, $this->options[ \AJR\SEOAssistant\Core\Schema::VERSION_OPTION ] );
+
+		// Current tables: nothing to do.
+		$GLOBALS['aisa_dbdelta'] = [];
+		( new Upgrade() )->maybe_run();
+		$this->assertSame( [], $GLOBALS['aisa_dbdelta'] );
+	}
+
+	/**
 	 * A fake $wpdb: SHOW TABLES answers $table; $enabled enabled rules, all with source /old/.
 	 *
 	 * @param string|null $table   Table.

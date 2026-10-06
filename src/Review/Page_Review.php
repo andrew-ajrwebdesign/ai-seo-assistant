@@ -463,10 +463,16 @@ class Page_Review {
 				'matches' => $splice['matches'],
 			];
 		}
-		$content_saved = $new === $content ? null : $this->write_content( $post_id, $content, $new );
-		if ( true === $content_saved ) {
-			$this->log->log( $batch, $post_id, $path, 'content', $post_id, $content, $new, $user_id );
-			$count += $page_only;
+		$content_saved = null;
+		if ( $new !== $content ) {
+			// Log FIRST: a content change that could not be logged could not be undone, so it is not made.
+			$log_id        = $this->log->log( $batch, $post_id, $path, 'content', $post_id, $content, $new, $user_id );
+			$content_saved = 0 === $log_id ? 'not-logged' : $this->write_content( $post_id, $content, $new );
+			if ( true === $content_saved ) {
+				$count += $page_only;
+			} elseif ( $log_id > 0 ) {
+				$this->log->discard( $log_id ); // Nothing changed on the page: no row to undo.
+			}
 		}
 
 		$s['applied'] = [
@@ -503,7 +509,7 @@ class Page_Review {
 	 * @param int    $post_id Post ID.
 	 * @param string $before  Content before.
 	 * @param string $after   Content after.
-	 * @return bool|string true when saved; 'not-allowed' | 'changed' when not.
+	 * @return bool|string true when saved; 'not-allowed' | 'changed' | 'restore-failed' when not.
 	 */
 	protected function write_content( int $post_id, string $before, string $after ) {
 		if ( ! current_user_can( 'unfiltered_html' ) ) {
@@ -527,7 +533,8 @@ class Page_Review {
 				]
 			);
 			clean_post_cache( $post_id );
-			return 'changed';
+			// The put-back is checked too: if even that does not read back, say so (the revisions hold it).
+			return (string) get_post_field( 'post_content', $post_id, 'raw' ) === $before ? 'changed' : 'restore-failed';
 		}
 
 		return true;
@@ -560,6 +567,10 @@ class Page_Review {
 					$reason = __( 'Your account may not save raw HTML on this site, so the page content was left alone.', 'ai-seo-assistant' );
 				} elseif ( 'changed' === $saved ) {
 					$reason = __( 'The page content changed while applying, so it was left alone. Try again.', 'ai-seo-assistant' );
+				} elseif ( 'not-logged' === $saved ) {
+					$reason = __( 'The change could not be saved in the change log (so it could not be undone), so the page content was left alone.', 'ai-seo-assistant' );
+				} elseif ( 'restore-failed' === $saved ) {
+					$reason = __( 'Saving the page went wrong and putting it back could not be confirmed: check the page, and restore it from Revisions in the editor if needed.', 'ai-seo-assistant' );
 				} else {
 					$reason = __( 'The page still shows a different alt (a cache, or a module printing its own).', 'ai-seo-assistant' );
 				}
@@ -591,8 +602,9 @@ class Page_Review {
 			}
 			if ( 'content' === $row['field'] ) {
 				// The post content is restored only while it is exactly what the apply left (byte for byte).
-				if ( true !== $this->write_content( $row['post_id'], (string) $row['after_value'], (string) $row['before_value'] ) ) {
-					$kept[] = $row['field'];
+				$restored = $this->write_content( $row['post_id'], (string) $row['after_value'], (string) $row['before_value'] );
+				if ( true !== $restored ) {
+					$kept[] = 'restore-failed' === $restored ? 'content-restore-failed' : $row['field'];
 					continue;
 				}
 				$this->log->mark_undone( $row['id'], $user_id );

@@ -314,14 +314,15 @@ class Scan_Page {
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- display-only result code from our own redirect.
 		$code     = isset( $_GET['aisa'] ) ? sanitize_key( wp_unslash( $_GET['aisa'] ) ) : '';
 		$messages = [
-			'rescan'      => [ 'info', __( 'Rescan started. It runs in the background in steps; this screen updates when you reload it.', 'ai-seo-assistant' ) ],
-			'kept'        => [ 'warning', __( 'Some fields were not undone: they were changed again after the plugin applied them, and undo never overwrites later work.', 'ai-seo-assistant' ) ],
-			'undone'      => [ 'success', __( 'Undone: the earlier values are back.', 'ai-seo-assistant' ) ],
-			'nothing'     => [ 'info', __( 'Nothing was applied: every field was skipped or already had that value.', 'ai-seo-assistant' ) ],
-			'genfail'     => [ 'error', __( 'Claude could not write suggestions for this page. Try again in a minute.', 'ai-seo-assistant' ) ],
-			'capped'      => [ 'warning', __( 'The monthly AI cap is reached, so no new suggestions were written.', 'ai-seo-assistant' ) ],
-			'type'        => [ 'success', __( 'Page type saved in AJR Core. Google reads it from the next visit; the opportunity score counts it now.', 'ai-seo-assistant' ) ],
-			'type_failed' => [ 'error', __( 'The page type was not changed.', 'ai-seo-assistant' ) ],
+			'rescan'         => [ 'info', __( 'Rescan started. It runs in the background in steps; this screen updates when you reload it.', 'ai-seo-assistant' ) ],
+			'kept'           => [ 'warning', __( 'Some fields were not undone: they were changed again after the plugin applied them, and undo never overwrites later work.', 'ai-seo-assistant' ) ],
+			'restore_failed' => [ 'error', __( 'The page content could not be put back as it was, and putting it back could not be confirmed: check the page, and restore it from Revisions in the editor if needed.', 'ai-seo-assistant' ) ],
+			'undone'         => [ 'success', __( 'Undone: the earlier values are back.', 'ai-seo-assistant' ) ],
+			'nothing'        => [ 'info', __( 'Nothing was applied: every field was skipped or already had that value.', 'ai-seo-assistant' ) ],
+			'genfail'        => [ 'error', __( 'Claude could not write suggestions for this page. Try again in a minute.', 'ai-seo-assistant' ) ],
+			'capped'         => [ 'warning', __( 'The monthly AI cap is reached, so no new suggestions were written.', 'ai-seo-assistant' ) ],
+			'type'           => [ 'success', __( 'Page type saved in AJR Core. Google reads it from the next visit; the opportunity score counts it now.', 'ai-seo-assistant' ) ],
+			'type_failed'    => [ 'error', __( 'The page type was not changed.', 'ai-seo-assistant' ) ],
 		];
 		if ( isset( $messages[ $code ] ) ) {
 			echo Ui::notice( $messages[ $code ][0], '<p>' . esc_html( $messages[ $code ][1] ) . '</p>' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped piecewise.

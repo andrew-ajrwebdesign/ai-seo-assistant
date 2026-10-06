@@ -54,7 +54,7 @@ class Change_Log {
 	public function log( string $batch, int $post_id, string $path, string $field, int $object_id, string $before, string $after, int $user_id ): int {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- the plugin's own table.
-		$wpdb->insert(
+		$ok = $wpdb->insert(
 			Schema::table( 'changes' ),
 			[
 				'batch'        => $batch,
@@ -70,7 +70,20 @@ class Change_Log {
 			[ '%s', '%d', '%s', '%s', '%d', '%s', '%s', '%d', '%s' ]
 		);
 
-		return (int) $wpdb->insert_id;
+		// 0 when the row was not stored (too big for the column, a lost table): the caller must not make a
+		// change it cannot undo.
+		return false === $ok ? 0 : (int) $wpdb->insert_id;
+	}
+
+	/**
+	 * Remove a row that never took effect (its write was refused after it was logged).
+	 *
+	 * @param int $id Row ID.
+	 */
+	public function discard( int $id ): bool {
+		global $wpdb;
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the plugin's own table.
+		return false !== $wpdb->delete( Schema::table( 'changes' ), [ 'id' => $id ], [ '%d' ] );
 	}
 
 	/**
@@ -97,8 +110,13 @@ class Change_Log {
 	public function find( array $where = [] ): array {
 		global $wpdb;
 		$table = Schema::table( 'changes' );
-		$sql   = "SELECT * FROM `{$table}` WHERE 1=1";
-		$args  = [];
+		// Lean by default: a content row's before/after is the whole page (often 100 KB+), so lists read it
+		// as '' and only get(), Undo and the CSV export ('full') load it.
+		$cols = ! empty( $where['full'] )
+			? '*'
+			: "id, batch, post_id, path, field, object_id, user_id, applied_at, undone_at, undone_by, effect, IF( field = 'content', '', before_value ) AS before_value, IF( field = 'content', '', after_value ) AS after_value";
+		$sql  = "SELECT {$cols} FROM `{$table}` WHERE 1=1";
+		$args = [];
 		if ( ! empty( $where['post_id'] ) ) {
 			$sql   .= ' AND post_id = %d';
 			$args[] = (int) $where['post_id'];
@@ -129,10 +147,10 @@ class Change_Log {
 	 * @param int $id      Row ID.
 	 * @param int $user_id Who undid it.
 	 */
-	public function mark_undone( int $id, int $user_id ): void {
+	public function mark_undone( int $id, int $user_id ): bool {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the plugin's own table.
-		$wpdb->update(
+		$ok = $wpdb->update(
 			Schema::table( 'changes' ),
 			[
 				'undone_at' => gmdate( 'Y-m-d H:i:s' ),
@@ -142,6 +160,8 @@ class Change_Log {
 			[ '%s', '%d' ],
 			[ '%d' ]
 		);
+
+		return false !== $ok;
 	}
 
 	/**
@@ -150,10 +170,10 @@ class Change_Log {
 	 * @param int                 $id     Row ID.
 	 * @param array<string,mixed> $effect measure().
 	 */
-	public function save_effect( int $id, array $effect ): void {
+	public function save_effect( int $id, array $effect ): bool {
 		global $wpdb;
 		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching -- the plugin's own table.
-		$wpdb->update( Schema::table( 'changes' ), [ 'effect' => (string) wp_json_encode( $effect ) ], [ 'id' => $id ], [ '%s' ], [ '%d' ] );
+		return false !== $wpdb->update( Schema::table( 'changes' ), [ 'effect' => (string) wp_json_encode( $effect ) ], [ 'id' => $id ], [ '%s' ], [ '%d' ] );
 	}
 
 	/**

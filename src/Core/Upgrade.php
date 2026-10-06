@@ -91,7 +91,15 @@ class Upgrade {
 	 * before it checks the login, and current_user_can() at plugins_loaded runs before authentication.
 	 */
 	public function maybe_run(): void {
-		if ( self::is_current() || ! current_user_can( 'manage_options' ) || self::waiting() ) {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		// The custom tables follow their own version: any mismatch (a column change in a point release, a
+		// table lost to a restore) re-runs dbDelta, which adds and alters columns without losing rows.
+		if ( ! Schema::is_current() ) {
+			Schema::install();
+		}
+		if ( self::is_current() || self::waiting() ) {
 			return;
 		}
 		self::run();
@@ -129,7 +137,13 @@ class Upgrade {
 			return;
 		}
 		$plugins = (array) ( $options['plugins'] ?? [ $options['plugin'] ?? '' ] );
-		if ( in_array( AI_SEO_ASSISTANT_BASENAME, $plugins, true ) && ! self::is_current() ) {
+		if ( ! in_array( AI_SEO_ASSISTANT_BASENAME, $plugins, true ) ) {
+			return;
+		}
+		if ( ! Schema::is_current() ) {
+			Schema::install();
+		}
+		if ( ! self::is_current() ) {
 			self::run();
 		}
 	}

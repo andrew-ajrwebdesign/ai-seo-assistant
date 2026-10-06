@@ -212,7 +212,7 @@ class Tools_Actions {
 		$ids    = isset( $_POST['ids'] ) ? array_filter( array_map( 'absint', explode( ',', sanitize_text_field( wp_unslash( $_POST['ids'] ) ) ) ) ) : [];
 		$result = ( new Page_Review() )->undo( $ids, get_current_user_id() );
 		$first  = [] === $ids ? null : ( new Change_Log() )->get( (int) reset( $ids ) );
-		$args   = [ 'aisa' => [] !== $result['kept'] ? 'kept' : 'undone' ];
+		$args   = [ 'aisa' => in_array( 'content-restore-failed', $result['kept'], true ) ? 'restore_failed' : ( [] !== $result['kept'] ? 'kept' : 'undone' ) ];
 		$ref    = wp_get_referer();
 		if ( $ref && false !== strpos( $ref, 'page=' . Changes_Page::SLUG ) ) {
 			wp_safe_redirect( add_query_arg( $args, $ref ) );

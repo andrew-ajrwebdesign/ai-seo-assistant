@@ -33,7 +33,7 @@ class Schema {
 	public const VERSION_OPTION = 'ai_seo_assistant_db_version';
 
 	/** Current table version. */
-	public const VERSION = '5.0.0';
+	public const VERSION = '5.0.1'; // 5.0.1: the change log's before/after are longtext (a builder page's content is often over 64 KB).
 
 	/**
 	 * A table's full name.
@@ -101,8 +101,8 @@ post_id bigint(20) unsigned NOT NULL DEFAULT 0,
 path varchar(191) NOT NULL DEFAULT '',
 field varchar(20) NOT NULL DEFAULT '',
 object_id bigint(20) unsigned NOT NULL DEFAULT 0,
-before_value text NOT NULL,
-after_value text NOT NULL,
+before_value longtext NOT NULL,
+after_value longtext NOT NULL,
 user_id bigint(20) unsigned NOT NULL DEFAULT 0,
 applied_at datetime NOT NULL DEFAULT '0000-00-00 00:00:00',
 undone_at datetime NULL DEFAULT NULL,

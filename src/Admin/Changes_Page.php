@@ -68,7 +68,9 @@ class Changes_Page {
 		echo $hero; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- display-only result code from our own redirect.
 		$code = isset( $_GET['aisa'] ) ? sanitize_key( wp_unslash( $_GET['aisa'] ) ) : '';
-		if ( 'kept' === $code ) {
+		if ( 'restore_failed' === $code ) {
+			echo Ui::notice( 'error', '<p>' . esc_html__( 'The page content could not be put back as it was, and putting it back could not be confirmed: check the page, and restore it from Revisions in the editor if needed.', 'ai-seo-assistant' ) . '</p>' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped piecewise.
+		} elseif ( 'kept' === $code ) {
 			echo Ui::notice( 'warning', '<p>' . esc_html__( 'Not undone: that field was changed again after the plugin applied it, and undo never overwrites later work.', 'ai-seo-assistant' ) . '</p>' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped piecewise.
 		} elseif ( 'undone' === $code ) {
 			echo Ui::notice( 'success', '<p>' . esc_html__( 'Undone: the earlier value is back.', 'ai-seo-assistant' ) . '</p>' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped piecewise.
@@ -237,7 +239,7 @@ class Changes_Page {
 			echo '<tr><td class="aisa-col-date"><strong>' . esc_html( wp_date( 'D j M', (int) strtotime( $row['applied_at'] . ' UTC' ) ) ) . '</strong><br><span class="aisa-small">' . esc_html( $user ? $user->display_name : '' ) . '</span></td>'
 				. '<td class="aisa-col-page"><a href="' . esc_url( $edit ) . '"><strong>' . esc_html( '' !== $title ? $title : $row['path'] ) . '</strong></a><br><span class="aisa-path">' . esc_html( $row['path'] ) . '</span></td>'
 				. '<td data-label="' . esc_attr__( 'Field', 'ai-seo-assistant' ) . '">' . esc_html( $labels[ $row['field'] ] ?? $row['field'] ) . '</td>'
-				. '<td>' . ( 'content' === $row['field'] ? '<p class="aisa-small">' . esc_html( self::content_summary( (string) $row['before_value'], (string) $row['after_value'] ) ) . '</p>' : '<dl class="aisa-ba"><dt>' . esc_html__( 'Before', 'ai-seo-assistant' ) . '</dt><dd class="aisa-before">' . esc_html( '' !== $row['before_value'] ? (string) $row['before_value'] : __( '(empty)', 'ai-seo-assistant' ) ) . '</dd><dt>' . esc_html__( 'After', 'ai-seo-assistant' ) . '</dt><dd>' . esc_html( (string) $row['after_value'] ) . '</dd></dl>' ) . '</td>'
+				. '<td>' . ( 'content' === $row['field'] ? '<p class="aisa-small">' . esc_html( self::content_row_summary( $log, (int) $row['id'] ) ) . '</p>' : '<dl class="aisa-ba"><dt>' . esc_html__( 'Before', 'ai-seo-assistant' ) . '</dt><dd class="aisa-before">' . esc_html( '' !== $row['before_value'] ? (string) $row['before_value'] : __( '(empty)', 'ai-seo-assistant' ) ) . '</dd><dt>' . esc_html__( 'After', 'ai-seo-assistant' ) . '</dt><dd>' . esc_html( (string) $row['after_value'] ) . '</dd></dl>' ) . '</td>'
 				. '<td data-label="' . esc_attr__( 'Effect', 'ai-seo-assistant' ) . '">' . Ui::pill( $pill, $tone ) . '<p class="aisa-small">' . esc_html( $text ) . '</p></td>' // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in Ui.
 				. '<td class="aisa-col-action">' . $undo . '</td></tr>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped above.
 		}
@@ -282,6 +284,18 @@ class Changes_Page {
 	 * The page-content change in words: which alt attributes changed (the whole content is kept in the log
 	 * for Undo, but never printed).
 	 *
+	 * @param Change_Log $log The change log.
+	 * @param int        $id  The content row's ID.
+	 */
+	public static function content_row_summary( Change_Log $log, int $id ): string {
+		$row = $log->get( $id ); // The list reads content rows lean (Change_Log::find()); the summary needs them whole.
+
+		return null === $row ? '' : self::content_summary( (string) $row['before_value'], (string) $row['after_value'] );
+	}
+
+	/**
+	 * What a content row changed, in one line (the alt attributes written into the page).
+	 *
 	 * @param string $before Content before.
 	 * @param string $after  Content after.
 	 */
@@ -324,7 +338,12 @@ class Changes_Page {
 		header( 'Content-Disposition: attachment; filename="ai-seo-assistant-changes-' . gmdate( 'Y-m-d' ) . '.csv"' );
 		$out = fopen( 'php://output', 'w' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_system_operations_fopen -- streaming a download.
 		fputcsv( $out, [ 'applied_at_utc', 'user', 'page', 'path', 'field', 'before', 'after', 'effect', 'ctr_before', 'ctr_after', 'undone_at_utc' ] );
-		foreach ( $log->find( [ 'limit' => 1000 ] ) as $row ) {
+		foreach ( $log->find(
+			[
+				'limit' => 1000,
+				'full'  => true,
+			]
+		) as $row ) {
 			$user   = get_userdata( $row['user_id'] );
 			$effect = $log->effect( $row, $data->get( (string) $row['path'] ) );
 			fputcsv(
