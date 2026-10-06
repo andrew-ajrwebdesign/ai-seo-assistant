@@ -444,6 +444,10 @@ a.aisa-pagecell__title:hover {
 	overflow-wrap: anywhere;
 }
 
+.aisa-tool input.regular-text {
+	max-inline-size: 100%;
+}
+
 /* Role tag: a select dressed as a small pill, one click to change. */
 .aisa-tool select.aisa-roletag {
 	min-block-size: 22px;
@@ -943,6 +947,7 @@ a.aisa-pagecell__title:hover {
 
 .aisa-setrow__field {
 	display: grid;
+	grid-template-columns: minmax(0, 1fr);
 	gap: 6px;
 	min-inline-size: 0;
 }

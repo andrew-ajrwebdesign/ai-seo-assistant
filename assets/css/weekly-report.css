@@ -500,6 +500,7 @@
 /* ---- Table and lists --------------------------------------------------------------------------- */
 
 .aisa-tablewrap {
+	position: relative; /* Holds WP's absolutely positioned .screen-reader-text, which otherwise widens the page on a phone. */
 	min-inline-size: 0;
 	overflow-x: auto;
 }
