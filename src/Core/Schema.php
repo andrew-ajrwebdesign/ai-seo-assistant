@@ -237,7 +237,7 @@ KEY applied_at (applied_at)
 		foreach ( [ 'scan', 'pages', 'changes' ] as $name ) {
 			$table = self::table( $name );
 			// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.DirectDatabaseQuery.SchemaChange,WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- the plugin's own tables, on uninstall.
-			$wpdb->query( "DROP TABLE IF EXISTS `{$table}`" );
+			$wpdb->query( "DROP TABLE IF EXISTS `{$table}`" ); // schema-guard: uninstall drops the tables, nothing to bring up to date.
 		}
 		delete_option( self::VERSION_OPTION );
 	}

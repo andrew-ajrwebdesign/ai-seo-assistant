@@ -27,7 +27,7 @@ class SchemaGuardCheckTest extends TestCase {
 	 * Each case in the fixture, decided as its comment says.
 	 */
 	public function test_cases(): void {
-		$this->assertSame( [ 7, 8, 16, 30 ], \aisa_schema_guard_findings( (string) file_get_contents( self::DIR . 'cases.php' ) ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- a fixture.
+		$this->assertSame( [ 7, 8, 16, 30, 41, 48, 54, 60, 61 ], \aisa_schema_guard_findings( (string) file_get_contents( self::DIR . 'cases.php' ) ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- a fixture.
 	}
 
 	/**
@@ -38,6 +38,13 @@ class SchemaGuardCheckTest extends TestCase {
 		$found = \aisa_schema_guard_scan( [ self::DIR . 'old-scan-store.php' ] );
 		$this->assertSame( self::DIR . 'old-scan-store.php:44', $found[0] );
 		$this->assertCount( 5, $found, 'save_facts, save_issues, save_suggestions, prune, delete' );
+	}
+
+	/**
+	 * Verify review A6: a file that names a table without Schema::table() is still checked.
+	 */
+	public function test_raw_table_name_checked(): void {
+		$this->assertSame( [ 6 ], \aisa_schema_guard_findings( (string) file_get_contents( self::DIR . 'raw-table-name.php' ) ) ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- a fixture.
 	}
 
 	/**

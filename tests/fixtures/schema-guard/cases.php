@@ -35,4 +35,29 @@ class Cases {
 		// $wpdb->query( 'in a comment' ) is not a write.
 		return $wpdb->get_results( 'SELECT 1' ); // A read: fine.
 	}
+
+	public function ensure_after_write() {
+		global $wpdb;
+		$wpdb->update( 'x', [], [] ); // Flagged: line 41 (the check comes too late).
+		Schema::ensure();
+	}
+
+	public function is_current_not_a_condition() {
+		global $wpdb;
+		$ok = Schema::is_current();
+		$wpdb->update( 'x', [], [] ); // Flagged: line 48 (is_current() only counts as an if's condition).
+	}
+
+	public function negated() {
+		global $wpdb;
+		if ( ! Schema::is_current() ) {
+			$wpdb->update( 'x', [], [] ); // Flagged: line 54 (written when the tables are NOT current).
+		}
+	}
+
+	public function other_names() {
+		$db = $GLOBALS['wpdb'];
+		$db->insert( 'x', [] ); // Flagged: line 60 (any database variable).
+		$this->db->update( 'x', [], [] ); // Flagged: line 61 (a database property).
+	}
 }
