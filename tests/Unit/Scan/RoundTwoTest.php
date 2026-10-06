@@ -257,6 +257,43 @@ class RoundTwoTest extends TestCase {
 	}
 
 	/**
+	 * Spend: a call lost after sending counts its worst case; two calls add up (the total is read fresh under
+	 * a lock, never from this request's stale copy).
+	 */
+	public function test_spend_counts_lost_calls_and_adds_atomically(): void {
+		\WP_Mock::userFunction( 'wp_timezone' )->andReturn( new \DateTimeZone( 'UTC' ) );
+		\WP_Mock::userFunction( 'wp_cache_delete' )->andReturn( true );
+		\WP_Mock::userFunction( 'add_option' )->andReturnUsing(
+			function ( $n, $v ) {
+				if ( array_key_exists( $n, $this->options ) ) {
+					return false;
+				}
+				$this->options[ $n ] = $v;
+				return true;
+			}
+		);
+		\WP_Mock::userFunction( 'delete_option' )->andReturnUsing(
+			function ( $n ) {
+				unset( $this->options[ $n ] );
+				return true;
+			}
+		);
+		$lost = \AJR\SEOAssistant\AI\Spend::record_unknown( 'intent', 'claude-haiku-4-5' );
+		$this->assertEqualsWithDelta( \AJR\SEOAssistant\AI\Spend::reserve( 'intent', 'claude-haiku-4-5' ), $lost, 1e-9 );
+		\AJR\SEOAssistant\AI\Spend::record(
+			'claude-haiku-4-5',
+			[
+				'input_tokens'  => 1000000,
+				'output_tokens' => 0,
+			]
+		);
+		$state = $this->options[ \AJR\SEOAssistant\AI\Spend::OPTION ];
+		$this->assertEqualsWithDelta( $lost + 1.0, $state['usd'], 1e-6 );
+		$this->assertSame( 2, $state['calls'] );
+		$this->assertArrayNotHasKey( \AJR\SEOAssistant\AI\Spend::LOCK_OPTION, $this->options, 'the lock is released' );
+	}
+
+	/**
 	 * Golden set: 60 real estate-agent searches labelled by hand; rules first, then the cached Haiku
 	 * answers for what the rules leave, must agree on at least 90%.
 	 */

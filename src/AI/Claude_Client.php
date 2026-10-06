@@ -375,6 +375,11 @@ class Claude_Client {
 		);
 
 		if ( is_wp_error( $response ) ) {
+			// A timeout or a dropped connection after the request went out may still be billed: count the
+			// call's worst case, so the cap never under-counts. A refused connection was never sent.
+			if ( preg_match( '/timed out|cURL error (28|52|55|56)|connection reset|empty reply/i', $response->get_error_message() ) ) {
+				$this->last_cost = Spend::record_unknown( $task, $model );
+			}
 			return new \WP_Error(
 				'ai_seo_claude_unreachable',
 				Utils::mask_sensitive_text( $response->get_error_message() )
@@ -389,6 +394,7 @@ class Claude_Client {
 		}
 
 		if ( ! is_array( $data ) ) {
+			$this->last_cost = Spend::record_unknown( $task, $model ); // A 2xx is billed even when unreadable.
 			return new \WP_Error(
 				'ai_seo_claude_invalid_response',
 				__( 'Claude returned an unreadable response.', 'ai-seo-assistant' )

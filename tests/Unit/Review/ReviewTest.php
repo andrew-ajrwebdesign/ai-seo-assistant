@@ -445,8 +445,12 @@ class ReviewTest extends TestCase {
 		$this->assertSame( '2026-10-17', Spend::period_start( 17, (int) strtotime( '2026-10-17 UTC' ), $utc )->format( 'Y-m-d' ), 'the anchor day starts a new month' );
 		$this->assertSame( '2026-09-30', Spend::period_start( 31, (int) strtotime( '2026-10-05 UTC' ), $utc )->format( 'Y-m-d' ), 'a 31st anchor falls on the 30th in September' );
 
-		$this->assertTrue( Spend::allows( 9.80, 10.0, 'review' ) );
-		$this->assertFalse( Spend::allows( 9.95, 10.0, 'review' ), 'no call may start that would pass the cap' );
+		// The reserve is the call's worst case: max_tokens of output + expected input, at the model's price.
+		$worst = ( 16000 * 25 + 14000 * 5 ) / 1e6;
+		$this->assertEqualsWithDelta( $worst, Spend::reserve( 'review', 'claude-opus-5' ), 1e-9 );
+		$this->assertEqualsWithDelta( ( 8000 * 5 + 6000 * 1 ) / 1e6, Spend::reserve( 'intent' ), 1e-9, 'the intent pass is always Haiku' );
+		$this->assertTrue( Spend::allows( 10.0 - $worst - 0.01, 10.0, 'review', 'claude-opus-5' ) );
+		$this->assertFalse( Spend::allows( 10.0 - $worst + 0.01, 10.0, 'review', 'claude-opus-5' ), 'no call may start whose worst case would pass the cap' );
 		$this->assertFalse( Spend::allows( 0.0, 0.0, 'test' ), 'a zero cap stops everything' );
 	}
 }

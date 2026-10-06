@@ -70,17 +70,20 @@ class Spend {
 	];
 
 	/**
-	 * The most one call of each kind is expected to cost, in dollars, checked against what is left.
-	 * From measured Opus 5 calls (2026-09-22: title + description 2–3¢, recommendations about 6¢); a page
-	 * review asks for both plus alt text, so it reserves the most.
+	 * Input tokens a call of each kind is expected to send (prompt, page content, photos for a review). With
+	 * the task's max_tokens (Claude_Client::TASKS) at the model's price this is the call's worst case, which
+	 * the cap keeps in hand before a call starts (reserve()).
 	 */
-	public const RESERVE = [
-		'metadata'        => 0.04,
-		'recommendations' => 0.08,
-		'review'          => 0.12,
-		'intent'          => 0.02,
-		'test'            => 0.01,
+	public const INPUT_TOKENS = [
+		'metadata'        => 4000,
+		'recommendations' => 8000,
+		'review'          => 14000,
+		'intent'          => 6000,
+		'test'            => 50,
 	];
+
+	/** Option used as a short lock around adding to the month's total. */
+	public const LOCK_OPTION = 'ai_seo_assistant_spend_lock';
 
 	/**
 	 * Price one reply.
@@ -169,14 +172,32 @@ class Spend {
 	 *
 	 * @param float  $spent Spent this period.
 	 * @param float  $cap   Cap.
-	 * @param string $task  Key of RESERVE.
+	 * @param string $task  Task (Claude_Client::TASKS).
+	 * @param string $model Model ('' = the task's own or the configured one).
 	 */
-	public static function allows( float $spent, float $cap, string $task ): bool {
+	public static function allows( float $spent, float $cap, string $task, string $model = '' ): bool {
 		if ( $cap <= 0 ) {
 			return false;
 		}
 
-		return $spent + ( self::RESERVE[ $task ] ?? self::RESERVE['review'] ) <= $cap + 0.000001;
+		return $spent + self::reserve( $task, $model ) <= $cap + 0.000001;
+	}
+
+	/**
+	 * A call's worst case in dollars: its max_tokens of output and its expected input at the model's price
+	 * (the configured model, or the task's own, e.g. the intent pass's Haiku).
+	 *
+	 * @param string $task  Task (Claude_Client::TASKS).
+	 * @param string $model Model ID ('' = the task's own, else the configured one).
+	 */
+	public static function reserve( string $task, string $model = '' ): float {
+		$shape = Claude_Client::TASKS[ $task ] ?? Claude_Client::TASKS['review'];
+		if ( '' === $model ) {
+			$model = isset( $shape['model'] ) ? (string) $shape['model'] : ( function_exists( 'get_option' ) ? (string) get_option( Claude_Client::OPTION_MODEL, Claude_Client::DEFAULT_MODEL ) : Claude_Client::DEFAULT_MODEL );
+		}
+		$price = self::PRICES[ self::base_model( $model ) ] ?? self::PRICES['claude-opus-5'];
+
+		return ( (int) $shape['max_tokens'] * $price['out'] + ( self::INPUT_TOKENS[ $task ] ?? self::INPUT_TOKENS['review'] ) * $price['in'] ) / 1000000;
 	}
 
 	/* ---- WordPress side ---------------------------------------------------------------------------- */
@@ -244,7 +265,7 @@ class Spend {
 	/**
 	 * Refuse a call that would go past the cap (WP_Error with the B2 wording), or true.
 	 *
-	 * @param string $task Key of RESERVE.
+	 * @param string $task Task (Claude_Client::TASKS).
 	 * @return true|\WP_Error
 	 */
 	public static function check( string $task ) {
@@ -268,16 +289,58 @@ class Spend {
 	 */
 	public static function record( string $model, array $usage ): float {
 		$cost = self::cost( $model, $usage );
-		$now  = self::current();
+		self::add( $cost );
+
+		return $cost;
+	}
+
+	/**
+	 * A call that was sent but whose reply never arrived (a timeout, a dropped connection) may still be
+	 * billed: count its reserve, so the cap never under-counts.
+	 *
+	 * @param string $task  Task.
+	 * @param string $model Model sent.
+	 */
+	public static function record_unknown( string $task, string $model ): float {
+		$cost = self::reserve( $task, $model );
+		self::add( $cost );
+
+		return $cost;
+	}
+
+	/**
+	 * Add to the month's total under a short lock (two calls finishing together must both count). The
+	 * lock is an add_option(), which only one request can win; a lock older than 10 s is taken over.
+	 *
+	 * @param float $usd Dollars.
+	 */
+	protected static function add( float $usd ): void {
+		$locked = false;
+		for ( $i = 0; $i < 40 && ! $locked; $i++ ) {
+			$locked = add_option( self::LOCK_OPTION, time(), '', false );
+			if ( ! $locked ) {
+				$held = (int) get_option( self::LOCK_OPTION, 0 );
+				if ( $held > 0 && time() - $held > 10 ) {
+					delete_option( self::LOCK_OPTION );
+					continue;
+				}
+				usleep( 50000 );
+			}
+		}
+		if ( function_exists( 'wp_cache_delete' ) ) {
+			wp_cache_delete( self::OPTION, 'options' ); // Read the stored total, not this request's copy.
+		}
+		$now = self::current();
 		self::save(
 			$now,
 			[
-				'usd'   => round( $now['usd'] + $cost, 6 ),
+				'usd'   => round( $now['usd'] + $usd, 6 ),
 				'calls' => $now['calls'] + 1,
 			]
 		);
-
-		return $cost;
+		if ( $locked ) {
+			delete_option( self::LOCK_OPTION );
+		}
 	}
 
 	/**
@@ -288,7 +351,7 @@ class Spend {
 	public static function cap_message( array $now ): string {
 		return sprintf(
 			/* translators: 1: dollars spent, 2: the cap, 3: date writing resumes. */
-			__( 'Monthly AI cap reached: %1$s of %2$s used this billing month. Writing new suggestions is paused until %3$s. The scan, the issues and the search data keep updating, and suggestions already written can still be reviewed and applied.', 'ai-seo-assistant' ),
+			__( 'Monthly AI cap reached: %1$s of about %2$s used this billing month (a call already in progress can finish, so the total can go slightly over). Writing new suggestions is paused until %3$s. The scan, the issues and the search data keep updating, and suggestions already written can still be reviewed and applied.', 'ai-seo-assistant' ),
 			self::money( (float) $now['usd'] ),
 			self::money( self::cap() ),
 			wp_date( 'j F', $now['end']->getTimestamp(), $now['end']->getTimezone() )
