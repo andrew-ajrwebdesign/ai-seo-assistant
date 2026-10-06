@@ -80,7 +80,9 @@ class Push_Endpoint {
 	 * @return mixed
 	 */
 	public function refuse_oversize( $result, $server, $request ) { // phpcs:ignore Generic.CodeAnalysis.UnusedFunctionParameter.FoundInExtendedClassBeforeLastUsed,Generic.CodeAnalysis.UnusedFunctionParameter.FoundBeforeLastUsed -- the filter's signature.
-		if ( null !== $result || ! $request instanceof \WP_REST_Request || '/' . self::REST_NAMESPACE . self::ROUTE !== untrailingslashit( (string) $request->get_route() ) ) {
+		// WordPress matches routes without regard to case: so does this check (else /AI-SEO-Assistant/v1/Report
+		// would be decoded before any size check).
+		if ( null !== $result || ! $request instanceof \WP_REST_Request || strtolower( '/' . self::REST_NAMESPACE . self::ROUTE ) !== strtolower( untrailingslashit( (string) $request->get_route() ) ) ) {
 			return $result;
 		}
 

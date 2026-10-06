@@ -524,6 +524,10 @@ class FinalRoundTest extends TestCase {
 		$this->assertInstanceOf( \WP_Error::class, $got );
 		$this->assertSame( 'aisa_report_too_large', $got->get_error_code() );
 
+		$mixed = new \WP_REST_Request( 'POST', '/AI-SEO-Assistant/v1/Report/' );
+		$mixed->set_header( 'Content-Length', (string) ( \AJR\SEOAssistant\Report\Snapshot::MAX_BYTES_V2 + 1 ) );
+		$this->assertSame( 413, $endpoint->refuse_oversize( null, null, $mixed )->data['status'], 'the route in another case is still this route' );
+
 		$other = new \WP_REST_Request( 'POST', '/wp/v2/posts' );
 		$other->set_header( 'Content-Length', (string) ( \AJR\SEOAssistant\Report\Snapshot::MAX_BYTES_V2 + 1 ) );
 		$this->assertNull( $endpoint->refuse_oversize( null, null, $other ), 'another route is not ours to judge' );
