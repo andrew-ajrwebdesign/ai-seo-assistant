@@ -22,7 +22,7 @@ const root = path.resolve( path.dirname( fileURLToPath( import.meta.url ) ), '..
  * @param {Array<Object>} steps Answers to aisa_scan_step, in order.
  * @return {Object} The bar's parts, what was posted, and a promise for the in-place refresh.
  */
-function harness( steps ) {
+function harness( steps, hidden = false ) {
 	const button = new El( 'button', {} );
 	const form = new El( 'form', { 'data-aisa-scan': '' }, [ button ] );
 	form.dataset = { running: '1', done: '47', total: '153' };
@@ -59,9 +59,18 @@ function harness( steps ) {
 		location: { href: 'https://x.test/wp-admin/admin.php?page=ai-seo-assistant-scan&aisa=rescan', reload() {} },
 	};
 	const document = {
+		hidden,
+		listeners: [],
 		querySelector: ( s ) => body.querySelector( s ),
 		querySelectorAll: ( s ) => body.querySelectorAll( s ),
 		createElement: () => ( { getContext: () => null } ),
+		addEventListener( type, fn ) {
+			this.listeners.push( fn );
+		},
+		show() {
+			this.hidden = false;
+			this.listeners.splice( 0 ).forEach( ( fn ) => fn() );
+		},
 	};
 	class DOMParser {
 		parseFromString() {
@@ -69,7 +78,7 @@ function harness( steps ) {
 		}
 	}
 	vm.runInNewContext( fs.readFileSync( path.join( root, 'assets/js/aisa-tools.js' ), 'utf8' ), { window, document, URLSearchParams, URL, DOMParser, fetch, setTimeout, console } );
-	return { form, progress, track, fill, text, live, posted, seen, done };
+	return { form, progress, track, fill, text, live, posted, seen, done, document };
 }
 
 test( 'a running scan resumes at its stored position and finishes with the issue difference', async () => {
@@ -99,4 +108,16 @@ test( 'a scan another screen finished is reported as finished, never as stopped'
 	await done;
 	await new Promise( ( r ) => setTimeout( r, 0 ) );
 	assert.equal( text.textContent, '153 pages checked just now' );
+} );
+
+test( 'a tab in the background does not drive the scan; it carries on when seen again', async () => {
+	const { posted, done, document } = harness( [
+		{ success: true, data: { state: 'working', done: 100, total: 153 } },
+		{ success: true, data: { state: 'done', done: 153, total: 153, result: { issues: 80 }, before: 80 } },
+	], true );
+	await new Promise( ( r ) => setTimeout( r, 20 ) );
+	assert.deepEqual( posted, [], 'hidden: no step sent' );
+	document.show();
+	await done;
+	assert.deepEqual( posted, [ 'aisa_scan_step', 'aisa_scan_step' ] );
 } );

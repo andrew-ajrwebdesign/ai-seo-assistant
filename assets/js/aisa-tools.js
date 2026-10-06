@@ -147,7 +147,12 @@
 				return;
 			}
 			if ( 'busy' === state.data.state ) {
-				await new Promise( ( resolve ) => setTimeout( resolve, 3000 ) );
+				// Another request holds the step (cron, another screen): look again in 5 s.
+				await new Promise( ( resolve ) => setTimeout( resolve, 5000 ) );
+			}
+			// A tab in the background does not drive the scan (cron carries on): wait until it is seen again.
+			while ( document.hidden ) {
+				await new Promise( ( resolve ) => document.addEventListener( 'visibilitychange', resolve, { once: true } ) );
 			}
 			state = await post( 'aisa_scan_step' );
 		}
