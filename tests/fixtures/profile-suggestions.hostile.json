@@ -14,7 +14,7 @@
     "not_compared": 0,
     "problems": 2,
     "worst": "medium",
-    "suggestions": 3
+    "suggestions": 10
   },
   "google": {
     "name": "Northfield Plumbing & Heating",
@@ -98,6 +98,83 @@
       "where": "Business Profile → Edit profile → Contact → Website",
       "detail": "websiteUri has no utm_ parameters; GA4 files these visits under google / organic.",
       "copy": "https://northfieldplumbing.example/?utm_source=google&utm_medium=organic&utm_campaign=gbp"
+    },
+    {
+      "priority": "medium",
+      "current": "https://northfieldplumbing.example/",
+      "why": "Tagging the link lets your report count the visits.",
+      "where": "Business Profile → Edit profile → Contact → Website",
+      "detail": "hostile fixture row",
+      "id": "h_protocol_relative",
+      "field": "website",
+      "suggested": "//evil.example/",
+      "copy": "//evil.example/"
+    },
+    {
+      "priority": "medium",
+      "current": "https://northfieldplumbing.example/",
+      "why": "Tagging the link lets your report count the visits.",
+      "where": "Business Profile → Edit profile → Contact → Website",
+      "detail": "hostile fixture row",
+      "id": "h_double_slash_path",
+      "field": "website",
+      "suggested": "https://northfieldplumbing.example//evil.example/",
+      "copy": "https://northfieldplumbing.example//evil.example/"
+    },
+    {
+      "priority": "medium",
+      "current": "https://northfieldplumbing.example/",
+      "why": "Tagging the link lets your report count the visits.",
+      "where": "Business Profile → Edit profile → Contact → Website",
+      "detail": "hostile fixture row",
+      "id": "h_userinfo",
+      "field": "website",
+      "suggested": "https://user@northfieldplumbing.example/",
+      "copy": "https://user@northfieldplumbing.example/"
+    },
+    {
+      "priority": "medium",
+      "current": "https://northfieldplumbing.example/",
+      "why": "Tagging the link lets your report count the visits.",
+      "where": "Business Profile → Edit profile → Contact → Website",
+      "detail": "hostile fixture row",
+      "id": "h_http",
+      "field": "booking",
+      "suggested": "http://northfieldplumbing.example/book-online/",
+      "copy": "http://northfieldplumbing.example/book-online/"
+    },
+    {
+      "priority": "medium",
+      "current": "https://northfieldplumbing.example/",
+      "why": "Tagging the link lets your report count the visits.",
+      "where": "Business Profile → Edit profile → Contact → Website",
+      "detail": "hostile fixture row",
+      "id": "h_zero_width_host",
+      "field": "website",
+      "suggested": "https://northfield​plumbing.example/",
+      "copy": "https://northfield​plumbing.example/"
+    },
+    {
+      "priority": "medium",
+      "current": "https://northfieldplumbing.example/",
+      "why": "Tagging the link lets your report count the visits.",
+      "where": "Business Profile → Edit profile → Contact → Website",
+      "detail": "hostile fixture row",
+      "id": "h_other_host",
+      "field": "website",
+      "suggested": "https://evil.example/?utm_source=google",
+      "copy": "https://evil.example/?utm_source=google"
+    },
+    {
+      "priority": "medium",
+      "current": "Northfield Plumbing",
+      "why": "Tagging the link lets your report count the visits.",
+      "where": "Business Profile → Edit profile → Contact → Website",
+      "detail": "hostile fixture row",
+      "id": "h_bidi_text",
+      "field": "name",
+      "suggested": "Northfield ‮Plumbing",
+      "copy": "Northfield ‮Plumbing"
     }
   ],
   "suggestions_unchecked": [
@@ -122,6 +199,28 @@
       "detail": null,
       "copy": null,
       "reason": "Google's data doesn't show the towns your listing serves, so missing towns can't be checked."
+    },
+    {
+      "id": "booking_link",
+      "priority": "low",
+      "field": "booking",
+      "suggested": null,
+      "why": null,
+      "where": null,
+      "detail": null,
+      "copy": "javascript:alert(1)",
+      "reason": "hostile: a script URL as the booking link (same id as the real row: dropped twice over)"
+    },
+    {
+      "id": "h_unchecked_line_sep",
+      "priority": "low",
+      "field": "booking",
+      "suggested": null,
+      "why": null,
+      "where": null,
+      "detail": null,
+      "copy": "https://northfieldplumbing.example/book online/",
+      "reason": "hostile: a line separator inside the link"
     }
   ]
 }

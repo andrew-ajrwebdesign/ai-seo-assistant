@@ -113,7 +113,7 @@ class Snapshot_V2 extends Snapshot {
 			'ads'          => $ads,
 			'pages'        => $pages['items'],
 			'pages_range'  => $pages['range'],
-			'listing'      => self::listing( $raw['business_profile_check'] ?? null ),
+			'listing'      => self::listing( $raw['business_profile_check'] ?? null, strtolower( $site ) ),
 		];
 		if ( 'week' === $period ) {
 			// v1's series key, from the in-total history, so the weekly report's 12-week bars draw as before.
@@ -511,10 +511,11 @@ class Snapshot_V2 extends Snapshot {
 	 * null when the push did not carry one. `checked: false` is kept as such: the scan then says "not
 	 * checked", never "all match". Every value is Google- or site-sourced text: capped here, escaped on output.
 	 *
-	 * @param mixed $raw Raw block.
+	 * @param mixed  $raw  Raw block.
+	 * @param string $site The snapshot's site host (a suggested website link must be on it).
 	 * @return array<string,mixed>|null
 	 */
-	protected static function listing( $raw ): ?array {
+	protected static function listing( $raw, string $site = '' ): ?array {
 		if ( ! is_array( $raw ) ) {
 			return null;
 		}
@@ -564,56 +565,128 @@ class Snapshot_V2 extends Snapshot {
 				'service_area_only' => true === ( $google['service_area_only'] ?? false ),
 			],
 			'fields'                => $fields,
-			'suggestions'           => self::listing_suggestions( $raw['suggestions'] ?? null, 20 ),
-			'suggestions_unchecked' => self::listing_suggestions( $raw['suggestions_unchecked'] ?? null, 10, true ),
+			'suggestions'           => self::listing_suggestions( $raw['suggestions'] ?? null, 20, false, $site ),
+			'suggestions_unchecked' => self::listing_suggestions( $raw['suggestions_unchecked'] ?? null, 10, true, $site ),
 			'problems'              => count( array_filter( $fields, static fn( $f ) => in_array( $f['status'], [ 'mismatch', 'missing_on_site', 'missing_on_google' ], true ) && 'info' !== $f['severity'] ) ),
 		];
 	}
 
 	/**
-	 * The profile check's suggested edits to the Google listing (profile-check PR #145): `suggestions` (at
-	 * most 20) and `suggestions_unchecked` (at most 10, each with the reason it could not be checked). Every
-	 * string capped and cleaned like the rest of the Google-sourced text; a row without an id, a known
-	 * priority, a field or a why is dropped.
+	 * The profile check's suggested edits to the Google listing (profile-check PR #145), by the schema's
+	 * rules (retainer-scan schema/snapshot-v2.md, "suggestions" and "suggestions_unchecked"):
+	 * - id: slug ^[a-z][a-z0-9_]{0,40}$, unique (the first wins); priority high|medium|low; field a slug.
+	 *   In the unchecked list only id and reason are required: priority, field and the rest may be null.
+	 * - current, suggested, why, where ≤ 200 (where is free text: the Business Profile editor path),
+	 *   detail ≤ 400, copy ≤ 300 (longer: copy becomes null, the row is kept).
+	 * - DROPPED: copy or suggested holding a control, format or separator character; a link row whose
+	 *   link is not plain https (user, password, "//" path, unparseable); suggested equal to current; a
+	 *   website link naming another host than this site's.
+	 * At most 20 suggestions, 10 unchecked.
 	 *
-	 * @param mixed $raw       Raw list.
-	 * @param int   $max       Most rows kept.
-	 * @param bool  $unchecked The unchecked list (carries a reason).
+	 * @param mixed  $raw       Raw list.
+	 * @param int    $max       Most rows kept.
+	 * @param bool   $unchecked The unchecked list (carries a reason; no current).
+	 * @param string $site      This site's host (the website row's link must be on it).
 	 * @return array<int,array<string,string>>
 	 */
-	protected static function listing_suggestions( $raw, int $max, bool $unchecked = false ): array {
-		$out = [];
+	protected static function listing_suggestions( $raw, int $max, bool $unchecked = false, string $site = '' ): array {
+		$out  = [];
+		$seen = [];
+		$slug = static fn( $v ): string => is_string( $v ) && preg_match( '/^[a-z][a-z0-9_]{0,40}$/', $v ) ? $v : '';
 		foreach ( self::rows( $raw, 40 ) as $s ) {
-			$id       = is_string( $s['id'] ?? null ) && preg_match( '/^[A-Za-z0-9_.:-]{1,60}$/', $s['id'] ) ? $s['id'] : '';
+			$id       = $slug( $s['id'] ?? null );
 			$priority = is_string( $s['priority'] ?? null ) && in_array( $s['priority'], [ 'high', 'medium', 'low' ], true ) ? $s['priority'] : '';
-			$field    = self::text( $s['field'] ?? null, 40 );
+			$field    = $slug( $s['field'] ?? null );
 			$why      = self::text( $s['why'] ?? null, 200 );
-			if ( '' === $id || '' === $priority || '' === $field || '' === $why ) {
+			$reason   = self::text( $s['reason'] ?? null, 200 );
+			if ( '' === $id || isset( $seen[ $id ] ) ) {
 				continue;
 			}
-			$row = [
+			if ( $unchecked ? '' === $reason : ( '' === $priority || '' === $field || '' === $why ) ) {
+				continue;
+			}
+			$raw_copy = is_string( $s['copy'] ?? null ) ? $s['copy'] : '';
+			$raw_sugg = is_scalar( $s['suggested'] ?? null ) ? (string) $s['suggested'] : '';
+			if ( ! self::pasteable( $raw_copy ) || ! self::pasteable( $raw_sugg ) ) {
+				continue; // Text someone pastes into Google must be exactly what it looks like.
+			}
+			$current   = $unchecked ? '' : self::text( is_scalar( $s['current'] ?? null ) ? (string) $s['current'] : null, 200 );
+			$suggested = self::text( '' === $raw_sugg ? null : $raw_sugg, 200 );
+			if ( '' !== $current && $current === $suggested ) {
+				continue; // Changing a value to itself is no suggestion.
+			}
+			$is_url = static fn( string $v ): bool => (bool) preg_match( '#^([a-z][a-z0-9+.-]*:|//|www\.)#i', $v );
+			$link   = in_array( $field, [ 'website', 'booking', 'booking_link' ], true ) || 'booking_link' === $id || $is_url( $raw_copy ) || $is_url( $raw_sugg );
+			if ( $link ) {
+				foreach ( array_filter( [ $raw_copy, $is_url( $raw_sugg ) ? $raw_sugg : '' ] ) as $url ) {
+					if ( ! self::safe_link( $url ) ) {
+						continue 2;
+					}
+					if ( 'website' === $field && '' !== $site && self::bare_host( (string) parse_url( $url, PHP_URL_HOST ) ) !== self::bare_host( $site ) ) { // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- the snapshot parser is pure PHP.
+						continue 2; // The website link must be this site's own.
+					}
+				}
+			}
+			$copy = '' === $raw_copy ? '' : self::text( $raw_copy, 100000 );
+			$row  = [
 				'id'        => $id,
-				'priority'  => $priority,
+				'priority'  => '' !== $priority ? $priority : 'low', // An unchecked row without one shows as low.
 				'field'     => $field,
-				'current'   => self::text( is_scalar( $s['current'] ?? null ) ? (string) $s['current'] : null, 200 ),
-				'suggested' => self::text( is_scalar( $s['suggested'] ?? null ) ? (string) $s['suggested'] : null, 200 ),
+				'current'   => $current,
+				'suggested' => $suggested,
 				'why'       => $why,
-				'where'     => is_string( $s['where'] ?? null ) && in_array( $s['where'], [ 'site', 'google', 'site_or_google' ], true ) ? $s['where'] : '',
+				'where'     => self::text( $s['where'] ?? null, 200 ),
 				'detail'    => self::text( $s['detail'] ?? null, 400 ),
+				'copy'      => mb_strlen( $copy ) > 300 ? '' : $copy, // Too long to paste: no Copy button, the row kept.
 			];
-			if ( isset( $s['copy'] ) ) {
-				$row['copy'] = self::text( $s['copy'], 300 ); // Text to paste into the listing.
-			}
 			if ( $unchecked ) {
-				$row['reason'] = self::text( $s['reason'] ?? null, 200 );
+				unset( $row['current'] );
+				$row['reason'] = $reason;
 			}
-			$out[] = $row;
+			$seen[ $id ] = true;
+			$out[]       = $row;
 			if ( count( $out ) >= $max ) {
 				break;
 			}
 		}
 
 		return $out;
+	}
+
+	/**
+	 * Whether text is safe to paste: no control, format or separator character (zero-width spaces, bidi
+	 * overrides, line separators).
+	 *
+	 * @param string $text Raw text.
+	 */
+	protected static function pasteable( string $text ): bool {
+		return '' === $text || 0 === preg_match( '/[\p{Cc}\p{Cf}\x{2028}\x{2029}]/u', $text );
+	}
+
+	/**
+	 * A link a client may open or paste: https, no user or password, no "//" path, parseable.
+	 *
+	 * @param string $url URL.
+	 */
+	protected static function safe_link( string $url ): bool {
+		$parts = parse_url( $url ); // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- the snapshot parser is pure PHP.
+		if ( ! is_array( $parts ) || 'https' !== strtolower( (string) ( $parts['scheme'] ?? '' ) ) || '' === (string) ( $parts['host'] ?? '' ) ) {
+			return false;
+		}
+		if ( isset( $parts['user'] ) || isset( $parts['pass'] ) || 0 === strpos( (string) ( $parts['path'] ?? '' ), '//' ) ) {
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * A host for comparison: lower case, no "www.".
+	 *
+	 * @param string $host Host.
+	 */
+	protected static function bare_host( string $host ): string {
+		return (string) preg_replace( '/^www\./', '', strtolower( $host ) );
 	}
 
 	/**

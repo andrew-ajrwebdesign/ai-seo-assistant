@@ -159,41 +159,53 @@ class SnapshotV2Test extends TestCase {
 	}
 
 	/**
-	 * Profile-check suggestions (PR #145): cleaned and capped like the other Google text, bad rows dropped,
-	 * at most 20, passed to AJR Core in the listing block.
+	 * Profile-check suggestions (PR #145) by the schema's rules, on retainer-scan's own fixtures: the week
+	 * example's rows survive whole (free-text where, underscore ids, copy), the hostile example keeps only
+	 * the rows the schema says survive, at most 20 / 10, and an unchecked row may carry nulls.
 	 */
 	public function test_profile_suggestions(): void {
 		$errors = [];
 		$week   = self::fixture( 'snapshot-v2.week.example.json' );
-		$extra  = json_decode( (string) file_get_contents( dirname( __DIR__, 2 ) . '/fixtures/profile-suggestions.json' ), true ); // phpcs:ignore WordPress.WP.AlternativeFunctions.file_get_contents_file_get_contents -- test fixture.
-		$extra['suggestions'][5]['why']               = str_repeat( 'w', 300 );
-		$week['business_profile_check']['suggestions'] = $extra['suggestions'];
-		$snap = self::parse( $week, $errors );
+		$week['business_profile_check'] = self::fixture( 'profile-suggestions.json' );
+		$snap   = self::parse( $week, $errors );
 		$this->assertNotNull( $snap, implode( '; ', $errors ) );
-		$got = $snap['listing']['suggestions'];
-		$this->assertSame( [ 'description-length', 'add-hours', 'long' ], array_column( $got, 'id' ) );
-		$this->assertStringNotContainsString( '<', $got[1]['why'] );
-		$this->assertSame( '', $got[1]['current'], 'null current is empty' );
-		$this->assertSame( 200, mb_strlen( $got[2]['why'] ) );
-		$this->assertSame( '', $got[2]['where'], 'unknown where dropped' );
-		$this->assertArrayHasKey( 'copy', $got[0] );
-		$this->assertLessThanOrEqual( 300, mb_strlen( $got[0]['copy'] ) );
-		$this->assertArrayNotHasKey( 'copy', $got[1] );
+		$got = array_column( $snap['listing']['suggestions'], null, 'id' );
+		$this->assertSame( [ 'primary_category', 'hours', 'website_utm' ], array_keys( $got ) );
+		$this->assertSame( 'Business Profile → Edit profile → Business category', $got['primary_category']['where'], 'where is the editor path, free text' );
+		$this->assertSame( 'Plumber', $got['primary_category']['copy'] );
+		$this->assertSame( '', $got['hours']['copy'], 'copy null: no Copy button' );
+		$this->assertStringStartsWith( 'https://northfieldplumbing.example/?utm_source=google', $got['website_utm']['copy'] );
+		$un = array_column( $snap['listing']['suggestions_unchecked'], null, 'id' );
+		$this->assertSame( [ 'booking_link', 'service_area' ], array_keys( $un ) );
+		$this->assertSame( 'low', $un['service_area']['priority'], 'null priority shows as low' );
+		$this->assertSame( '', $un['service_area']['field'] );
+		$this->assertNotSame( '', $un['service_area']['reason'] );
+		$this->assertArrayNotHasKey( 'current', $un['booking_link'] );
 
-		$week['business_profile_check']['suggestions'] = array_fill( 0, 30, $extra['suggestions'][0] );
+		// The hostile example: every h_* row dropped (protocol-relative, // path, userinfo, http, zero-width
+		// host, another host for the website, bidi text), and the repeated / line-separated unchecked rows.
+		$hostile                         = self::fixture( 'snapshot-v2.week.example.json' );
+		$hostile['business_profile_check'] = self::fixture( 'profile-suggestions.hostile.json' );
+		$snap                            = self::parse( $hostile, $errors );
+		$this->assertSame( [ 'primary_category', 'hours', 'website_utm' ], array_column( $snap['listing']['suggestions'], 'id' ) );
+		$this->assertSame( [ 'booking_link', 'service_area' ], array_column( $snap['listing']['suggestions_unchecked'], 'id' ) );
+		$this->assertSame( 'https', parse_url( $snap['listing']['suggestions_unchecked'][0]['copy'], PHP_URL_SCHEME ), 'the https booking link is the one kept' ); // phpcs:ignore WordPress.WP.AlternativeFunctions.parse_url_parse_url -- test.
+
+		// Other rules: a slug id with "-" is refused (AJR Core's is_id rejects it too); suggested = current
+		// is no suggestion; copy over 300 keeps the row without a Copy button; at most 20.
+		$base                                      = $week['business_profile_check']['suggestions'][0];
+		$week['business_profile_check']['suggestions'] = [
+			[ 'id' => 'add-hours' ] + $base,
+			[ 'id' => 'same', 'suggested' => 'Services' ] + $base,
+			[ 'id' => 'long_copy', 'copy' => str_repeat( 'c', 301 ) ] + $base,
+		];
+		$rows = self::parse( $week, $errors )['listing']['suggestions'];
+		$this->assertSame( [ 'long_copy' ], array_column( $rows, 'id' ) );
+		$this->assertSame( '', $rows[0]['copy'] );
+		$week['business_profile_check']['suggestions'] = array_map( static fn( $i ) => [ 'id' => 'row_' . $i ] + $base, range( 1, 30 ) );
 		$this->assertCount( 20, self::parse( $week, $errors )['listing']['suggestions'] );
 		unset( $week['business_profile_check']['suggestions'] );
 		$this->assertSame( [], self::parse( $week, $errors )['listing']['suggestions'], 'an older push: none' );
-
-		$row                                                     = $extra['suggestions'][1];
-		$row['reason']                                           = str_repeat( 'r', 250 );
-		$row['copy']                                             = str_repeat( 'c', 400 );
-		$week['business_profile_check']['suggestions_unchecked'] = array_fill( 0, 15, $row );
-		$un = self::parse( $week, $errors )['listing']['suggestions_unchecked'];
-		$this->assertCount( 10, $un );
-		$this->assertSame( 200, mb_strlen( $un[0]['reason'] ) );
-		$this->assertSame( 300, mb_strlen( $un[0]['copy'] ) );
-		$this->assertSame( '', $un[0]['current'], 'current may be null' );
 	}
 
 	/**
