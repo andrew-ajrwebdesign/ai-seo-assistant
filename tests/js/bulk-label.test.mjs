@@ -60,3 +60,11 @@ test( 'lint: no querySelector( \'span\' ) in assets/js (the first span of a butt
 		assert.ok( ! /querySelector(All)?\(\s*['"]span['"]\s*\)/.test( src ), file + ' selects a bare span: give the label a data-aisa-label hook' );
 	}
 } );
+
+test( 'lint: no innerHTML / outerHTML / insertAdjacentHTML writes in assets/js (nodes only)', () => {
+	const dir = path.join( root, 'assets/js' );
+	for ( const file of fs.readdirSync( dir ).filter( ( f ) => f.endsWith( '.js' ) && ! f.endsWith( '.min.js' ) ) ) {
+		const src = fs.readFileSync( path.join( dir, file ), 'utf8' );
+		assert.ok( ! /\.(innerHTML|outerHTML)\s*\+?=(?!=)|insertAdjacentHTML\s*\(/.test( src ), file + ' writes HTML from a string' );
+	}
+} );

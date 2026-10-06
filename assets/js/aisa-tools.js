@@ -101,7 +101,8 @@
 			const here = document.querySelector( '[data-aisa-refresh]' );
 			const sub = doc.querySelector( '.aisa-hero__sub' );
 			if ( fresh && here ) {
-				here.innerHTML = fresh.innerHTML;
+				// Nodes, never an HTML string: the fetched page's own nodes, adopted into this document.
+				here.replaceChildren( ...Array.from( fresh.childNodes, ( node ) => document.importNode( node, true ) ) );
 				initList();
 			}
 			if ( sub && document.querySelector( '.aisa-hero__sub' ) ) {
