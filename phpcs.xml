@@ -9,6 +9,10 @@
       in CI — adding a folder is a promise, not a wish.
     -->
     <file>src/Report</file>
+    <!-- 4.4.0: new files start inside the ratchet. -->
+    <file>src/Core/Secret_Store.php</file>
+    <file>src/Core/Upgrade.php</file>
+    <file>src/Admin/Secret_Notices.php</file>
 
     <exclude-pattern>/vendor/*</exclude-pattern>
     <exclude-pattern>/tests/*</exclude-pattern>

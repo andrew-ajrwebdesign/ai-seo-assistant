@@ -6,6 +6,7 @@
 namespace AJR\SEOAssistant\GSC;
 
 use AJR\SEOAssistant\Adapters\SEO_Adapter_Resolver;
+use AJR\SEOAssistant\Core\Secret_Store;
 
 defined( 'ABSPATH' ) || exit;
 
@@ -50,8 +51,6 @@ class GSC_Page {
 
 		$this->render_notice();
 
-		$client_id     = $this->gsc_client->get_client_id();
-		$client_secret = $this->gsc_client->get_client_secret();
 		$redirect_uri  = $this->gsc_client->get_redirect_uri();
 		$is_connected  = $this->gsc_client->is_connected();
 		$selected_site = $this->gsc_client->get_selected_site();
@@ -83,52 +82,10 @@ class GSC_Page {
 				<?php wp_nonce_field( 'ai_seo_assistant_gsc_save_settings', 'ai_seo_assistant_gsc_nonce' ); ?>
 
 				<table class="form-table" role="presentation">
-					<tr>
-						<th scope="row">
-							<label for="ai_seo_assistant_gsc_client_id">Google Client ID</label>
-						</th>
-						<td>
-							<input
-								type="text"
-								id="ai_seo_assistant_gsc_client_id"
-								name="ai_seo_assistant_gsc_client_id"
-								value="<?php echo esc_attr( $client_id ); ?>"
-								class="large-text"
-								autocomplete="off"
-							>
-						</td>
-					</tr>
-
-					<?php $has_client_secret = ! empty( $this->gsc_client->get_client_secret() ); ?>
-
-					<tr>
-						<th scope="row">
-							<label for="ai_seo_assistant_gsc_client_secret">
-								<?php esc_html_e( 'Google Client Secret', 'ai-seo-assistant' ); ?>
-							</label>
-						</th>
-						<td>
-							<input
-								type="password"
-								id="ai_seo_assistant_gsc_client_secret"
-								name="ai_seo_assistant_gsc_client_secret"
-								value=""
-								class="regular-text"
-								autocomplete="off"
-								placeholder="<?php echo $has_client_secret ? esc_attr__( 'Saved. Leave blank to keep existing secret.', 'ai-seo-assistant' ) : esc_attr__( 'Enter Google client secret', 'ai-seo-assistant' ); ?>"
-							/>
-
-							<?php if ( $has_client_secret ) : ?>
-								<p class="description">
-									<?php esc_html_e( 'A Google Client Secret is saved. Leave this field blank to keep the existing secret.', 'ai-seo-assistant' ); ?>
-								</p>
-							<?php else : ?>
-								<p class="description">
-									<?php esc_html_e( 'Add the Google OAuth client secret from Google Cloud Console.', 'ai-seo-assistant' ); ?>
-								</p>
-							<?php endif; ?>
-						</td>
-					</tr>
+					<?php
+					$this->render_secret_row( GSC_Client::OPTION_CLIENT_ID, __( 'Google Client ID', 'ai-seo-assistant' ), $this->gsc_client->client_id_from_config(), 'text' );
+					$this->render_secret_row( GSC_Client::OPTION_CLIENT_SECRET, __( 'Google Client Secret', 'ai-seo-assistant' ), $this->gsc_client->client_secret_from_config(), 'password' );
+					?>
 
 					<tr>
 						<th scope="row">Redirect URI</th>
@@ -255,22 +212,88 @@ class GSC_Page {
 	public function save_settings() {
 		$this->verify_request( 'ai_seo_assistant_gsc_save_settings' );
 
-		$client_id = isset( $_POST['ai_seo_assistant_gsc_client_id'] )
-			? sanitize_text_field( wp_unslash( $_POST['ai_seo_assistant_gsc_client_id'] ) )
-			: '';
-
-		$client_secret = isset( $_POST['ai_seo_assistant_gsc_client_secret'] )
-			? sanitize_text_field( wp_unslash( $_POST['ai_seo_assistant_gsc_client_secret'] ) )
-			: '';
-
-		update_option( GSC_Client::OPTION_CLIENT_ID, $client_id, false );
-
-		if ( '' !== $client_secret ) {
-			update_option( GSC_Client::OPTION_CLIENT_SECRET, $client_secret, false );
+		// Both fields are write-only (never rendered back): blank keeps the saved value, "Clear" removes it.
+		// Until 4.4.0 a blank Client ID field wiped the saved ID; it can no longer be blank-by-display.
+		$failed = false;
+		foreach ( [ GSC_Client::OPTION_CLIENT_ID, GSC_Client::OPTION_CLIENT_SECRET ] as $option ) {
+			if ( ! empty( $_POST[ $option . '_clear' ] ) ) {
+				Secret_Store::set( $option, '' );
+				continue;
+			}
+			$value = isset( $_POST[ $option ] ) && is_string( $_POST[ $option ] ) ? trim( sanitize_text_field( wp_unslash( $_POST[ $option ] ) ) ) : '';
+			if ( '' !== $value && ! Secret_Store::set( $option, $value ) ) {
+				$failed = true;
+			}
 		}
 
-		$this->set_notice( 'success', 'Google settings saved.' );
+		if ( $failed ) {
+			$this->set_notice( 'error', __( 'A value could not be encrypted on this server, so it was not saved. Define it in wp-config.php instead.', 'ai-seo-assistant' ) );
+		} else {
+			$this->set_notice( 'success', 'Google settings saved.' );
+		}
 		$this->redirect();
+	}
+
+	/**
+	 * One write-only credential row: "Saved · ends …XXXX", a Replace field and a Clear box.
+	 *
+	 * The stored value never reaches the page, not even in value="". When wp-config.php defines it, the
+	 * row says so and offers no field.
+	 *
+	 * @param string $option      Option (and field) name.
+	 * @param string $label       Row label.
+	 * @param bool   $from_config Whether a wp-config.php constant supplies the value.
+	 * @param string $type        Input type for a new value (the ID is not secret enough to mask).
+	 */
+	protected function render_secret_row( $option, $label, $from_config, $type ) {
+		$saved = Secret_Store::has( $option );
+		$ends  = $saved ? Secret_Store::last4( $option ) : '';
+		?>
+		<tr>
+			<th scope="row">
+				<label for="<?php echo esc_attr( $option ); ?>"><?php echo esc_html( $label ); ?></label>
+			</th>
+			<td>
+				<?php if ( $from_config ) : ?>
+					<p><strong><?php esc_html_e( 'Set in wp-config.php.', 'ai-seo-assistant' ); ?></strong></p>
+				<?php else : ?>
+					<?php if ( $saved ) : ?>
+						<p>
+							<strong>
+								<?php
+								echo esc_html(
+									'' !== $ends
+										/* translators: %s: last four characters of the saved value. */
+										? sprintf( __( 'Saved · ends …%s', 'ai-seo-assistant' ), $ends )
+										: __( 'Saved, but it can no longer be read: re-enter it.', 'ai-seo-assistant' )
+								);
+								?>
+							</strong>
+						</p>
+					<?php endif; ?>
+					<input
+						type="<?php echo esc_attr( 'password' === $type ? 'password' : 'text' ); ?>"
+						id="<?php echo esc_attr( $option ); ?>"
+						name="<?php echo esc_attr( $option ); ?>"
+						value=""
+						class="large-text"
+						autocomplete="<?php echo esc_attr( 'password' === $type ? 'new-password' : 'off' ); ?>"
+						spellcheck="false"
+						placeholder="<?php echo esc_attr( $saved ? __( 'Leave blank to keep the saved value', 'ai-seo-assistant' ) : __( 'From Google Cloud Console', 'ai-seo-assistant' ) ); ?>"
+					>
+					<?php if ( $saved ) : ?>
+						<p>
+							<label>
+								<input type="checkbox" name="<?php echo esc_attr( $option . '_clear' ); ?>" value="1">
+								<?php esc_html_e( 'Clear the saved value', 'ai-seo-assistant' ); ?>
+							</label>
+						</p>
+					<?php endif; ?>
+					<p class="description"><?php esc_html_e( 'Stored encrypted; never shown again after saving.', 'ai-seo-assistant' ); ?></p>
+				<?php endif; ?>
+			</td>
+		</tr>
+		<?php
 	}
 
 	public function connect() {

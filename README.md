@@ -217,6 +217,15 @@ Pasting the key on the settings screen also works; the `wp-config.php` constant 
 
 Do not commit a real API key to this repository.
 
+### Keys saved on the settings screens are encrypted (4.4.0)
+
+Every secret the plugin stores in the database (the Claude key, the Google client ID and secret, the Search Console tokens, the report push key) is sealed with libsodium `secretbox` before it is written, with a key derived from the site's `AUTH_*` and `SECURE_AUTH_*` salts in `wp-config.php` (`Core\Secret_Store`). A database backup on its own cannot open them. The fields are write-only: a saved value shows as "Saved · ends …XXXX" with Replace and Clear, and is never sent back to the browser.
+
+* **Upgrading from 4.3.x:** the first admin page load by an Administrator after the update seals any plain-text secret in place and deletes the plain text (recorded at level 4.4.0 in `ai_seo_assistant_settings_version`).
+* **Rotating the salts** makes saved secrets unreadable: the plugin treats them as missing and tells agency users which one to re-enter.
+* **Salts not in `wp-config.php`:** WordPress then keeps them in the database, so the secrets are only obfuscated; agency users see a warning.
+* A `wp-config.php` constant still wins over a saved value. **Disconnect** in Search Console, and deleting the plugin, revoke the Google grant at Google before deleting the tokens.
+
 ### Model
 
 The settings screen offers Claude Opus 5 (default, best quality), Claude Sonnet 5 and Claude Haiku 4.5 (faster and cheaper). Metadata runs at low effort and recommendations at medium; the `ai_seo_assistant_claude_effort` filter overrides either.

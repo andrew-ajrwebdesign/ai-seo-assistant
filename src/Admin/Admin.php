@@ -5,32 +5,21 @@
 
 namespace AJR\SEOAssistant\Admin;
 
+use AJR\SEOAssistant\Core\Secret_Store;
 use AJR\SEOAssistant\Core\Utils;
 use AJR\SEOAssistant\AI\Claude_Client;
 
 defined( 'ABSPATH' ) || exit;
 
+/**
+ * Settings screen, editor metabox and their saves.
+ *
+ * One-time settings clean-ups (the OpenAI-era key, 4.0.0) moved to Core\Upgrade in 4.4.0.
+ */
 class Admin {
 
 	const NONCE_ACTION = 'ai_seo_assistant_generate';
 	const NONCE_NAME   = 'ai_seo_assistant_nonce';
-
-	/**
-	 * Option that held the OpenAI key before the move to Claude (4.0.0).
-	 */
-	const LEGACY_OPENAI_KEY_OPTION = 'ai_seo_assistant_api_key';
-
-	/**
-	 * Autoloaded marker recording which one-time settings clean-ups have run.
-	 */
-	const SETTINGS_VERSION_OPTION = 'ai_seo_assistant_settings_version';
-
-	/**
-	 * The clean-up level this code expects. Deliberately NOT the plugin
-	 * version: it only moves when a release adds a new one-time clean-up. If
-	 * it followed the header, every release would re-run the clean-ups.
-	 */
-	const SETTINGS_VERSION = '4.0.0';
 
 	private $tsf_adapter;
 	private $logger;
@@ -44,6 +33,13 @@ class Admin {
 	 * @var Claude_Client
 	 */
 	private $ai_client;
+
+	/**
+	 * Post IDs whose metabox fields were already saved in this request.
+	 *
+	 * @var array<int,true>
+	 */
+	protected $saved = [];
 
 	/**
 	 * Wires the admin UI to its collaborators.
@@ -65,12 +61,21 @@ class Admin {
 	public function init() {
 		add_action( 'add_meta_boxes', [ $this, 'add_meta_box' ] );
 		add_action( 'admin_enqueue_scripts', [ $this, 'enqueue_admin_assets' ] );
-		add_action( 'save_post', [ $this, 'save_metadata_fields' ], 99 );
+		/*
+		 * ONE save hook, deliberately the late one. Yoast writes its own meta on wp_after_insert_post at
+		 * priority 10, after save_post, so a value written on save_post was overwritten by Yoast's copy of
+		 * the old one (decision "Yoast overwrite fix", 2026-06). wp_after_insert_post fires for the classic
+		 * editor's form and for the block editor's metabox request alike (both go through wp_insert_post),
+		 * so the save_post registration that ran beside it until 4.3.2 only wrote everything twice.
+		 */
 		add_action( 'wp_after_insert_post', [ $this, 'save_metadata_fields' ], 9999 );
 
 		add_action( 'admin_menu', [ $this, 'add_settings_page' ] );
 		add_action( 'admin_init', [ $this, 'register_settings' ] );
-		add_action( 'admin_init', [ $this, 'remove_legacy_openai_settings' ] );
+
+		// options.php only checks manage_options for a settings group unless told otherwise, so a client
+		// Administrator who cannot see this screen could still post to it and replace the agency's key.
+		add_filter( 'option_page_capability_ai_seo_assistant_settings', [ $this, 'settings_capability' ] );
 
 		// A saved key is only needed when generating, so keep it out of the
 		// options loaded (and object-cached) on every request.
@@ -80,6 +85,18 @@ class Admin {
 		add_action( 'admin_post_ai_seo_assistant_test_claude', [ $this, 'test_claude_connection' ] );
 
 		add_filter( 'plugin_action_links_' . AI_SEO_ASSISTANT_BASENAME, [ $this, 'add_action_links' ] );
+	}
+
+	/**
+	 * The capability options.php requires to save this screen's settings group.
+	 *
+	 * The agency's tools capability, the same one that shows the screen: without this filter WordPress
+	 * accepts the group from anyone with manage_options.
+	 *
+	 * @return string
+	 */
+	public function settings_capability(): string {
+		return \AJR\SEOAssistant\Report\Access::TOOLS_CAP;
 	}
 
 	/**
@@ -132,6 +149,11 @@ class Admin {
 
 		$current_title       = $this->tsf_adapter->get_title( $post->ID );
 		$current_description = $this->tsf_adapter->get_description( $post->ID );
+
+		// What the box showed at page load. save_metadata_fields() writes a field only when it differs, so
+		// a title changed in the SEO plugin's own sidebar is never reverted by this box's stale copy.
+		printf( '<input type="hidden" name="ai_seo_title_original" value="%s">', esc_attr( $current_title ) );
+		printf( '<input type="hidden" name="ai_seo_description_original" value="%s">', esc_attr( $current_description ) );
 
 		$title_status       = Utils::get_title_status( $current_title );
 		$description_status = Utils::get_description_status( $current_description );
@@ -675,21 +697,38 @@ class Admin {
 	}
 
 	/**
-	 * Keeps the saved Claude key when the field is submitted blank, and
-	 * refuses anything that is not an Anthropic key.
+	 * Seals a newly pasted Claude key; keeps the saved one when the field is
+	 * submitted blank; clears it only when "Clear" is ticked.
 	 *
-	 * A rejected value keeps the existing key rather than wiping it, so a
+	 * The field is write-only: the stored key is never sent to the browser,
+	 * so a blank field means "no change", never "delete". A value that is not
+	 * an Anthropic key keeps the existing key rather than wiping it, so a
 	 * mistyped paste never silently switches AI generation off.
 	 *
+	 * What is returned is what WordPress stores: the encrypted envelope from
+	 * Core\Secret_Store, never the key itself. add_option() runs this callback
+	 * a second time on the value it was handed (on the first save, when the
+	 * row does not exist yet), so an envelope passes straight through.
+	 *
 	 * @param mixed $api_key Submitted value.
-	 * @return string
+	 * @return array|string Envelope, the unchanged stored value, or '' to clear.
 	 */
 	public function sanitize_api_key( $api_key ) {
-		$api_key     = trim( sanitize_text_field( (string) $api_key ) );
-		$current_key = (string) get_option( Claude_Client::OPTION_API_KEY, '' );
+		if ( Secret_Store::is_envelope( $api_key ) ) {
+			return $api_key;
+		}
+
+		$current = get_option( Claude_Client::OPTION_API_KEY, '' );
+
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- options.php verified the settings group's nonce before sanitising.
+		if ( ! empty( $_POST[ Claude_Client::OPTION_API_KEY . '_clear' ] ) ) {
+			return '';
+		}
+
+		$api_key = is_scalar( $api_key ) ? trim( sanitize_text_field( (string) $api_key ) ) : '';
 
 		if ( '' === $api_key ) {
-			return $current_key;
+			return $current;
 		}
 
 		if ( 0 !== strpos( $api_key, Claude_Client::KEY_PREFIX ) ) {
@@ -699,10 +738,22 @@ class Admin {
 				__( 'That does not look like a Claude API key (they start with sk-ant-). The previous key was kept.', 'ai-seo-assistant' )
 			);
 
-			return $current_key;
+			return $current;
 		}
 
-		return $api_key;
+		$sealed = Secret_Store::seal( $api_key );
+
+		if ( null === $sealed ) {
+			add_settings_error(
+				Claude_Client::OPTION_API_KEY,
+				'ai_seo_assistant_cannot_encrypt',
+				__( 'The key could not be encrypted on this server, so it was not saved. Define it in wp-config.php instead.', 'ai-seo-assistant' )
+			);
+
+			return $current;
+		}
+
+		return $sealed;
 	}
 
 	/**
@@ -729,34 +780,6 @@ class Admin {
 		$model = sanitize_text_field( (string) $model );
 
 		return Claude_Client::is_supported_model( $model ) ? $model : Claude_Client::DEFAULT_MODEL;
-	}
-
-	/**
-	 * Removes settings left over from the OpenAI version, once per site.
-	 *
-	 * The old option held an OpenAI secret that nothing reads any more;
-	 * leaving an unused credential in the database is a liability. A stored
-	 * OpenAI model name is reset so the dropdown shows a real Claude model.
-	 *
-	 * Gated by an autoloaded marker: after the first run, every admin request
-	 * costs one in-memory option read and nothing else. (Checking the old
-	 * options directly would query the database on every admin page once
-	 * they are gone, because a missing option is not autoloaded.)
-	 */
-	public function remove_legacy_openai_settings() {
-		if ( version_compare( (string) get_option( self::SETTINGS_VERSION_OPTION, '0' ), self::SETTINGS_VERSION, '>=' ) ) {
-			return;
-		}
-
-		delete_option( self::LEGACY_OPENAI_KEY_OPTION );
-
-		$model = get_option( Claude_Client::OPTION_MODEL, false );
-
-		if ( false !== $model && ! Claude_Client::is_supported_model( $model ) ) {
-			update_option( Claude_Client::OPTION_MODEL, Claude_Client::DEFAULT_MODEL, false );
-		}
-
-		update_option( self::SETTINGS_VERSION_OPTION, self::SETTINGS_VERSION, true );
 	}
 
 	public function sanitize_post_types( $post_types ) {
@@ -796,7 +819,7 @@ class Admin {
 			<?php
 		}
 
-		$focus_mode              = get_option( 'ai_seo_assistant_focus_mode', 'general' );
+		$focus_mode              = $this->local_seo_context->get_focus_mode(); // Includes AJR Core's business type when never chosen here.
 		$seo_detected            = $this->seo_adapter_resolver->get_adapter() !== null;
 		$active_seo_name         = $this->seo_adapter_resolver->get_current_integration_name();
 		$model                   = $this->ai_client->get_model();
@@ -865,7 +888,8 @@ class Admin {
 						<td>
 							<?php
 							$key_from_config   = $this->ai_client->has_config_key();
-							$has_saved_api_key = '' !== (string) get_option( Claude_Client::OPTION_API_KEY, '' );
+							$has_saved_api_key = Secret_Store::has( Claude_Client::OPTION_API_KEY );
+							$saved_key_ends    = $has_saved_api_key ? Secret_Store::last4( Claude_Client::OPTION_API_KEY ) : '';
 
 							$test_claude_url = wp_nonce_url(
 								admin_url( 'admin-post.php?action=ai_seo_assistant_test_claude' ),
@@ -888,26 +912,48 @@ class Admin {
 
 							<?php else : ?>
 
+								<?php // Write-only: the saved key never reaches the page, not even in value="". ?>
+								<?php if ( $has_saved_api_key ) : ?>
+									<p>
+										<strong>
+											<?php
+											echo esc_html(
+												'' !== $saved_key_ends
+													/* translators: %s: last four characters of the saved key. */
+													? sprintf( __( 'Saved · ends …%s', 'ai-seo-assistant' ), $saved_key_ends )
+													: __( 'Saved, but it can no longer be read: re-enter it.', 'ai-seo-assistant' )
+											);
+											?>
+										</strong>
+									</p>
+									<p>
+										<label for="<?php echo esc_attr( Claude_Client::OPTION_API_KEY ); ?>"><?php esc_html_e( 'Replace with a new key', 'ai-seo-assistant' ); ?></label><br>
+								<?php endif; ?>
+
 								<input
 									type="password"
 									id="<?php echo esc_attr( Claude_Client::OPTION_API_KEY ); ?>"
 									name="<?php echo esc_attr( Claude_Client::OPTION_API_KEY ); ?>"
 									value=""
 									class="regular-text"
-									autocomplete="off"
+									autocomplete="new-password"
 									spellcheck="false"
-									placeholder="<?php echo esc_attr( $has_saved_api_key ? __( 'Saved. Leave blank to keep the current key.', 'ai-seo-assistant' ) : 'sk-ant-...' ); ?>"
+									placeholder="<?php echo esc_attr( $has_saved_api_key ? __( 'Leave blank to keep the saved key', 'ai-seo-assistant' ) : 'sk-ant-...' ); ?>"
 								/>
+
+								<?php if ( $has_saved_api_key ) : ?>
+									</p>
+									<p>
+										<label>
+											<input type="checkbox" name="<?php echo esc_attr( Claude_Client::OPTION_API_KEY . '_clear' ); ?>" value="1">
+											<?php esc_html_e( 'Clear the saved key', 'ai-seo-assistant' ); ?>
+										</label>
+									</p>
+								<?php endif; ?>
 
 								<p class="description">
 									<?php if ( $has_saved_api_key ) : ?>
-										<?php
-										printf(
-											/* translators: %s: masked API key, e.g. sk-ant-api...AbCd. */
-											esc_html__( 'Current key: %s. Paste a new key to replace it.', 'ai-seo-assistant' ),
-											'<code>' . esc_html( $this->ai_client->get_key_hint() ) . '</code>'
-										);
-										?>
+										<?php esc_html_e( 'Stored encrypted. Paste a new key to replace it; leave the field blank to keep it.', 'ai-seo-assistant' ); ?>
 									<?php else : ?>
 										<?php
 										printf(
@@ -1219,26 +1265,54 @@ class Admin {
 			return;
 		}
 
-		// Only write to the SEO plugin if the field contains a value — an empty
-		// metabox field must not overwrite data already stored by the active SEO
-		// plugin (e.g. Yoast saves its own values via the block-editor REST API
-		// before WordPress processes classic metaboxes, and a blank POST value
-		// would silently clear them).
-		if ( isset( $_POST['ai_seo_title'] ) && '' !== trim( wp_unslash( $_POST['ai_seo_title'] ) ) ) {
-			$this->tsf_adapter->save_title(
-				$post_id,
-				wp_unslash( $_POST['ai_seo_title'] )
-			);
+		// Once per post per request: wp_insert_post can run more than once for one save (a plugin updating
+		// the post from its own save hook), and the second pass must not write again.
+		if ( isset( $this->saved[ $post_id ] ) ) {
+			return;
+		}
+		$this->saved[ $post_id ] = true;
+
+		$title       = self::posted_change( 'ai_seo_title' );
+		$description = self::posted_change( 'ai_seo_description' );
+
+		if ( null !== $title ) {
+			$this->tsf_adapter->save_title( $post_id, $title );
 		}
 
-		if ( isset( $_POST['ai_seo_description'] ) && '' !== trim( wp_unslash( $_POST['ai_seo_description'] ) ) ) {
-			$this->tsf_adapter->save_description(
-				$post_id,
-				wp_unslash( $_POST['ai_seo_description'] )
-			);
+		if ( null !== $description ) {
+			$this->tsf_adapter->save_description( $post_id, $description );
 		}
 
 		$this->local_seo_context->save_page_context( $post_id, $_POST );
+	}
+
+	/**
+	 * The value to write for one SEO field, or null to leave the SEO plugin's value alone.
+	 *
+	 * Null when the field is absent or empty (an empty box must not clear what Yoast or Rank Math
+	 * stores) and when it still equals what the box showed at page load: then nobody changed it HERE,
+	 * and writing it back would revert an edit made in the SEO plugin's own sidebar on the same save.
+	 * A form without the *_original field (rendered before 4.4.0) keeps the old rule: write if non-empty.
+	 *
+	 * @param string $field POST field name.
+	 * @return string|null
+	 */
+	protected static function posted_change( string $field ): ?string {
+		// phpcs:disable WordPress.Security.NonceVerification.Missing,WordPress.Security.ValidatedSanitizedInput -- the caller verified the nonce; the value is compared, and sanitised by the adapter.
+		if ( ! isset( $_POST[ $field ] ) || ! is_string( $_POST[ $field ] ) ) {
+			return null;
+		}
+		$value = wp_unslash( $_POST[ $field ] );
+		if ( '' === trim( $value ) ) {
+			return null;
+		}
+		if ( isset( $_POST[ $field . '_original' ] ) && is_string( $_POST[ $field . '_original' ] )
+			&& trim( wp_unslash( $_POST[ $field . '_original' ] ) ) === trim( $value ) ) {
+			return null;
+		}
+		// phpcs:enable
+
+		return $value;
 	}
 
 	/**
